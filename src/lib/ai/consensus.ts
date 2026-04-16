@@ -106,7 +106,14 @@ function summarizeToolOutput(output: unknown): string {
 
 export async function runAnalystPanel(
   ticker: string,
-  dataBlock: string
+  dataBlock: string,
+  /**
+   * Optional user-context rider. When set, it's appended to each analyst's
+   * system prompt to tilt emphasis toward the user's risk tolerance /
+   * horizon / goals. STEER, not filter — analysts still produce the full
+   * verdict from their core lens. See src/lib/user-profile.ts.
+   */
+  profileRider?: string | null
 ): Promise<ModelResult[]> {
   const userMessage = `Analyze ${ticker} using the verified DATA below. You may call up to 3 tools if a deeper look would materially change your view.\n\n--- DATA (verified source) ---\n${dataBlock}\n--- END DATA ---`;
 
@@ -115,9 +122,12 @@ export async function runAnalystPanel(
   ).map(async (key) => {
     try {
       const traces: ToolCallTrace[] = [];
+      const systemText = profileRider
+        ? `${buildAnalystSystem(PERSONAS[key])}\n\n${profileRider}`
+        : buildAnalystSystem(PERSONAS[key]);
       const result = await generateText({
         model: models[key],
-        system: buildAnalystSystem(PERSONAS[key]),
+        system: systemText,
         prompt: userMessage,
         tools: analystTools,
         // stopWhen: stop after 5 steps total (each step = model turn + optional tools)

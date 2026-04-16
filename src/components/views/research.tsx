@@ -58,6 +58,42 @@ type TickerTrackRecord = {
   flats30d: number;
 };
 
+type InsiderAggregates = {
+  ticker: string;
+  windowDays: number;
+  filings: number;
+  transactions: number;
+  buys: number;
+  sells: number;
+  officerBuys: number;
+  officerSells: number;
+  netShares: number;
+  netDollarValue: number;
+  lastActivityAt: string | null;
+};
+
+type NewsResponse = {
+  ticker: string;
+  configured: boolean;
+  source: "finnhub" | "yahoo";
+  items: Array<{
+    datetime: string | null;
+    headline: string;
+    source?: string | null;
+    publisher?: string | null;
+    summary: string | null;
+    url?: string | null;
+  }>;
+  sentiment: { bearishPercent: number; bullishPercent: number } | null;
+  buzz: {
+    articlesInLastWeek: number;
+    weeklyAverage: number;
+    buzz: number;
+  } | null;
+  companyNewsScore?: number | null;
+  sectorAverageNewsScore?: number | null;
+};
+
 const MODEL_META: Record<
   ModelKey,
   { label: string; lens: string; color: string }
@@ -183,6 +219,8 @@ export default function ResearchView() {
   const [disclaimerChecked, setDisclaimerChecked] = useState(false);
   const [copied, setCopied] = useState(false);
   const [trackRecord, setTrackRecord] = useState<TickerTrackRecord | null>(null);
+  const [insider, setInsider] = useState<InsiderAggregates | null>(null);
+  const [news, setNews] = useState<NewsResponse | null>(null);
 
   async function copyShareLink() {
     if (!result?.recommendationId) return;
@@ -223,14 +261,30 @@ export default function ResearchView() {
     setError(null);
     setResult(null);
     setTrackRecord(null);
+    setInsider(null);
+    setNews(null);
 
-    // Fire the track-record fetch in parallel with the research request.
-    // It's cheap and returns before the AI pipeline does — we render the
-    // strip as soon as it lands.
+    // Fire track-record + insider-activity + news fetches in parallel
+    // with the research request. They're cheap and return before the
+    // AI pipeline does — we render strips as soon as each lands.
     fetch(`/api/track-record/${encodeURIComponent(ticker)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data: TickerTrackRecord | null) => {
         if (data && data.total > 0) setTrackRecord(data);
+      })
+      .catch(() => {});
+
+    fetch(`/api/insider/${encodeURIComponent(ticker)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: InsiderAggregates | null) => {
+        if (data && data.transactions > 0) setInsider(data);
+      })
+      .catch(() => {});
+
+    fetch(`/api/news/${encodeURIComponent(ticker)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: NewsResponse | null) => {
+        if (data && data.items && data.items.length > 0) setNews(data);
       })
       .catch(() => {});
 
@@ -372,6 +426,149 @@ export default function ResearchView() {
             >
               See all →
             </a>
+          </CardContent>
+        </Card>
+      )}
+
+      {insider && insider.transactions > 0 && (
+        <Card className="border-border/60 bg-muted/30">
+          <CardContent className="flex flex-wrap items-center gap-x-6 gap-y-2 py-3 text-xs">
+            <div className="font-mono uppercase tracking-[0.15em] text-muted-foreground">
+              Insider activity (last {insider.windowDays}d)
+            </div>
+            <div className="flex items-center gap-3">
+              {insider.buys > 0 && (
+                <span className="text-[var(--buy)]">
+                  {insider.buys} open-market buy{insider.buys === 1 ? "" : "s"}
+                  {insider.officerBuys > 0 && (
+                    <span className="ml-1 text-muted-foreground">
+                      ({insider.officerBuys} officer-level)
+                    </span>
+                  )}
+                </span>
+              )}
+              {insider.sells > 0 && (
+                <span className="text-[var(--sell)]">
+                  {insider.sells} sell{insider.sells === 1 ? "" : "s"}
+                  {insider.officerSells > 0 && (
+                    <span className="ml-1 text-muted-foreground">
+                      ({insider.officerSells} officer-level)
+                    </span>
+                  )}
+                </span>
+              )}
+              {insider.buys === 0 && insider.sells === 0 && (
+                <span className="text-muted-foreground">
+                  {insider.transactions} non-market transaction
+                  {insider.transactions === 1 ? "" : "s"} only (awards, option
+                  exercises, etc.)
+                </span>
+              )}
+            </div>
+            {insider.netDollarValue !== 0 && (
+              <div className="border-l border-border/60 pl-6 text-muted-foreground">
+                Net:{" "}
+                <span
+                  className={
+                    insider.netDollarValue > 0
+                      ? "font-mono text-[var(--buy)]"
+                      : "font-mono text-[var(--sell)]"
+                  }
+                >
+                  {insider.netDollarValue > 0 ? "+" : "-"}$
+                  {Math.abs(insider.netDollarValue).toLocaleString("en-US")}
+                </span>
+              </div>
+            )}
+            {insider.lastActivityAt && (
+              <div className="ml-auto font-mono text-[10px] text-muted-foreground/70">
+                Latest filing {insider.lastActivityAt}
+              </div>
+            )}
+          </CardContent>
+          <CardContent className="border-t border-border/60 pt-2 pb-3 text-[10px] text-muted-foreground">
+            Source: SEC Form 4 filings. Open-market buys are a higher-conviction
+            signal than sells (which may reflect planned diversification or tax).
+          </CardContent>
+        </Card>
+      )}
+
+      {news && news.items.length > 0 && (
+        <Card className="border-border/60 bg-muted/30">
+          <CardHeader className="pb-2">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <CardTitle className="text-sm">Recent headlines</CardTitle>
+              <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+                <span>Source: {news.source === "finnhub" ? "Finnhub" : "Yahoo Finance"}</span>
+                {news.sentiment && (
+                  <>
+                    <span className="text-[var(--buy)]">
+                      {(news.sentiment.bullishPercent * 100).toFixed(0)}% bullish
+                    </span>
+                    <span className="text-[var(--sell)]">
+                      {(news.sentiment.bearishPercent * 100).toFixed(0)}% bearish
+                    </span>
+                  </>
+                )}
+                {news.buzz && news.buzz.weeklyAverage > 0 && (
+                  <span>
+                    buzz ×{news.buzz.buzz.toFixed(2)} vs avg
+                  </span>
+                )}
+                {news.companyNewsScore != null && (
+                  <span
+                    className={
+                      news.companyNewsScore > 0.55
+                        ? "text-[var(--buy)]"
+                        : news.companyNewsScore < 0.45
+                        ? "text-[var(--sell)]"
+                        : ""
+                    }
+                    title="Finnhub company news score (0–1)"
+                  >
+                    score {news.companyNewsScore.toFixed(2)}
+                  </span>
+                )}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <ul className="divide-y divide-border/60 text-sm">
+              {news.items.slice(0, 6).map((n, i) => {
+                const ts = n.datetime ? new Date(n.datetime) : null;
+                const when = ts ? ts.toLocaleDateString() : "";
+                const pub = n.source ?? n.publisher ?? "";
+                return (
+                  <li key={i} className="py-2">
+                    <div className="flex items-baseline justify-between gap-3">
+                      {n.url ? (
+                        <a
+                          href={n.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex-1 truncate hover:underline"
+                          title={n.headline}
+                        >
+                          {n.headline}
+                        </a>
+                      ) : (
+                        <span className="flex-1 truncate" title={n.headline}>
+                          {n.headline}
+                        </span>
+                      )}
+                      <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+                        {pub}{pub && when ? " · " : ""}{when}
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            <p className="mt-3 text-[10px] text-muted-foreground">
+              News is qualitative context only. Sentiment scores are not
+              financial advice and are not used as primary signals by the
+              analyst panel.
+            </p>
           </CardContent>
         </Card>
       )}

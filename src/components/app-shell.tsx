@@ -25,6 +25,7 @@ import {
   LogOut,
   TrendingUp,
   History as HistoryIcon,
+  Settings as SettingsIcon,
 } from "lucide-react";
 
 type View =
@@ -57,6 +58,7 @@ const dashboardNavItems: DashboardNav[] = [
 
 const linkNavItems: LinkNav[] = [
   { kind: "link", href: "/app/history", label: "History", icon: HistoryIcon },
+  { kind: "link", href: "/app/settings", label: "Settings", icon: SettingsIcon },
 ];
 
 export default function AppShell({

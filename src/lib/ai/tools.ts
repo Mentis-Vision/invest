@@ -8,6 +8,12 @@ import {
 import { getFilingText } from "../data/sec-extras";
 import { getSeriesHistory } from "../data/fred";
 import { getRecentFilings } from "../data/sec";
+import { getInsiderAggregates } from "../data/insider";
+import {
+  getTickerNews,
+  getTickerSentiment,
+  finnhubConfigured,
+} from "../data/finnhub";
 import { log, errorInfo } from "../log";
 
 /**
@@ -160,7 +166,7 @@ export const analystTools = {
 
   getRecentNews: tool({
     description:
-      "Fetch recent news headlines for a ticker via Yahoo Finance. Use to check for material events (earnings surprise, guidance, litigation, M&A) the static data block wouldn't capture.",
+      "Fetch recent news headlines for a ticker. Prefers Finnhub (when configured) for structured company news with a date window; falls back to Yahoo Finance headlines. Use to check for material events (earnings surprise, guidance, litigation, M&A) the static data block wouldn't capture. News is qualitative context; do NOT cite sentiment as a numeric signal.",
     inputSchema: z.object({
       ticker: z.string().describe("Ticker symbol, uppercase"),
       limit: z
@@ -170,10 +176,79 @@ export const analystTools = {
         .max(15)
         .optional()
         .describe("Max headlines to return (default 6)"),
+      windowDays: z
+        .number()
+        .int()
+        .min(1)
+        .max(60)
+        .optional()
+        .describe("Look-back window in days for Finnhub path (default 14)"),
     }),
-    execute: async ({ ticker, limit }) =>
-      safe("getRecentNews", () =>
-        getRecentNews(ticker.toUpperCase(), limit ?? 6)
+    execute: async ({ ticker, limit, windowDays }) =>
+      safe("getRecentNews", async () => {
+        const tickerUpper = ticker.toUpperCase();
+        if (finnhubConfigured()) {
+          const fh = await getTickerNews(
+            tickerUpper,
+            windowDays ?? 14,
+            limit ?? 6
+          );
+          return {
+            source: "finnhub" as const,
+            ticker: tickerUpper,
+            windowDays: fh.windowDays,
+            items: fh.items.map((n) => ({
+              datetime: n.datetime,
+              headline: n.headline,
+              publisher: n.source,
+              summary: n.summary?.slice(0, 300) ?? null,
+            })),
+          };
+        }
+        // Fallback to Yahoo
+        const y = await getRecentNews(tickerUpper, limit ?? 6);
+        return {
+          source: "yahoo" as const,
+          ticker: tickerUpper,
+          windowDays: null,
+          items: y.items.map((n) => ({
+            datetime: n.publishedAt,
+            headline: n.title,
+            publisher: n.publisher,
+            summary: n.summary?.slice(0, 300) ?? null,
+          })),
+        };
+      }),
+  }),
+
+  getNewsSentiment: tool({
+    description:
+      "Fetch aggregate news sentiment for a ticker (Finnhub only; returns notConfigured when Finnhub isn't set). Returns bull/bear percentages, a company news score (-1..+1), sector-average score, and a news 'buzz' ratio (this-week articles / weekly baseline). Use to detect narrative shifts and crowded positioning; do NOT treat as a primary numeric signal — it's qualitative context only.",
+    inputSchema: z.object({
+      ticker: z.string().describe("Ticker symbol, uppercase"),
+    }),
+    execute: async ({ ticker }) =>
+      safe("getNewsSentiment", () =>
+        getTickerSentiment(ticker.toUpperCase())
+      ),
+  }),
+
+  getInsiderActivity: tool({
+    description:
+      "Fetch insider transaction activity (SEC Form 4) for a ticker. Returns counts of open-market buys vs sells, net shares and approximate dollar value, plus the 5 most recent transactions. Insider BUYS are a high-conviction bullish signal (insiders have no obligation to buy); insider SELLS are a noisier signal (could be diversification, tax, or planned schedules). Officer-level buys weigh more than 10% owners.",
+    inputSchema: z.object({
+      ticker: z.string().describe("Ticker symbol, uppercase"),
+      windowDays: z
+        .number()
+        .int()
+        .min(7)
+        .max(365)
+        .optional()
+        .describe("Look-back window in days (default 90, max 365)"),
+    }),
+    execute: async ({ ticker, windowDays }) =>
+      safe("getInsiderActivity", () =>
+        getInsiderAggregates(ticker.toUpperCase(), windowDays ?? 90)
       ),
   }),
 } as const;

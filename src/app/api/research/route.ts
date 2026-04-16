@@ -9,6 +9,7 @@ import { checkRateLimit, RULES, getClientIp, sweepStaleBuckets } from "@/lib/rat
 import { checkUsageCap, recordBatchUsage, recordUsage, TIER_LIMITS } from "@/lib/usage";
 import { log, errorInfo } from "@/lib/log";
 import { saveRecommendationAndSchedule } from "@/lib/history";
+import { getUserProfile, buildProfileRider } from "@/lib/user-profile";
 
 export const maxDuration = 120;
 
@@ -96,12 +97,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Fetch data in parallel
+  // Fetch data in parallel (incl. user profile for persona-aware prompting)
   try {
-    const [snap, filings, macro] = await Promise.all([
+    const [snap, filings, macro, profile] = await Promise.all([
       getStockSnapshot(ticker),
       getRecentFilings(ticker, 5),
       getMacroSnapshot(),
+      getUserProfile(userId),
     ]);
 
     const dataBlock = [
@@ -112,7 +114,8 @@ export async function POST(req: NextRequest) {
       formatMacroForAI(macro),
     ].join("\n");
 
-    const analyses = await runAnalystPanel(ticker, dataBlock);
+    const profileRider = buildProfileRider(profile);
+    const analyses = await runAnalystPanel(ticker, dataBlock, profileRider);
     const supervisor = await runSupervisor(ticker, dataBlock, analyses, snap.asOf);
 
     // Record usage (fire-and-forget; don't block response)
