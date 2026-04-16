@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
-import { streamText, gateway } from "ai";
+import { streamText } from "ai";
 import { auth } from "@/lib/auth";
 import { getStockSnapshot, formatSnapshotForAI } from "@/lib/data/yahoo";
+import { models } from "@/lib/ai/models";
 
 export const maxDuration = 60;
 
@@ -65,7 +66,7 @@ export async function POST(req: NextRequest) {
   const userMessage = `Analyze ${ticker} using ONLY the data below.\n\n--- DATA (verified from Yahoo Finance) ---\n${dataBlock}\n--- END DATA ---\n\nProduce your analysis in the required format.`;
 
   const result = streamText({
-    model: gateway("anthropic/claude-sonnet-4.6"),
+    model: models.claude,
     system: SYSTEM_PROMPT,
     prompt: userMessage,
   });
