@@ -57,3 +57,79 @@ export const SupervisorOutputSchema = z.object({
 });
 
 export type SupervisorOutput = z.infer<typeof SupervisorOutputSchema>;
+
+/**
+ * Portfolio-level analysis schema.
+ * Focuses on concentration risk, sector balance, macro alignment.
+ * Each model fills the same schema from its analytical lens.
+ */
+export const PortfolioAnalystOutputSchema = z.object({
+  overallHealth: z.enum(["STRONG", "BALANCED", "FRAGILE", "AT_RISK"]),
+  confidence: z.enum(["LOW", "MEDIUM", "HIGH"]),
+  summary: z.string().describe("2–3 sentences in plain language."),
+  concentrationRisks: z
+    .array(
+      z.object({
+        ticker: z.string(),
+        percentOfPortfolio: z.number().describe("Approximate percent, 0-100"),
+        concern: z.string(),
+      })
+    )
+    .max(5)
+    .describe("Single-position concentrations worth flagging"),
+  sectorImbalances: z
+    .array(
+      z.object({
+        sector: z.string(),
+        direction: z.enum(["OVERWEIGHT", "UNDERWEIGHT"]),
+        observation: z.string(),
+      })
+    )
+    .max(5),
+  macroAlignment: z
+    .array(z.string())
+    .max(5)
+    .describe("Statements on how the portfolio aligns or mis-aligns with current macro regime"),
+  rebalancingSuggestions: z
+    .array(
+      z.object({
+        action: z.enum(["REDUCE", "INCREASE", "REVIEW"]),
+        target: z.string(),
+        rationale: z.string(),
+      })
+    )
+    .max(5)
+    .describe("Generic directional suggestions. Not investment advice."),
+  redFlags: z.array(z.string()).max(5),
+});
+
+export type PortfolioAnalystOutput = z.infer<typeof PortfolioAnalystOutputSchema>;
+
+export const PortfolioSupervisorOutputSchema = z.object({
+  overallHealth: z.enum(["STRONG", "BALANCED", "FRAGILE", "AT_RISK"]),
+  confidence: z.enum(["LOW", "MEDIUM", "HIGH"]),
+  consensus: z.enum(["UNANIMOUS", "MAJORITY", "SPLIT", "INSUFFICIENT"]),
+  summary: z.string(),
+  agreedPoints: z.array(z.string()),
+  disagreements: z.array(
+    z.object({
+      topic: z.string(),
+      claudeView: z.string(),
+      gptView: z.string(),
+      geminiView: z.string(),
+    })
+  ),
+  redFlags: z.array(z.string()),
+  topActions: z
+    .array(
+      z.object({
+        priority: z.enum(["HIGH", "MEDIUM", "LOW"]),
+        action: z.string(),
+        rationale: z.string(),
+      })
+    )
+    .max(5),
+  dataAsOf: z.string(),
+});
+
+export type PortfolioSupervisorOutput = z.infer<typeof PortfolioSupervisorOutputSchema>;

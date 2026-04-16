@@ -20,7 +20,17 @@ function getVertex() {
   return _vertex;
 }
 
-export const models: { claude: LanguageModel; gpt: LanguageModel; gemini: LanguageModel } = {
+/**
+ * Model map. Analyst models are the headline three. `haikuSupervisor`
+ * is used by the supervisor rotation to avoid same-family bias on
+ * Claude-authored analyses.
+ */
+export const models: {
+  claude: LanguageModel;
+  gpt: LanguageModel;
+  gemini: LanguageModel;
+  haikuSupervisor: LanguageModel;
+} = {
   get claude() {
     return anthropic("claude-sonnet-4-6");
   },
@@ -29,6 +39,9 @@ export const models: { claude: LanguageModel; gpt: LanguageModel; gemini: Langua
   },
   get gemini() {
     return getVertex()("gemini-3-pro-preview");
+  },
+  get haikuSupervisor() {
+    return anthropic("claude-haiku-4-5-20251001");
   },
 };
 
