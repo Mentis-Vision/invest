@@ -72,6 +72,25 @@ type InsiderAggregates = {
   lastActivityAt: string | null;
 };
 
+type WallStreetConsensus = {
+  ticker: string;
+  asOf: string;
+  recommendationKey: string | null;
+  recommendationMean: number | null;
+  numberOfAnalystOpinions: number | null;
+  targetMean: number | null;
+  targetMedian: number | null;
+  targetHigh: number | null;
+  targetLow: number | null;
+  upgradesDowngrades?: Array<{
+    firm: string;
+    date: string;
+    fromGrade: string | null;
+    toGrade: string | null;
+    action: string | null;
+  }>;
+};
+
 type NewsResponse = {
   ticker: string;
   configured: boolean;
@@ -98,9 +117,9 @@ const MODEL_META: Record<
   ModelKey,
   { label: string; lens: string; color: string }
 > = {
-  claude: { label: "Claude Sonnet 4.6", lens: "Value", color: "text-[var(--decisive)]" },
-  gpt: { label: "GPT-5.2", lens: "Growth", color: "text-[var(--buy)]" },
-  gemini: { label: "Gemini 2.5 Pro", lens: "Macro", color: "text-[var(--hold)]" },
+  claude: { label: "Claude", lens: "Value", color: "text-[var(--decisive)]" },
+  gpt: { label: "GPT", lens: "Growth", color: "text-[var(--buy)]" },
+  gemini: { label: "Gemini", lens: "Macro", color: "text-[var(--hold)]" },
 };
 
 function recColor(rec: string) {
@@ -221,6 +240,7 @@ export default function ResearchView() {
   const [trackRecord, setTrackRecord] = useState<TickerTrackRecord | null>(null);
   const [insider, setInsider] = useState<InsiderAggregates | null>(null);
   const [news, setNews] = useState<NewsResponse | null>(null);
+  const [wallStreet, setWallStreet] = useState<WallStreetConsensus | null>(null);
 
   async function copyShareLink() {
     if (!result?.recommendationId) return;
@@ -263,10 +283,11 @@ export default function ResearchView() {
     setTrackRecord(null);
     setInsider(null);
     setNews(null);
+    setWallStreet(null);
 
-    // Fire track-record + insider-activity + news fetches in parallel
-    // with the research request. They're cheap and return before the
-    // AI pipeline does — we render strips as soon as each lands.
+    // Fire track-record + insider + news + Wall Street consensus fetches
+    // in parallel with the research request. Cheap, return before the AI
+    // pipeline does — we render strips as soon as each lands.
     fetch(`/api/track-record/${encodeURIComponent(ticker)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data: TickerTrackRecord | null) => {
@@ -285,6 +306,13 @@ export default function ResearchView() {
       .then((r) => (r.ok ? r.json() : null))
       .then((data: NewsResponse | null) => {
         if (data && data.items && data.items.length > 0) setNews(data);
+      })
+      .catch(() => {});
+
+    fetch(`/api/analyst-consensus/${encodeURIComponent(ticker)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: WallStreetConsensus | null) => {
+        if (data && data.numberOfAnalystOpinions) setWallStreet(data);
       })
       .catch(() => {});
 
@@ -492,6 +520,83 @@ export default function ResearchView() {
           </CardContent>
         </Card>
       )}
+
+      {wallStreet && wallStreet.numberOfAnalystOpinions ? (
+        (() => {
+          const price = result?.snapshot?.price ?? null;
+          const target = wallStreet.targetMean ?? wallStreet.targetMedian;
+          const upside =
+            price && target && price > 0 ? ((target - price) / price) * 100 : null;
+          const recKey = wallStreet.recommendationKey ?? "";
+          const recColorClass =
+            recKey.includes("buy") || recKey === "strong_buy"
+              ? "text-[var(--buy)]"
+              : recKey === "sell" || recKey === "underperform"
+              ? "text-[var(--sell)]"
+              : recKey === "hold"
+              ? "text-[var(--hold)]"
+              : "text-foreground";
+          return (
+            <Card className="border-border/60 bg-muted/30">
+              <CardContent className="flex flex-wrap items-center gap-x-6 gap-y-2 py-3 text-xs">
+                <div className="font-mono uppercase tracking-[0.15em] text-muted-foreground">
+                  Wall Street consensus
+                </div>
+                <div className="flex items-center gap-3">
+                  <span>
+                    <span className="font-medium">
+                      {wallStreet.numberOfAnalystOpinions}
+                    </span>{" "}
+                    analysts covering
+                  </span>
+                  {recKey && (
+                    <span className={`font-medium uppercase ${recColorClass}`}>
+                      {recKey.replace(/_/g, " ")}
+                    </span>
+                  )}
+                </div>
+                {target != null && (
+                  <div className="flex items-center gap-3 border-l border-border/60 pl-6">
+                    <span className="text-muted-foreground">Target:</span>
+                    <span className="font-mono font-medium">
+                      ${target.toFixed(2)}
+                    </span>
+                    {upside != null && (
+                      <span
+                        className={
+                          upside > 0
+                            ? "text-[var(--buy)]"
+                            : upside < 0
+                            ? "text-[var(--sell)]"
+                            : "text-muted-foreground"
+                        }
+                      >
+                        ({upside >= 0 ? "+" : ""}
+                        {upside.toFixed(1)}% vs current)
+                      </span>
+                    )}
+                  </div>
+                )}
+                {wallStreet.targetLow != null &&
+                  wallStreet.targetHigh != null && (
+                    <div className="text-muted-foreground">
+                      Range: $
+                      {wallStreet.targetLow.toFixed(2)} – $
+                      {wallStreet.targetHigh.toFixed(2)}
+                    </div>
+                  )}
+              </CardContent>
+              <CardContent className="border-t border-border/60 pt-2 pb-3 text-[10px] text-muted-foreground">
+                Third-party analyst consensus (Yahoo Finance). Shown for
+                cross-reference against ClearPath&rsquo;s verdict —{" "}
+                <span className="text-foreground">not</span> the same as the
+                ClearPath recommendation above. Disagreement between Wall
+                Street and ClearPath is diagnostic, not dispositive.
+              </CardContent>
+            </Card>
+          );
+        })()
+      ) : null}
 
       {news && news.items.length > 0 && (
         <Card className="border-border/60 bg-muted/30">

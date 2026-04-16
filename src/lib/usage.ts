@@ -57,6 +57,8 @@ const PRICING_PER_1M_TOKENS_CENTS: Record<string, number> = {
   gemini: 1000,
   // Haiku (supervisor in rotation): $0.80 in / $4 out → 200¢
   haiku: 200,
+  // Panel-consensus fast-path — no LLM call, no cost.
+  none: 0,
 };
 
 export function estimateCostCents(model: string, tokens: number): number {

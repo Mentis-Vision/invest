@@ -142,7 +142,7 @@ export async function runPortfolioSupervisor(
       (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0);
     return {
       output: result.object,
-      supervisorModel: "Claude Haiku 4.5",
+      supervisorModel: "Claude Haiku",
       pricingKey: "haiku",
       tokensUsed: tokens,
     };
@@ -161,7 +161,7 @@ export async function runPortfolioSupervisor(
         topActions: [],
         dataAsOf,
       },
-      supervisorModel: "Claude Haiku 4.5 (failed)",
+      supervisorModel: "Claude Haiku (failed)",
       pricingKey: "haiku",
       tokensUsed: 0,
     };
