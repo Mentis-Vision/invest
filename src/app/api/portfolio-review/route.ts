@@ -21,6 +21,8 @@ type HoldingRow = {
   lastValue: string | number | null;
   costBasis: string | number | null;
   accountName: string | null;
+  sector: string | null;
+  industry: string | null;
 };
 
 export async function POST(req: NextRequest) {
@@ -64,7 +66,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const { rows } = await pool.query(
-      `SELECT ticker, shares, "avgPrice", "lastPrice", "lastValue", "costBasis", "accountName"
+      `SELECT ticker, shares, "avgPrice", "lastPrice", "lastValue", "costBasis", "accountName", sector, industry
        FROM "holding"
        WHERE "userId" = $1
        ORDER BY COALESCE("lastValue", shares * COALESCE("lastPrice", "avgPrice", 0)) DESC`,
@@ -95,10 +97,40 @@ export async function POST(req: NextRequest) {
     const macro = await getMacroSnapshot();
     const dataAsOf = new Date().toISOString();
 
+    // Sector rollup — sum market value per sector so the model sees
+    // concentration at a glance, not just per-position.
+    const sectorBuckets = new Map<string, number>();
+    let unclassified = 0;
+    for (const h of holdings) {
+      const v = marketValue(h);
+      if (h.sector) {
+        sectorBuckets.set(h.sector, (sectorBuckets.get(h.sector) ?? 0) + v);
+      } else {
+        unclassified += v;
+      }
+    }
+    const sectorLines = [...sectorBuckets.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([sector, value]) => {
+        const pct = totalValue > 0 ? (value / totalValue) * 100 : 0;
+        return `  - ${sector}: $${value.toFixed(2)} (${pct.toFixed(1)}%)`;
+      });
+    if (unclassified > 0) {
+      const pct = totalValue > 0 ? (unclassified / totalValue) * 100 : 0;
+      sectorLines.push(
+        `  - Unclassified: $${unclassified.toFixed(2)} (${pct.toFixed(1)}%)`
+      );
+    }
+
     const dataBlock = [
       `PORTFOLIO SNAPSHOT (as of ${dataAsOf}):`,
       `Total positions: ${holdings.length}`,
       `Estimated market value: $${totalValue.toFixed(2)} USD`,
+      ``,
+      `SECTOR BREAKDOWN (by market value):`,
+      ...(sectorLines.length > 0
+        ? sectorLines
+        : ["  (no sector data available)"]),
       ``,
       `POSITIONS (sorted largest first, using last-synced price from brokerage):`,
       ...holdings.map((h) => {
@@ -108,10 +140,13 @@ export async function POST(req: NextRequest) {
         const pct = totalValue > 0 ? (value / totalValue) * 100 : 0;
         const avgCost = h.avgPrice !== null && h.avgPrice !== undefined ? Number(h.avgPrice) : null;
         const costLabel = avgCost != null ? ` · avg cost $${avgCost.toFixed(2)}` : "";
-        return `- ${h.ticker}: ${shares} shares @ $${current.toFixed(2)}${costLabel} ≈ $${value.toFixed(2)} (${pct.toFixed(1)}% of portfolio)${h.accountName ? ` [${h.accountName}]` : ""}`;
+        const sectorLabel = h.sector
+          ? ` [${h.sector}${h.industry ? ` / ${h.industry}` : ""}]`
+          : " [sector: unclassified]";
+        return `- ${h.ticker}: ${shares} shares @ $${current.toFixed(2)}${costLabel} ≈ $${value.toFixed(2)} (${pct.toFixed(1)}% of portfolio)${sectorLabel}${h.accountName ? ` {${h.accountName}}` : ""}`;
       }),
       ``,
-      `NOTE: Prices are last-synced from the user's brokerage via SnapTrade; they may be intraday-stale. Sector data is NOT included in this block.`,
+      `NOTE: Prices are last-synced from the user's brokerage via SnapTrade; they may be intraday-stale. Sector/industry data is sourced from Yahoo Finance and may be missing for non-US or niche tickers.`,
       ``,
       formatMacroForAI(macro),
     ].join("\n");

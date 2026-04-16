@@ -8,6 +8,7 @@ import {
 } from "@/lib/snaptrade";
 import { pool } from "@/lib/db";
 import { log, errorInfo } from "@/lib/log";
+import { getTickerMetadataBatch } from "@/lib/data/ticker-metadata";
 
 /**
  * GET /api/snaptrade/holdings
@@ -70,9 +71,23 @@ export async function GET(_req: NextRequest) {
       costBasis: number | null;
       institutionName: string | null;
       accountName: string | null;
+      sector: string | null;
+      industry: string | null;
     };
 
-    const aggregated: Holding[] = [];
+    type PendingUpsert = {
+      ticker: string;
+      shares: number;
+      costBasis: number | null;
+      avgCost: number | null;
+      price: number;
+      value: number;
+      currency: string;
+      accountName: string | null;
+      accountId: string;
+    };
+
+    const pending: PendingUpsert[] = [];
 
     for (const acct of accounts) {
       if (!acct.id) continue;
@@ -101,10 +116,6 @@ export async function GET(_req: NextRequest) {
             p.symbol?.local_symbol ??
             p.symbol?.description?.slice(0, 12).toUpperCase() ??
             "UNKNOWN";
-          const name =
-            p.symbol?.symbol?.description ??
-            p.symbol?.description ??
-            ticker;
           const shares = Number(p.units ?? 0);
           const price = Number(p.price ?? 0);
           const value = shares * price;
@@ -112,53 +123,88 @@ export async function GET(_req: NextRequest) {
             p.average_purchase_price != null ? Number(p.average_purchase_price) : null;
           const costBasis = avgCost != null ? avgCost * shares : null;
 
-          aggregated.push({
+          pending.push({
             ticker,
-            name,
             shares,
+            costBasis,
+            avgCost,
             price,
             value,
-            costBasis,
-            institutionName: acct.institution_name ?? null,
+            currency: (p.currency?.code as string) ?? "USD",
             accountName: acct.name ?? null,
+            accountId: acct.id,
           });
-
-          try {
-            await pool.query(
-              `INSERT INTO "holding" (id, "userId", ticker, shares, "costBasis", "avgPrice", "lastPrice", "lastValue", currency, "accountName", "plaidAccountId", source, "lastSyncedAt")
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'snaptrade', NOW())
-               ON CONFLICT ("userId", ticker, COALESCE("accountName", ''))
-               DO UPDATE SET
-                 shares = EXCLUDED.shares,
-                 "costBasis" = EXCLUDED."costBasis",
-                 "avgPrice" = EXCLUDED."avgPrice",
-                 "lastPrice" = EXCLUDED."lastPrice",
-                 "lastValue" = EXCLUDED."lastValue",
-                 "lastSyncedAt" = NOW()`,
-              [
-                crypto.randomUUID(),
-                session.user.id,
-                ticker,
-                shares,
-                costBasis,
-                avgCost,
-                price || null,
-                value || null,
-                (p.currency?.code as string) ?? "USD",
-                acct.name ?? null,
-                acct.id,
-              ]
-            );
-          } catch (err) {
-            log.warn("snaptrade.holdings", "holding upsert failed", {
-              ticker,
-              ...errorInfo(err),
-            });
-          }
         }
       } catch (err) {
         log.warn("snaptrade.holdings", "account positions fetch failed", {
           accountId: acct.id,
+          ...errorInfo(err),
+        });
+      }
+    }
+
+    // Batch-fetch sector/industry for every unique ticker we saw. Cached in
+    // Postgres (30d) and in-memory (process lifetime) so re-syncs are cheap.
+    const uniqueTickers = [...new Set(pending.map((p) => p.ticker))];
+    const metadataMap = await getTickerMetadataBatch(uniqueTickers);
+
+    const aggregated: Holding[] = [];
+    for (const p of pending) {
+      const md = metadataMap.get(p.ticker) ?? {
+        ticker: p.ticker,
+        name: null,
+        sector: null,
+        industry: null,
+      };
+      const displayName = md.name ?? p.ticker;
+      const acct = accounts.find((a) => a.id === p.accountId);
+
+      aggregated.push({
+        ticker: p.ticker,
+        name: displayName,
+        shares: p.shares,
+        price: p.price,
+        value: p.value,
+        costBasis: p.costBasis,
+        institutionName: acct?.institution_name ?? null,
+        accountName: p.accountName,
+        sector: md.sector,
+        industry: md.industry,
+      });
+
+      try {
+        await pool.query(
+          `INSERT INTO "holding" (id, "userId", ticker, shares, "costBasis", "avgPrice", "lastPrice", "lastValue", currency, "accountName", "plaidAccountId", sector, industry, source, "lastSyncedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'snaptrade', NOW())
+           ON CONFLICT ("userId", ticker, COALESCE("accountName", ''))
+           DO UPDATE SET
+             shares = EXCLUDED.shares,
+             "costBasis" = EXCLUDED."costBasis",
+             "avgPrice" = EXCLUDED."avgPrice",
+             "lastPrice" = EXCLUDED."lastPrice",
+             "lastValue" = EXCLUDED."lastValue",
+             sector = COALESCE(EXCLUDED.sector, "holding".sector),
+             industry = COALESCE(EXCLUDED.industry, "holding".industry),
+             "lastSyncedAt" = NOW()`,
+          [
+            crypto.randomUUID(),
+            session.user.id,
+            p.ticker,
+            p.shares,
+            p.costBasis,
+            p.avgCost,
+            p.price || null,
+            p.value || null,
+            p.currency,
+            p.accountName,
+            p.accountId,
+            md.sector,
+            md.industry,
+          ]
+        );
+      } catch (err) {
+        log.warn("snaptrade.holdings", "holding upsert failed", {
+          ticker: p.ticker,
           ...errorInfo(err),
         });
       }

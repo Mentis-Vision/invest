@@ -28,11 +28,15 @@ Running list of everything that was tabled during the P1–P5 implementation pus
 
 ### Sentry (P1.3 upgrade path)
 - **Chose:** Minimal structured JSON logging to Vercel's native runtime logs (`src/lib/log.ts`). Zero accounts, zero vendor lock-in, greppable.
-- **Upgrade path:** when volume justifies richer observability:
-  - `npm install @sentry/nextjs && npx @sentry/wizard@latest -i nextjs`
-  - Replace `log.error(...)` call-sites with Sentry capture (or have `log.error` additionally forward).
-  - Add `SENTRY_DSN`, `SENTRY_ORG`, `SENTRY_PROJECT` to Vercel env.
-  - Effort: ~1h.
+- **Sentry via Vercel Marketplace is explicitly rejected** — it bills on the Vercel invoice at a markup. We do not need to pay Vercel for observability.
+- **Alternate route (in preference order):**
+  1. **Stay with Vercel runtime logs + `log.error` JSON** for beta. Vercel's log UI is grep-friendly and already captures every error. No external account needed. Add a weekly cron that `SELECT`s error-frequency from logs via Vercel's Logs API into a summary email once Resend is live.
+  2. **Axiom (free tier, 500MB/mo ingestion, Vercel-native log drain)** — when volume grows past what Vercel's log UI handles comfortably. Ships through the Vercel log-drain feature; SDK is `@axiomhq/nextjs`. Free forever for our scale, no Vercel markup.
+  3. **Better Stack Logtail (free 1GB/mo)** — similar model to Axiom, slightly nicer alerting. Fine alternative if we prefer their UI.
+  4. **Sentry direct (NOT via Vercel Marketplace)** — signing up at sentry.io gives a 5k-errors/mo free tier with the same SDK. Add `SENTRY_DSN` via `vercel env add` manually. Only reason to pick this over Axiom/Logtail is if we want structured exception grouping / issue tracking out of the box.
+  5. **Self-hosted GlitchTip** (Sentry-compatible, open-source) — last resort. Needs its own hosting and DB. Not worth the maintenance at our scale.
+- **Trigger to upgrade from (1):** first real user hits a silent 500, OR sustained >50 errors/day, OR the Vercel log UI becomes slow to filter. Whichever comes first.
+- **Effort to migrate to Axiom later:** ~30min (Vercel Marketplace → Axiom integration → flip log drain → keep our `log.ts` unchanged).
 
 ---
 

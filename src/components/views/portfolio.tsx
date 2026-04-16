@@ -5,6 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Link as LinkIcon, RefreshCw, Loader2 } from "lucide-react";
+import {
+  getHoldings,
+  invalidateAndRefresh,
+} from "@/lib/client/holdings-cache";
 
 type Holding = {
   ticker: string;
@@ -15,6 +19,8 @@ type Holding = {
   costBasis: number | null;
   institutionName: string | null;
   accountName: string | null;
+  sector: string | null;
+  industry: string | null;
 };
 
 type HoldingsResponse = {
@@ -46,11 +52,10 @@ export default function PortfolioView() {
   const popupRef = useRef<Window | null>(null);
   const pollingRef = useRef<number | null>(null);
 
-  const loadHoldings = useCallback(async () => {
+  const loadHoldings = useCallback(async (force = false) => {
     setLoadingHoldings(true);
     try {
-      const res = await fetch("/api/snaptrade/holdings");
-      const data: HoldingsResponse = await res.json();
+      const data = force ? await invalidateAndRefresh() : await getHoldings();
       if (data.message && !data.connected) {
         setNotConfiguredMessage(data.message);
       }
@@ -109,12 +114,12 @@ export default function PortfolioView() {
         return;
       }
 
-      // Poll until popup closes, then refresh.
+      // Poll until popup closes, then refresh (bypassing cache).
       pollingRef.current = window.setInterval(async () => {
         if (popup.closed) {
           if (pollingRef.current) window.clearInterval(pollingRef.current);
           pollingRef.current = null;
-          await loadHoldings();
+          await loadHoldings(true);
           // Also trigger a trade sync in the background
           fetch("/api/snaptrade/sync", { method: "POST" }).catch(() => {});
         }
@@ -130,7 +135,7 @@ export default function PortfolioView() {
     setSyncing(true);
     try {
       await fetch("/api/snaptrade/sync", { method: "POST" }).catch(() => {});
-      await loadHoldings();
+      await loadHoldings(true);
     } finally {
       setSyncing(false);
     }
@@ -141,6 +146,13 @@ export default function PortfolioView() {
     acc[bucket] = (acc[bucket] ?? 0) + h.value;
     return acc;
   }, {});
+
+  const sectorBreakdown = holdings.reduce<Record<string, number>>((acc, h) => {
+    const bucket = h.sector ?? "Unclassified";
+    acc[bucket] = (acc[bucket] ?? 0) + h.value;
+    return acc;
+  }, {});
+  const sectorRows = Object.entries(sectorBreakdown).sort((a, b) => b[1] - a[1]);
 
   return (
     <div className="space-y-6">
@@ -228,6 +240,53 @@ export default function PortfolioView() {
         </Card>
       )}
 
+      {connected && sectorRows.length > 0 && totalValue > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Sector breakdown</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {sectorRows.map(([sector, value]) => {
+                const pct = (value / totalValue) * 100;
+                return (
+                  <div key={sector} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span
+                        className={
+                          sector === "Unclassified"
+                            ? "text-muted-foreground"
+                            : "text-foreground"
+                        }
+                      >
+                        {sector}
+                      </span>
+                      <span className="font-mono text-muted-foreground">
+                        {money(value)} · {pct.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                      <div
+                        className={`h-full ${
+                          sector === "Unclassified"
+                            ? "bg-muted-foreground/40"
+                            : "bg-[var(--buy)]/60"
+                        }`}
+                        style={{ width: `${Math.min(pct, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="mt-4 text-[11px] text-muted-foreground">
+              Sector classification via Yahoo Finance; may be missing for
+              non-US or niche tickers.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Holdings</CardTitle>
@@ -279,7 +338,15 @@ export default function PortfolioView() {
                     .map((h, i) => (
                       <tr key={`${h.ticker}-${h.accountName}-${i}`} className="border-b last:border-0">
                         <td className="px-3 py-3 font-mono font-medium">{h.ticker}</td>
-                        <td className="px-3 py-3 text-muted-foreground">{h.name}</td>
+                        <td className="px-3 py-3 text-muted-foreground">
+                          <div>{h.name}</div>
+                          {h.sector && (
+                            <div className="mt-0.5 text-[10px] text-muted-foreground/70">
+                              {h.sector}
+                              {h.industry ? ` · ${h.industry}` : ""}
+                            </div>
+                          )}
+                        </td>
                         <td className="px-3 py-3 text-right tabular-nums">
                           {h.shares.toLocaleString("en-US", { maximumFractionDigits: 4 })}
                         </td>

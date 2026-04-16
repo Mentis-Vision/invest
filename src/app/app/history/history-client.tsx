@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Search } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import type { HistoryItem } from "@/lib/history";
+
+type OutcomeFilter = "all" | "losses" | "wins";
 
 const REC_STYLE: Record<string, string> = {
   BUY: "bg-[var(--buy)]/10 text-[var(--buy)] border-[var(--buy)]/20",
@@ -34,6 +37,21 @@ type TrackRecord = {
   outcomes: { evaluated: number; wins: number; losses: number; flats: number; acted: number };
 };
 
+const LOSS_VERDICTS = new Set([
+  "followed_loss",
+  "ignored_regret",
+  "contrary_regret",
+]);
+const WIN_VERDICTS = new Set([
+  "followed_win",
+  "ignored_win",
+  "contrary_win",
+]);
+
+function hasVerdictIn(it: HistoryItem, set: Set<string>): boolean {
+  return it.outcomes.some((o) => o.verdict !== null && set.has(o.verdict));
+}
+
 export default function HistoryClient({
   items,
   trackRecord,
@@ -41,16 +59,57 @@ export default function HistoryClient({
   items: HistoryItem[];
   trackRecord: TrackRecord;
 }) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const initialOutcomeFilter = ((): OutcomeFilter => {
+    const raw = searchParams.get("filter");
+    if (raw === "losses" || raw === "wins") return raw;
+    return "all";
+  })();
+
   const [filter, setFilter] = useState("");
+  const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>(
+    initialOutcomeFilter
+  );
   const [expanded, setExpanded] = useState<string | null>(null);
 
+  // Auto-expand the first match on "losses" so the user lands on the detail.
+  useEffect(() => {
+    if (outcomeFilter === "losses" && items.length > 0 && !expanded) {
+      const firstLoss = items.find((it) => hasVerdictIn(it, LOSS_VERDICTS));
+      if (firstLoss) setExpanded(firstLoss.id);
+    }
+    // Don't re-run when `expanded` changes — only on filter/items change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [outcomeFilter, items]);
+
+  // Keep URL in sync with the filter state so the view is shareable + bookmarkable.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (outcomeFilter === "all") {
+      url.searchParams.delete("filter");
+    } else {
+      url.searchParams.set("filter", outcomeFilter);
+    }
+    window.history.replaceState({}, "", url.toString());
+    // Router is imported to ensure RSC revalidation contract; we use
+    // replaceState for cheap same-page updates.
+    void router;
+  }, [outcomeFilter, router]);
+
   const filtered = useMemo(() => {
-    if (!filter.trim()) return items;
+    let pool = items;
+    if (outcomeFilter === "losses") {
+      pool = pool.filter((it) => hasVerdictIn(it, LOSS_VERDICTS));
+    } else if (outcomeFilter === "wins") {
+      pool = pool.filter((it) => hasVerdictIn(it, WIN_VERDICTS));
+    }
+    if (!filter.trim()) return pool;
     const q = filter.trim().toUpperCase();
-    return items.filter(
+    return pool.filter(
       (it) => it.ticker.includes(q) || it.recommendation.includes(q)
     );
-  }, [items, filter]);
+  }, [items, filter, outcomeFilter]);
 
   const hitRate =
     trackRecord.outcomes.evaluated > 0
@@ -94,8 +153,8 @@ export default function HistoryClient({
         </CardContent>
       </Card>
 
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[12rem] max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="pl-9"
@@ -104,20 +163,82 @@ export default function HistoryClient({
             onChange={(e) => setFilter(e.target.value)}
           />
         </div>
-        <span className="text-xs text-muted-foreground">
+        <div className="flex items-center gap-1 rounded-md border border-border bg-card p-0.5 text-xs">
+          {(["all", "losses", "wins"] as const).map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setOutcomeFilter(key)}
+              className={`rounded px-3 py-1 transition-colors ${
+                outcomeFilter === key
+                  ? key === "losses"
+                    ? "bg-[var(--sell)]/10 text-[var(--sell)]"
+                    : key === "wins"
+                    ? "bg-[var(--buy)]/10 text-[var(--buy)]"
+                    : "bg-accent text-accent-foreground"
+                  : "text-muted-foreground hover:bg-accent/40"
+              }`}
+            >
+              {key === "all" ? "All" : key === "losses" ? "Losses only" : "Wins only"}
+            </button>
+          ))}
+        </div>
+        {outcomeFilter !== "all" && (
+          <button
+            type="button"
+            onClick={() => setOutcomeFilter("all")}
+            className="flex items-center gap-1 rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+            aria-label="Clear outcome filter"
+          >
+            <X className="h-3 w-3" />
+            Clear
+          </button>
+        )}
+        <span className="ml-auto text-xs text-muted-foreground">
           {filtered.length} of {items.length}
         </span>
       </div>
+
+      {outcomeFilter === "losses" && (
+        <Card className="border-[var(--sell)]/30 bg-[var(--sell)]/5">
+          <CardContent className="py-3 text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">The misses.</span>{" "}
+            Every recommendation that went against us at the 7 / 30 / 90 / 365-day
+            check. We keep these in front of you on purpose — so the track record
+            is honest, not curated.
+          </CardContent>
+        </Card>
+      )}
+
+      {outcomeFilter === "wins" && (
+        <Card className="border-[var(--buy)]/30 bg-[var(--buy)]/5">
+          <CardContent className="py-3 text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">The wins.</span>{" "}
+            Recommendations that played out as called at one or more check
+            windows. Past performance does not guarantee future results.
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="p-0">
           {filtered.length === 0 ? (
             <div className="py-12 text-center text-sm text-muted-foreground">
-              No recommendations yet.{" "}
-              <a href="/app?view=research" className="underline">
-                Run your first research query
-              </a>
-              .
+              {items.length === 0 ? (
+                <>
+                  No recommendations yet.{" "}
+                  <a href="/app?view=research" className="underline">
+                    Run your first research query
+                  </a>
+                  .
+                </>
+              ) : outcomeFilter === "losses" ? (
+                <>No losses to show — nothing has gone against us yet at any check window.</>
+              ) : outcomeFilter === "wins" ? (
+                <>No wins to show yet — outcome checks run at 7 / 30 / 90 / 365 days.</>
+              ) : (
+                <>No matches for &ldquo;{filter}&rdquo;.</>
+              )}
             </div>
           ) : (
             <div className="divide-y">

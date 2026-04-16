@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { getHoldings } from "@/lib/client/holdings-cache";
 import {
   TrendingUp,
   TrendingDown,
@@ -50,7 +51,9 @@ export default function DashboardView() {
   useEffect(() => {
     let alive = true;
     Promise.all([
-      fetch("/api/snaptrade/holdings").then((r) => r.json()).catch(() => null),
+      // Shared cache — no duplicate fetch when the user navigates back
+      // to Portfolio view within 60s.
+      getHoldings().catch(() => null),
       fetch("/api/track-record").then((r) => r.json()).catch(() => null),
       fetch("/api/macro").then((r) => r.json()).catch(() => null),
     ]).then(([pRaw, tRaw, mRaw]: [unknown, unknown, unknown]) => {

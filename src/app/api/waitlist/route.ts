@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 import { checkRateLimit, RULES, getClientIp } from "@/lib/rate-limit";
 import { log, errorInfo } from "@/lib/log";
+import { notifySlack, slackConfigured } from "@/lib/notify";
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
@@ -35,13 +36,16 @@ export async function POST(req: NextRequest) {
     s ? s.slice(0, max) : null;
 
   try {
-    await pool.query(
+    // `xmax = 0` identifies a true INSERT vs. an UPDATE via ON CONFLICT,
+    // so we only Slack-notify on new signups, not re-submissions.
+    const result = await pool.query(
       `INSERT INTO "waitlist" ("email", "name", "portfolioSize", "source", "notes", "ipAddress", "userAgent")
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        ON CONFLICT ("email") DO UPDATE SET
          "name" = COALESCE(EXCLUDED."name", "waitlist"."name"),
          "portfolioSize" = COALESCE(EXCLUDED."portfolioSize", "waitlist"."portfolioSize"),
-         "notes" = COALESCE(EXCLUDED."notes", "waitlist"."notes")`,
+         "notes" = COALESCE(EXCLUDED."notes", "waitlist"."notes")
+       RETURNING (xmax = 0) AS inserted`,
       [
         email,
         clip(body.name?.trim() || null, 200),
@@ -52,6 +56,30 @@ export async function POST(req: NextRequest) {
         userAgent,
       ]
     );
+
+    const isNew = Boolean(result.rows[0]?.inserted);
+
+    if (isNew && slackConfigured()) {
+      // Fire-and-forget. Don't block the response on Slack latency or
+      // Slack outage.
+      const name = body.name?.trim() || null;
+      const portfolioSize = body.portfolioSize?.trim() || null;
+      const source = body.source?.trim() || "unknown";
+      const detail = [
+        name ? `name: ${name}` : null,
+        portfolioSize ? `portfolio: ${portfolioSize}` : null,
+        `source: ${source}`,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      notifySlack(
+        {
+          text: `🟢 New ClearPath waitlist signup\n• *${email}*${detail ? `\n• ${detail}` : ""}`,
+        },
+        "waitlist"
+      ).catch(() => {});
+    }
+
     return NextResponse.json({ status: "ok" });
   } catch (err) {
     log.error("waitlist", "insert failed", { email, ...errorInfo(err) });

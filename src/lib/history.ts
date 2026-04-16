@@ -143,6 +143,68 @@ export type HistoryItem = {
   }>;
 };
 
+/**
+ * Fetch a single recommendation by id, enforcing user ownership.
+ * Returns null if the record doesn't exist OR belongs to a different user
+ * (we don't leak the difference — 404 either way at the route level).
+ */
+export type FullRecommendation = HistoryItem & {
+  analysisJson: unknown;
+  supervisorModel: string | null;
+};
+
+export async function getRecommendationForUser(
+  userId: string,
+  recommendationId: string
+): Promise<FullRecommendation | null> {
+  const { rows } = await pool.query(
+    `SELECT r.id, r.ticker, r.recommendation, r.confidence, r.consensus,
+            r."priceAtRec", r.summary, r."dataAsOf", r."createdAt",
+            r."analysisJson",
+            COALESCE(json_agg(
+              json_build_object(
+                'window', o."window",
+                'status', o.status,
+                'priceAtCheck', o."priceAtCheck",
+                'percentMove', o."percentMove",
+                'userActed', o."userActed",
+                'verdict', o.verdict,
+                'evaluatedAt', o."evaluatedAt"
+              ) ORDER BY
+                CASE o."window"
+                  WHEN '7d' THEN 1 WHEN '30d' THEN 2 WHEN '90d' THEN 3 ELSE 4
+                END
+            ) FILTER (WHERE o.id IS NOT NULL), '[]') AS outcomes
+     FROM "recommendation" r
+     LEFT JOIN "recommendation_outcome" o ON o."recommendationId" = r.id
+     WHERE r."userId" = $1 AND r.id = $2
+     GROUP BY r.id
+     LIMIT 1`,
+    [userId, recommendationId]
+  );
+  if (rows.length === 0) return null;
+  const r = rows[0] as Record<string, unknown>;
+  const analysisJson = r.analysisJson as Record<string, unknown> | null;
+  const supervisorModel =
+    (analysisJson && typeof analysisJson === "object" && "supervisorModel" in analysisJson
+      ? (analysisJson.supervisorModel as string)
+      : null) ?? null;
+  return {
+    id: r.id as string,
+    ticker: r.ticker as string,
+    recommendation: r.recommendation as string,
+    confidence: r.confidence as string,
+    consensus: r.consensus as string,
+    priceAtRec: Number(r.priceAtRec),
+    summary: r.summary as string,
+    dataAsOf: (r.dataAsOf as Date).toISOString(),
+    createdAt: (r.createdAt as Date).toISOString(),
+    outcomes: (r.outcomes as HistoryItem["outcomes"]) ?? [],
+    analysisJson,
+    supervisorModel,
+  };
+}
+
 export async function getUserHistory(userId: string, limit = 50): Promise<HistoryItem[]> {
   const { rows } = await pool.query(
     `SELECT r.id, r.ticker, r.recommendation, r.confidence, r.consensus,

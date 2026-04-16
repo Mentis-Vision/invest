@@ -18,6 +18,7 @@ import {
   Check,
   X,
   Info,
+  Copy,
 } from "lucide-react";
 import type { AnalystOutput, SupervisorOutput } from "@/lib/ai/schemas";
 import type { StockSnapshot } from "@/lib/data/yahoo";
@@ -47,6 +48,14 @@ type ResearchResponse = {
   supervisorModel?: string;
   recommendationId?: string | null;
   toolCalls?: number;
+};
+
+type TickerTrackRecord = {
+  total: number;
+  byRec: Record<string, number>;
+  wins30d: number;
+  losses30d: number;
+  flats30d: number;
 };
 
 const MODEL_META: Record<
@@ -172,6 +181,20 @@ export default function ResearchView() {
   const [error, setError] = useState<string | null>(null);
   const [disclaimerOpen, setDisclaimerOpen] = useState(false);
   const [disclaimerChecked, setDisclaimerChecked] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [trackRecord, setTrackRecord] = useState<TickerTrackRecord | null>(null);
+
+  async function copyShareLink() {
+    if (!result?.recommendationId) return;
+    const url = `${window.location.origin}/app/r/${result.recommendationId}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      setCopied(false);
+    }
+  }
 
   // First-run acknowledgment state
   useEffect(() => {
@@ -199,6 +222,17 @@ export default function ResearchView() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setTrackRecord(null);
+
+    // Fire the track-record fetch in parallel with the research request.
+    // It's cheap and returns before the AI pipeline does — we render the
+    // strip as soon as it lands.
+    fetch(`/api/track-record/${encodeURIComponent(ticker)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: TickerTrackRecord | null) => {
+        if (data && data.total > 0) setTrackRecord(data);
+      })
+      .catch(() => {});
 
     try {
       const res = await fetch("/api/research", {
@@ -290,6 +324,58 @@ export default function ResearchView() {
         </Card>
       )}
 
+      {trackRecord && trackRecord.total > 0 && (
+        <Card className="border-border/60 bg-muted/30">
+          <CardContent className="flex flex-wrap items-center gap-x-6 gap-y-2 py-3 text-xs">
+            <div className="font-mono uppercase tracking-[0.15em] text-muted-foreground">
+              Our track record on {query.trim().toUpperCase()}
+            </div>
+            <div className="flex items-center gap-3">
+              <span>
+                <span className="font-medium">{trackRecord.total}</span> past{" "}
+                {trackRecord.total === 1 ? "analysis" : "analyses"}
+              </span>
+              {Object.entries(trackRecord.byRec).map(([rec, count]) => (
+                <Badge
+                  key={rec}
+                  variant="outline"
+                  className={`${recColor(rec)} border text-[10px]`}
+                >
+                  {count} {rec}
+                </Badge>
+              ))}
+            </div>
+            {trackRecord.wins30d + trackRecord.losses30d + trackRecord.flats30d > 0 && (
+              <div className="flex items-center gap-3 border-l border-border/60 pl-6">
+                <span className="text-muted-foreground">At 30 days:</span>
+                {trackRecord.wins30d > 0 && (
+                  <span className="text-[var(--buy)]">
+                    {trackRecord.wins30d} win{trackRecord.wins30d === 1 ? "" : "s"}
+                  </span>
+                )}
+                {trackRecord.losses30d > 0 && (
+                  <span className="text-[var(--sell)]">
+                    {trackRecord.losses30d} loss
+                    {trackRecord.losses30d === 1 ? "" : "es"}
+                  </span>
+                )}
+                {trackRecord.flats30d > 0 && (
+                  <span className="text-muted-foreground">
+                    {trackRecord.flats30d} flat
+                  </span>
+                )}
+              </div>
+            )}
+            <a
+              href="/app/history"
+              className="ml-auto text-[10px] text-muted-foreground underline-offset-4 hover:underline"
+            >
+              See all →
+            </a>
+          </CardContent>
+        </Card>
+      )}
+
       {result && (
         <div className="space-y-6">
           {/* Verdict card */}
@@ -334,6 +420,26 @@ export default function ResearchView() {
                 </div>
               </div>
               <p className="mt-4 text-sm leading-relaxed">{result.supervisor.summary}</p>
+              {result.recommendationId && (
+                <div className="mt-4 flex items-center gap-2 border-t border-white/[0.06] pt-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={copyShareLink}
+                    className="text-xs"
+                  >
+                    {copied ? (
+                      <Check className="mr-1.5 h-3 w-3" />
+                    ) : (
+                      <Copy className="mr-1.5 h-3 w-3" />
+                    )}
+                    {copied ? "Link copied" : "Copy shareable link"}
+                  </Button>
+                  <span className="font-mono text-[10px] text-muted-foreground/70">
+                    Archives this verdict at /app/r/{result.recommendationId.slice(0, 8)}…
+                  </span>
+                </div>
+              )}
             </div>
 
             <CardContent className="space-y-4 p-6">
