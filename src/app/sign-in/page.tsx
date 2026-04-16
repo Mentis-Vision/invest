@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { motion } from "motion/react";
 import { authClient } from "@/lib/auth-client";
 import AuthLayout from "@/components/auth-layout";
 import { Loader2 } from "lucide-react";
@@ -34,37 +33,36 @@ export default function SignInPage() {
 
   return (
     <AuthLayout>
-      {/* Logo / Brand */}
+      {/* Masthead */}
       <div className="mb-10 text-center">
-        <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] backdrop-blur-sm">
-          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M2 20 L8 10 L14 15 L22 4" className="text-emerald-400" />
-            <path d="M18 4 L22 4 L22 8" className="text-emerald-400" />
+        <div className="mb-5 inline-flex items-center gap-2 text-[11px] font-mono uppercase tracking-[0.25em] text-[var(--buy)]">
+          <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M2 20 L8 10 L14 15 L22 4" />
           </svg>
+          <span>ClearPath</span>
         </div>
-        <h1 className="text-[22px] font-light tracking-tight text-white">
-          ClearPath <span className="text-white/40">Invest</span>
+        <h1 className="font-heading text-[42px] leading-[1.05] tracking-tight text-foreground">
+          The Investor&rsquo;s
+          <br />
+          <em className="italic text-[var(--buy)]">considered</em> brief.
         </h1>
-        <p className="mt-1.5 text-[13px] text-white/30">
-          AI-verified portfolio intelligence
+        <p className="mx-auto mt-4 max-w-[280px] text-[13px] leading-relaxed text-muted-foreground">
+          Three independent AI models cross-verify every recommendation. Every
+          claim traces to a source.
         </p>
       </div>
 
       {/* Error */}
       {error && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: "auto" }}
-          className="mb-4 rounded-lg border border-red-500/20 bg-red-500/[0.06] px-3.5 py-2.5 text-[13px] text-red-300/80"
-        >
+        <div className="mb-4 rounded-md border border-[var(--destructive)]/20 bg-[var(--destructive)]/[0.04] px-3.5 py-2.5 text-[13px] text-[var(--destructive)]">
           {error}
-        </motion.div>
+        </div>
       )}
 
-      {/* Google OAuth */}
+      {/* Google */}
       <button
         onClick={handleGoogleSignIn}
-        className="group flex w-full items-center justify-center gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-[13px] font-medium text-white/70 transition-all hover:border-white/[0.15] hover:bg-white/[0.06] hover:text-white/90"
+        className="group flex w-full items-center justify-center gap-2.5 rounded-md border border-border bg-card px-4 py-2.5 text-[13px] font-medium text-foreground/80 shadow-sm transition-all hover:border-foreground/30 hover:text-foreground"
       >
         <svg className="h-4 w-4" viewBox="0 0 24 24">
           <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
@@ -76,16 +74,16 @@ export default function SignInPage() {
       </button>
 
       {/* Divider */}
-      <div className="my-6 flex items-center gap-3">
-        <div className="h-px flex-1 bg-white/[0.06]" />
-        <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/20">or</span>
-        <div className="h-px flex-1 bg-white/[0.06]" />
+      <div className="my-5 flex items-center gap-3">
+        <div className="h-px flex-1 bg-border" />
+        <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-muted-foreground/60">or</span>
+        <div className="h-px flex-1 bg-border" />
       </div>
 
       {/* Email form */}
-      <form onSubmit={handleEmailSignIn} className="space-y-3.5">
+      <form onSubmit={handleEmailSignIn} className="space-y-3">
         <div>
-          <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-[0.15em] text-white/25">
+          <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
             Email
           </label>
           <input
@@ -93,12 +91,12 @@ export default function SignInPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 py-2.5 text-[14px] text-white/90 outline-none transition-colors placeholder:text-white/15 focus:border-white/[0.18] focus:bg-white/[0.05]"
+            className="w-full rounded-md border border-input bg-card px-3.5 py-2.5 text-[14px] text-foreground outline-none transition-colors placeholder:text-muted-foreground/40 focus:border-foreground/40"
             placeholder="you@example.com"
           />
         </div>
         <div>
-          <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-[0.15em] text-white/25">
+          <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
             Password
           </label>
           <input
@@ -106,14 +104,14 @@ export default function SignInPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 py-2.5 text-[14px] text-white/90 outline-none transition-colors placeholder:text-white/15 focus:border-white/[0.18] focus:bg-white/[0.05]"
+            className="w-full rounded-md border border-input bg-card px-3.5 py-2.5 text-[14px] text-foreground outline-none transition-colors placeholder:text-muted-foreground/40 focus:border-foreground/40"
             placeholder="••••••••"
           />
         </div>
         <button
           type="submit"
           disabled={loading}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-[13px] font-semibold text-[#0a0a0f] transition-all hover:bg-white/90 disabled:opacity-50"
+          className="mt-1 flex w-full items-center justify-center gap-2 rounded-md bg-[var(--buy)] px-4 py-2.5 text-[13px] font-semibold text-[var(--primary-foreground)] transition-all hover:bg-[var(--buy)]/90 disabled:opacity-50"
         >
           {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
           Sign In
@@ -121,21 +119,12 @@ export default function SignInPage() {
       </form>
 
       {/* Footer */}
-      <p className="mt-8 text-center text-[12px] text-white/20">
+      <p className="mt-6 text-center text-[12px] text-muted-foreground">
         No account?{" "}
-        <Link href="/sign-up" className="text-white/50 underline-offset-4 transition-colors hover:text-white/70 hover:underline">
-          Create one
+        <Link href="/sign-up" className="font-medium text-foreground underline decoration-[var(--buy)] decoration-2 underline-offset-[5px] transition-colors hover:text-[var(--buy)]">
+          Request access
         </Link>
       </p>
-
-      {/* Trust badges */}
-      <div className="mt-8 flex items-center justify-center gap-4 text-[10px] font-mono uppercase tracking-[0.15em] text-white/15">
-        <span>Multi-Model AI</span>
-        <span className="text-white/10">·</span>
-        <span>Data-Verified</span>
-        <span className="text-white/10">·</span>
-        <span>Zero Hallucination</span>
-      </div>
     </AuthLayout>
   );
 }

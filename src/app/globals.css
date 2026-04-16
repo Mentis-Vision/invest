@@ -8,7 +8,8 @@
   --color-foreground: var(--foreground);
   --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
-  --font-heading: var(--font-sans);
+  --font-serif: "Fraunces", "Georgia", "Times New Roman", serif;
+  --font-heading: var(--font-serif);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -38,6 +39,10 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-buy: var(--buy);
+  --color-hold: var(--hold);
+  --color-sell: var(--sell);
+  --color-decisive: var(--decisive);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -47,73 +52,82 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* Editorial Warm — a modern private-wealth-memo aesthetic */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --background: #FAF7F2;       /* warm ivory */
+  --foreground: #1A1A1E;       /* deep ink */
+  --card: #FFFFFF;
+  --card-foreground: #1A1A1E;
+  --popover: #FFFFFF;
+  --popover-foreground: #1A1A1E;
+  --primary: #2D5F3F;          /* deep forest — growth, considered */
+  --primary-foreground: #FAF7F2;
+  --secondary: #F0EDE6;        /* slightly deeper cream */
+  --secondary-foreground: #1A1A1E;
+  --muted: #F0EDE6;
+  --muted-foreground: #5A5F6B; /* slate */
+  --accent: #F0EDE6;
+  --accent-foreground: #1A1A1E;
+  --destructive: #8B1F2A;      /* deep wine — serious, not alarming */
+  --border: #E8E4DC;           /* warm gray */
+  --input: #E8E4DC;
+  --ring: #2D5F3F;
+
+  /* Semantic — decision colors */
+  --buy: #2D5F3F;              /* forest */
+  --hold: #9A7B3F;             /* burnished gold */
+  --sell: #8B1F2A;             /* wine */
+  --decisive: #B54F2A;         /* burnished rust — for CTAs and "pay attention" */
+
+  --chart-1: #2D5F3F;
+  --chart-2: #9A7B3F;
+  --chart-3: #5A5F6B;
+  --chart-4: #B54F2A;
+  --chart-5: #8B1F2A;
+
+  --radius: 0.5rem;
+
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #1A1A1E;
+  --sidebar-primary: #2D5F3F;
+  --sidebar-primary-foreground: #FAF7F2;
+  --sidebar-accent: #F0EDE6;
+  --sidebar-accent-foreground: #1A1A1E;
+  --sidebar-border: #E8E4DC;
+  --sidebar-ring: #2D5F3F;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: #13110F;
+  --foreground: #F2EFEA;
+  --card: #1C1A17;
+  --card-foreground: #F2EFEA;
+  --popover: #1C1A17;
+  --popover-foreground: #F2EFEA;
+  --primary: #6EA782;
+  --primary-foreground: #13110F;
+  --secondary: #22201D;
+  --secondary-foreground: #F2EFEA;
+  --muted: #22201D;
+  --muted-foreground: #9A958D;
+  --accent: #22201D;
+  --accent-foreground: #F2EFEA;
+  --destructive: #D16B74;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.1);
+  --ring: #6EA782;
+  --buy: #6EA782;
+  --hold: #D4AF6B;
+  --sell: #D16B74;
+  --decisive: #E08456;
+  --sidebar: #1C1A17;
+  --sidebar-foreground: #F2EFEA;
+  --sidebar-primary: #6EA782;
+  --sidebar-primary-foreground: #13110F;
+  --sidebar-accent: #22201D;
+  --sidebar-accent-foreground: #F2EFEA;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: #6EA782;
 }
 
 @layer base {
@@ -122,8 +136,14 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "ss01", "cv11";
   }
   html {
     @apply font-sans;
+  }
+  h1, h2, h3, .font-heading {
+    font-family: var(--font-serif);
+    font-feature-settings: "ss01", "ss04";
+    letter-spacing: -0.01em;
   }
 }

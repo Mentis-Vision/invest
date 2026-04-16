@@ -37,35 +37,35 @@ type ResearchResponse = {
 };
 
 const MODEL_META: Record<ModelKey, { label: string; color: string }> = {
-  claude: { label: "Claude Sonnet 4.6", color: "text-orange-400" },
-  gpt: { label: "GPT-5.2", color: "text-emerald-400" },
-  gemini: { label: "Gemini 3 Pro", color: "text-blue-400" },
+  claude: { label: "Claude Sonnet 4.6", color: "text-[var(--decisive)]" },
+  gpt: { label: "GPT-5.2", color: "text-[var(--buy)]" },
+  gemini: { label: "Gemini 3 Pro", color: "text-[var(--hold)]" },
 };
 
 function recColor(rec: string) {
-  if (rec === "BUY") return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
-  if (rec === "SELL") return "bg-red-500/15 text-red-300 border-red-500/30";
-  if (rec === "HOLD") return "bg-amber-500/15 text-amber-300 border-amber-500/30";
-  return "bg-slate-500/15 text-slate-300 border-slate-500/30";
+  if (rec === "BUY") return "bg-[var(--buy)]/10 text-[var(--buy)] border-[var(--buy)]/25";
+  if (rec === "SELL") return "bg-[var(--sell)]/10 text-[var(--sell)] border-[var(--sell)]/25";
+  if (rec === "HOLD") return "bg-[var(--hold)]/10 text-[var(--hold)] border-[var(--hold)]/25";
+  return "bg-muted text-muted-foreground border-border";
 }
 
 function confColor(conf: string) {
-  if (conf === "HIGH") return "text-emerald-400";
-  if (conf === "MEDIUM") return "text-amber-400";
-  return "text-red-400";
+  if (conf === "HIGH") return "text-[var(--buy)]";
+  if (conf === "MEDIUM") return "text-[var(--hold)]";
+  return "text-[var(--sell)]";
 }
 
 function consensusColor(c: string) {
-  if (c === "UNANIMOUS") return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
-  if (c === "MAJORITY") return "bg-amber-500/15 text-amber-300 border-amber-500/30";
-  if (c === "SPLIT") return "bg-red-500/15 text-red-300 border-red-500/30";
-  return "bg-slate-500/15 text-slate-300 border-slate-500/30";
+  if (c === "UNANIMOUS") return "bg-[var(--buy)]/10 text-[var(--buy)] border-[var(--buy)]/25";
+  if (c === "MAJORITY") return "bg-[var(--hold)]/10 text-[var(--hold)] border-[var(--hold)]/25";
+  if (c === "SPLIT") return "bg-[var(--sell)]/10 text-[var(--sell)] border-[var(--sell)]/25";
+  return "bg-muted text-muted-foreground border-border";
 }
 
 function DirectionIcon({ d }: { d: "BULLISH" | "BEARISH" | "NEUTRAL" }) {
-  if (d === "BULLISH") return <TrendingUp className="h-3 w-3 text-emerald-400" />;
-  if (d === "BEARISH") return <TrendingDown className="h-3 w-3 text-red-400" />;
-  return <Minus className="h-3 w-3 text-slate-400" />;
+  if (d === "BULLISH") return <TrendingUp className="h-3 w-3 text-[var(--buy)]" />;
+  if (d === "BEARISH") return <TrendingDown className="h-3 w-3 text-[var(--sell)]" />;
+  return <Minus className="h-3 w-3 text-muted-foreground" />;
 }
 
 function ModelCard({ result }: { result: ModelResult }) {
