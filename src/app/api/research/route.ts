@@ -22,7 +22,10 @@ import {
   TIER_LIMITS,
 } from "@/lib/usage";
 import { log, errorInfo } from "@/lib/log";
-import { saveRecommendationAndSchedule } from "@/lib/history";
+import {
+  saveRecommendationAndSchedule,
+  getCachedRecommendation,
+} from "@/lib/history";
 import { getUserProfile, buildProfileRider } from "@/lib/user-profile";
 
 export const maxDuration = 120;
@@ -53,7 +56,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { ticker?: string };
+  let body: { ticker?: string; force?: boolean };
   try {
     body = await req.json();
   } catch {
@@ -61,6 +64,7 @@ export async function POST(req: NextRequest) {
   }
 
   const ticker = body.ticker?.toUpperCase().trim();
+  const force = body.force === true;
   if (!ticker || !TICKER_PATTERN.test(ticker)) {
     return NextResponse.json(
       {
@@ -115,6 +119,71 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Cache short-circuit: if the user just ran this exact ticker in the
+  // last 10 minutes and isn't forcing a refresh, replay the stored
+  // analysis. Saves the AI pipeline cost entirely (no tokens, no wallet
+  // hit) and returns in ~100ms. Rate limits above still apply so this
+  // can't be abused as a free endpoint.
+  const wantsStream =
+    (req.headers.get("accept") ?? "").includes("application/x-ndjson");
+
+  if (!force) {
+    const cached = await getCachedRecommendation(userId, ticker, 10);
+    if (cached) {
+      const a = cached.analysisJson as {
+        snapshot?: Record<string, unknown>;
+        analyses?: unknown[];
+        supervisor?: Record<string, unknown>;
+        supervisorModel?: string;
+        sources?: Record<string, unknown>;
+      };
+      const ageMs = Date.now() - cached.createdAt.getTime();
+      const payload = {
+        ticker,
+        snapshot: a.snapshot ?? cached.snapshot,
+        analyses: a.analyses ?? [],
+        supervisor: a.supervisor ?? {},
+        supervisorModel: a.supervisorModel ?? null,
+        recommendationId: cached.id,
+        toolCalls: 0,
+        sources: a.sources ?? {},
+        cached: true,
+        cachedAt: cached.createdAt.toISOString(),
+        cachedAgeSec: Math.floor(ageMs / 1000),
+      };
+
+      if (!wantsStream) {
+        return NextResponse.json(payload);
+      }
+
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          const send = (evt: Record<string, unknown>) =>
+            controller.enqueue(encoder.encode(JSON.stringify(evt) + "\n"));
+          send({ type: "snapshot", ticker, snapshot: payload.snapshot });
+          send({ type: "sources", sources: payload.sources });
+          // Replay each stored analyst as its own event so the UI
+          // renders identically to a live run.
+          for (const a of payload.analyses as unknown[]) {
+            send({ type: "analyst", analyst: a });
+          }
+          send({ type: "verdict", ...payload });
+          send({ type: "done" });
+          controller.close();
+        },
+      });
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "application/x-ndjson; charset=utf-8",
+          "Cache-Control": "no-store, no-transform",
+          "X-Accel-Buffering": "no",
+          "X-Cache": "HIT",
+        },
+      });
+    }
+  }
+
   const cap = await checkUsageCap(userId);
   if (!cap.ok) {
     log.info("research", "usage cap hit", {
@@ -143,8 +212,7 @@ export async function POST(req: NextRequest) {
     remainingCents: cap.remainingCents,
   };
 
-  const wantsStream =
-    (req.headers.get("accept") ?? "").includes("application/x-ndjson");
+  // (wantsStream is already declared above in the cache short-circuit block.)
 
   // Buffer for the legacy JSON path: events are still emitted to the
   // same `emit` function, we just collect into memory.

@@ -144,6 +144,72 @@ export type HistoryItem = {
 };
 
 /**
+ * Lookup the most recent recommendation for (user, ticker) within a
+ * short freshness window. Used by the research route to short-circuit
+ * re-runs of the same ticker inside a session — saves the entire AI
+ * pipeline + wallet hit on a cache hit.
+ *
+ * Returns null if no sufficiently-recent rec exists.
+ *
+ * Design notes:
+ *   - Only considers the most recent rec. Older ones in the history
+ *     are displayed via getUserHistory but never served as a cache hit.
+ *   - INSUFFICIENT_DATA recs are excluded: those are genuinely failed
+ *     runs and user might be retrying them on purpose.
+ *   - The returned item carries its full analysisJson so the caller
+ *     can reconstruct the identical response shape the live pipeline
+ *     would have emitted.
+ */
+export async function getCachedRecommendation(
+  userId: string,
+  ticker: string,
+  maxAgeMinutes = 10
+): Promise<{
+  id: string;
+  ticker: string;
+  createdAt: Date;
+  analysisJson: Record<string, unknown>;
+  snapshot: Record<string, unknown> | null;
+} | null> {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, ticker, "createdAt", "analysisJson"
+       FROM "recommendation"
+       WHERE "userId" = $1
+         AND ticker = $2
+         AND recommendation <> 'INSUFFICIENT_DATA'
+         AND "createdAt" > NOW() - ($3 || ' minutes')::interval
+       ORDER BY "createdAt" DESC
+       LIMIT 1`,
+      [userId, ticker, String(maxAgeMinutes)]
+    );
+    if (rows.length === 0) return null;
+    const r = rows[0] as {
+      id: string;
+      ticker: string;
+      createdAt: Date;
+      analysisJson: Record<string, unknown>;
+    };
+    const snapshot =
+      (r.analysisJson?.snapshot as Record<string, unknown>) ?? null;
+    return {
+      id: r.id,
+      ticker: r.ticker,
+      createdAt: new Date(r.createdAt),
+      analysisJson: r.analysisJson,
+      snapshot,
+    };
+  } catch (err) {
+    log.warn("history", "cache lookup failed", {
+      userId,
+      ticker,
+      ...errorInfo(err),
+    });
+    return null;
+  }
+}
+
+/**
  * Fetch a single recommendation by id, enforcing user ownership.
  * Returns null if the record doesn't exist OR belongs to a different user
  * (we don't leak the difference — 404 either way at the route level).

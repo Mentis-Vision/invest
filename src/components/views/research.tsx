@@ -23,6 +23,7 @@ import {
 import type { AnalystOutput, SupervisorOutput } from "@/lib/ai/schemas";
 import type { StockSnapshot } from "@/lib/data/yahoo";
 import DisclaimerModal from "@/components/disclaimer-modal";
+import OutcomePing from "@/components/outcome-ping";
 import { getHoldings } from "@/lib/client/holdings-cache";
 
 type ModelKey = "claude" | "gpt" | "gemini";
@@ -49,6 +50,9 @@ type ResearchResponse = {
   supervisorModel?: string;
   recommendationId?: string | null;
   toolCalls?: number;
+  cached?: boolean;
+  cachedAt?: string | null;
+  cachedAgeSec?: number | null;
 };
 
 type TickerTrackRecord = {
@@ -141,6 +145,14 @@ function consensusColor(c: string) {
   if (c === "MAJORITY") return "bg-[var(--hold)]/10 text-[var(--hold)] border-[var(--hold)]/25";
   if (c === "SPLIT") return "bg-[var(--sell)]/10 text-[var(--sell)] border-[var(--sell)]/25";
   return "bg-muted text-muted-foreground border-border";
+}
+
+function cachedAgeLabel(sec: number): string {
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} min ago`;
+  const hr = Math.floor(min / 60);
+  return `${hr}h ago`;
 }
 
 function DirectionIcon({ d }: { d: "BULLISH" | "BEARISH" | "NEUTRAL" }) {
@@ -305,9 +317,11 @@ export default function ResearchView() {
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
-    const ticker = query.trim().toUpperCase();
-    if (!ticker) return;
+    await runAnalysis(query.trim().toUpperCase(), false);
+  }
 
+  async function runAnalysis(ticker: string, force: boolean) {
+    if (!ticker) return;
     if (disclaimerChecked && disclaimerOpen) return;
 
     setLoading(true);
@@ -358,7 +372,7 @@ export default function ResearchView() {
           "Content-Type": "application/json",
           Accept: "application/x-ndjson",
         },
-        body: JSON.stringify({ ticker }),
+        body: JSON.stringify({ ticker, force }),
       });
 
       if (!res.ok || !res.body) {
@@ -457,6 +471,11 @@ export default function ResearchView() {
         open={disclaimerOpen}
         onAccept={() => setDisclaimerOpen(false)}
       />
+
+      {/* Outcome-ping: surfaces any recently-evaluated past recommendation
+          (7/30/90/365d windows). Transparency nudge — not a notification. */}
+      <OutcomePing />
+
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Research</h2>
         <p className="text-sm text-muted-foreground">
@@ -835,6 +854,30 @@ export default function ResearchView() {
                 </div>
               </div>
               <p className="mt-4 text-sm leading-relaxed">{result.supervisor.summary}</p>
+              {result.cached && result.cachedAgeSec != null && (
+                <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-[var(--hold)]/30 bg-[var(--hold)]/5 px-3 py-2 text-xs">
+                  <Info className="h-3 w-3 flex-shrink-0 text-[var(--hold)]" />
+                  <span>
+                    Showing result from{" "}
+                    <span className="font-medium">
+                      {cachedAgeLabel(result.cachedAgeSec)}
+                    </span>
+                    . Prices and macro data may have moved.
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="ml-auto text-xs"
+                    disabled={loading}
+                    onClick={() => runAnalysis(result.ticker, true)}
+                  >
+                    {loading ? (
+                      <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                    ) : null}
+                    Re-run fresh
+                  </Button>
+                </div>
+              )}
               {result.recommendationId && (
                 <div className="mt-4 flex items-center gap-2 border-t border-white/[0.06] pt-3">
                   <Button
