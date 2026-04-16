@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { motion } from "motion/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -216,11 +215,7 @@ export default function ResearchView() {
       )}
 
       {result && (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-6"
-        >
+        <div className="space-y-6">
           {/* Verdict card */}
           <Card className="overflow-hidden border-white/10">
             <div className="border-b border-white/[0.06] bg-gradient-to-br from-white/[0.02] to-transparent p-6">
@@ -345,7 +340,7 @@ export default function ResearchView() {
               ))}
             </div>
           </div>
-        </motion.div>
+        </div>
       )}
     </div>
   );
