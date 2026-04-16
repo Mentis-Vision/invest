@@ -17,7 +17,7 @@ export default async function HistoryPage() {
   ]);
 
   return (
-    <AppShell userName={session.user.name ?? session.user.email}>
+    <AppShell user={{ name: session.user.name ?? "", email: session.user.email }}>
       <HistoryClient items={items} trackRecord={trackRecord} />
     </AppShell>
   );

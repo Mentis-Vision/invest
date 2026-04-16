@@ -118,6 +118,16 @@ export default function SignInPage() {
         </button>
       </form>
 
+      {/* Forgot password */}
+      <p className="mt-3 text-center text-[12px] text-muted-foreground">
+        <Link
+          href="/forgot-password"
+          className="underline-offset-[5px] hover:underline"
+        >
+          Forgot your password?
+        </Link>
+      </p>
+
       {/* Footer */}
       <p className="mt-6 text-center text-[12px] text-muted-foreground">
         No account?{" "}

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -22,16 +23,39 @@ import {
   Menu,
   LogOut,
   TrendingUp,
+  History as HistoryIcon,
 } from "lucide-react";
 
-type View = "dashboard" | "portfolio" | "research" | "strategy" | "integrations";
+type View =
+  | "dashboard"
+  | "portfolio"
+  | "research"
+  | "strategy"
+  | "integrations";
 
-const navItems: { id: View; label: string; icon: typeof LayoutDashboard }[] = [
-  { id: "dashboard", label: "Overview", icon: LayoutDashboard },
-  { id: "portfolio", label: "My Portfolio", icon: PieChart },
-  { id: "research", label: "Research", icon: Search },
-  { id: "strategy", label: "AI Strategy", icon: Lightbulb },
-  { id: "integrations", label: "Data & APIs", icon: Plug },
+type DashboardNav = {
+  kind: "view";
+  id: View;
+  label: string;
+  icon: typeof LayoutDashboard;
+};
+type LinkNav = {
+  kind: "link";
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+};
+
+const dashboardNavItems: DashboardNav[] = [
+  { kind: "view", id: "dashboard", label: "Overview", icon: LayoutDashboard },
+  { kind: "view", id: "portfolio", label: "My Portfolio", icon: PieChart },
+  { kind: "view", id: "research", label: "Research", icon: Search },
+  { kind: "view", id: "strategy", label: "AI Strategy", icon: Lightbulb },
+  { kind: "view", id: "integrations", label: "Data & APIs", icon: Plug },
+];
+
+const linkNavItems: LinkNav[] = [
+  { kind: "link", href: "/app/history", label: "History", icon: HistoryIcon },
 ];
 
 export default function AppShell({
@@ -42,13 +66,16 @@ export default function AppShell({
 }: {
   user: { name: string; email: string };
   children: React.ReactNode;
-  currentView: View;
-  onViewChange: (view: View) => void;
+  currentView?: View;
+  onViewChange?: (view: View) => void;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const initials = user.name
+  const onDashboard = pathname === "/app" || pathname === "/app/";
+
+  const initials = (user.name || user.email || "U")
     .split(" ")
     .map((n) => n[0])
     .join("")
@@ -60,19 +87,26 @@ export default function AppShell({
     router.push("/sign-in");
   }
 
+  function handleViewNav(view: View) {
+    if (onDashboard && onViewChange) {
+      onViewChange(view);
+    } else {
+      // Navigate back to dashboard with the view in a query param.
+      router.push(`/app?view=${view}`);
+    }
+    setMobileOpen(false);
+  }
+
   function NavLinks() {
     return (
       <div className="space-y-1">
-        {navItems.map((item) => {
+        {dashboardNavItems.map((item) => {
           const Icon = item.icon;
-          const active = currentView === item.id;
+          const active = onDashboard && currentView === item.id;
           return (
             <button
               key={item.id}
-              onClick={() => {
-                onViewChange(item.id);
-                setMobileOpen(false);
-              }}
+              onClick={() => handleViewNav(item.id)}
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
                 active
                   ? "bg-accent text-accent-foreground font-medium"
@@ -84,6 +118,25 @@ export default function AppShell({
             </button>
           );
         })}
+        {linkNavItems.map((item) => {
+          const Icon = item.icon;
+          const active = pathname === item.href;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={() => setMobileOpen(false)}
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+                active
+                  ? "bg-accent text-accent-foreground font-medium"
+                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+              }`}
+            >
+              <Icon className="h-4 w-4" />
+              {item.label}
+            </Link>
+          );
+        })}
       </div>
     );
   }
@@ -93,8 +146,10 @@ export default function AppShell({
       {/* Desktop sidebar */}
       <aside className="hidden w-56 flex-col border-r bg-card md:flex">
         <div className="flex h-14 items-center gap-2 border-b px-4">
-          <TrendingUp className="h-5 w-5 text-primary" />
-          <span className="font-semibold">ClearPath</span>
+          <Link href="/app" className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-primary" />
+            <span className="font-semibold">ClearPath</span>
+          </Link>
         </div>
         <nav className="flex-1 overflow-y-auto p-3">
           <NavLinks />
@@ -148,10 +203,10 @@ export default function AppShell({
               </button>
             </SheetContent>
           </Sheet>
-          <div className="flex items-center gap-2">
+          <Link href="/app" className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-primary" />
             <span className="font-semibold">ClearPath</span>
-          </div>
+          </Link>
         </header>
 
         {/* Main content */}

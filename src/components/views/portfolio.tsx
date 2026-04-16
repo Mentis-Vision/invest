@@ -1,11 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Link as LinkIcon, RefreshCw, Loader2 } from "lucide-react";
-import { usePlaidLink } from "react-plaid-link";
 
 type Holding = {
   ticker: string;
@@ -23,6 +22,7 @@ type HoldingsResponse = {
   connected?: boolean;
   totalValue?: number;
   institutions?: string[];
+  accountCount?: number;
   message?: string;
 };
 
@@ -35,19 +35,21 @@ function money(n: number): string {
 }
 
 export default function PortfolioView() {
-  const [linkToken, setLinkToken] = useState<string | null>(null);
   const [loadingToken, setLoadingToken] = useState(false);
   const [loadingHoldings, setLoadingHoldings] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [totalValue, setTotalValue] = useState(0);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notConfiguredMessage, setNotConfiguredMessage] = useState<string | null>(null);
+  const popupRef = useRef<Window | null>(null);
+  const pollingRef = useRef<number | null>(null);
 
   const loadHoldings = useCallback(async () => {
     setLoadingHoldings(true);
     try {
-      const res = await fetch("/api/plaid/holdings");
+      const res = await fetch("/api/snaptrade/holdings");
       const data: HoldingsResponse = await res.json();
       if (data.message && !data.connected) {
         setNotConfiguredMessage(data.message);
@@ -66,73 +68,76 @@ export default function PortfolioView() {
     loadHoldings();
   }, [loadHoldings]);
 
-  const requestLinkToken = useCallback(async () => {
+  // If a popup is open, poll holdings every 3s and close when linked.
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) window.clearInterval(pollingRef.current);
+    };
+  }, []);
+
+  const startLinking = useCallback(async () => {
     setError(null);
     setLoadingToken(true);
     try {
-      const res = await fetch("/api/plaid/link-token", { method: "POST" });
+      const res = await fetch("/api/snaptrade/login-url", { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
-        if (data.error === "plaid_not_configured") {
+        if (data.error === "snaptrade_not_configured") {
           setNotConfiguredMessage(data.message);
           return;
         }
         setError(data.message ?? "Could not start brokerage linking.");
         return;
       }
-      setLinkToken(data.linkToken);
+
+      const url: string = data.loginUrl;
+      const w = Math.min(window.innerWidth * 0.9, 720);
+      const h = Math.min(window.innerHeight * 0.9, 820);
+      const left = window.screenX + (window.innerWidth - w) / 2;
+      const top = window.screenY + (window.innerHeight - h) / 2;
+      const popup = window.open(
+        url,
+        "snaptrade-link",
+        `width=${w},height=${h},left=${left},top=${top}`
+      );
+      popupRef.current = popup;
+
+      if (!popup) {
+        setError(
+          "Pop-up blocked. Enable pop-ups for this site, then try again."
+        );
+        return;
+      }
+
+      // Poll until popup closes, then refresh.
+      pollingRef.current = window.setInterval(async () => {
+        if (popup.closed) {
+          if (pollingRef.current) window.clearInterval(pollingRef.current);
+          pollingRef.current = null;
+          await loadHoldings();
+          // Also trigger a trade sync in the background
+          fetch("/api/snaptrade/sync", { method: "POST" }).catch(() => {});
+        }
+      }, 1000);
     } catch {
       setError("Could not reach our server. Try again in a moment.");
     } finally {
       setLoadingToken(false);
     }
-  }, []);
+  }, [loadHoldings]);
 
-  const onSuccess = useCallback(
-    async (publicToken: string) => {
-      try {
-        const res = await fetch("/api/plaid/exchange", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ publicToken }),
-        });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          setError(data.message ?? "Could not link brokerage.");
-          return;
-        }
-        setLinkToken(null);
-        await loadHoldings();
-        await fetch("/api/plaid/sync", { method: "POST" }).catch(() => {});
-      } catch {
-        setError("Link failed. Try again.");
-      }
-    },
-    [loadHoldings]
-  );
-
-  const { open, ready } = usePlaidLink({
-    token: linkToken,
-    onSuccess,
-    onExit: () => setLinkToken(null),
-  });
-
-  useEffect(() => {
-    if (linkToken && ready) open();
-  }, [linkToken, ready, open]);
-
-  const handleConnect = () => {
-    if (linkToken && ready) {
-      open();
-    } else {
-      requestLinkToken();
+  const handleRefresh = useCallback(async () => {
+    setSyncing(true);
+    try {
+      await fetch("/api/snaptrade/sync", { method: "POST" }).catch(() => {});
+      await loadHoldings();
+    } finally {
+      setSyncing(false);
     }
-  };
+  }, [loadHoldings]);
 
-  const sectors = holdings.reduce<Record<string, number>>((acc, h) => {
-    // Without sector data we bucket by ticker's first letter as a placeholder.
-    // Full sector rollup requires a holdings.getSector() lookup — deferred.
-    const bucket = h.institutionName ?? "Unclassified";
+  const institutions = holdings.reduce<Record<string, number>>((acc, h) => {
+    const bucket = h.institutionName ?? h.accountName ?? "Unclassified";
     acc[bucket] = (acc[bucket] ?? 0) + h.value;
     return acc;
   }, {});
@@ -148,18 +153,16 @@ export default function PortfolioView() {
         </div>
         <div className="flex items-center gap-2">
           {connected && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                fetch("/api/plaid/sync", { method: "POST" }).then(loadHoldings);
-              }}
-            >
-              <RefreshCw className="mr-2 h-4 w-4" />
+            <Button size="sm" variant="outline" onClick={handleRefresh} disabled={syncing}>
+              {syncing ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 h-4 w-4" />
+              )}
               Refresh
             </Button>
           )}
-          <Button size="sm" onClick={handleConnect} disabled={loadingToken}>
+          <Button size="sm" onClick={startLinking} disabled={loadingToken}>
             {loadingToken ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
@@ -207,13 +210,13 @@ export default function PortfolioView() {
               <div>
                 <div className="text-xs text-muted-foreground">Institutions</div>
                 <div className="mt-1 text-2xl font-semibold tracking-tight">
-                  {Object.keys(sectors).length}
+                  {Object.keys(institutions).length}
                 </div>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground">Largest position</div>
                 <div className="mt-1 text-2xl font-semibold tracking-tight">
-                  {holdings.length > 0
+                  {holdings.length > 0 && totalValue > 0
                     ? `${Math.round(
                         (Math.max(...holdings.map((h) => h.value)) / totalValue) * 100
                       )}%`
@@ -243,13 +246,13 @@ export default function PortfolioView() {
               <h3 className="text-sm font-medium">No holdings yet</h3>
               <p className="mt-1 max-w-sm text-sm text-muted-foreground">
                 Connect your brokerage account to sync your portfolio automatically.
-                We only request read-only access.
+                Read-only access — we never move money or place trades.
               </p>
               <Button
                 variant="outline"
                 size="sm"
                 className="mt-4"
-                onClick={handleConnect}
+                onClick={startLinking}
                 disabled={loadingToken}
               >
                 {loadingToken && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -278,13 +281,9 @@ export default function PortfolioView() {
                         <td className="px-3 py-3 font-mono font-medium">{h.ticker}</td>
                         <td className="px-3 py-3 text-muted-foreground">{h.name}</td>
                         <td className="px-3 py-3 text-right tabular-nums">
-                          {h.shares.toLocaleString("en-US", {
-                            maximumFractionDigits: 4,
-                          })}
+                          {h.shares.toLocaleString("en-US", { maximumFractionDigits: 4 })}
                         </td>
-                        <td className="px-3 py-3 text-right tabular-nums">
-                          {money(h.price)}
-                        </td>
+                        <td className="px-3 py-3 text-right tabular-nums">{money(h.price)}</td>
                         <td className="px-3 py-3 text-right tabular-nums font-medium">
                           {money(h.value)}
                         </td>
@@ -307,9 +306,9 @@ export default function PortfolioView() {
       </Card>
 
       <p className="text-xs text-muted-foreground">
-        Brokerage data is read-only. We never initiate trades or move money on
-        your behalf. Positions reflect the last sync from your institution and
-        may lag real-time.
+        Brokerage data is read-only via SnapTrade. We never initiate trades or
+        move money on your behalf. Positions reflect the last sync from your
+        institution and may lag real-time.
       </p>
     </div>
   );

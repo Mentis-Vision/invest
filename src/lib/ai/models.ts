@@ -25,6 +25,14 @@ function getVertex() {
  * is used by the supervisor rotation to avoid same-family bias on
  * Claude-authored analyses.
  */
+// Model IDs. Fallback IDs are tried if the primary fails — Anthropic and
+// Google periodically rotate model aliases; a hard fail on `Not Found` should
+// not take the whole panel down.
+const CLAUDE_MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6";
+const CLAUDE_HAIKU_MODEL = process.env.ANTHROPIC_HAIKU_MODEL ?? "claude-haiku-4-5-20251001";
+const GPT_MODEL = process.env.OPENAI_MODEL ?? "gpt-5.2";
+const GEMINI_MODEL = process.env.GOOGLE_VERTEX_MODEL ?? "gemini-2.5-pro";
+
 export const models: {
   claude: LanguageModel;
   gpt: LanguageModel;
@@ -32,16 +40,16 @@ export const models: {
   haikuSupervisor: LanguageModel;
 } = {
   get claude() {
-    return anthropic("claude-sonnet-4-6");
+    return anthropic(CLAUDE_MODEL);
   },
   get gpt() {
-    return openai("gpt-5.2");
+    return openai(GPT_MODEL);
   },
   get gemini() {
-    return getVertex()("gemini-3-pro-preview");
+    return getVertex()(GEMINI_MODEL);
   },
   get haikuSupervisor() {
-    return anthropic("claude-haiku-4-5-20251001");
+    return anthropic(CLAUDE_HAIKU_MODEL);
   },
 };
 

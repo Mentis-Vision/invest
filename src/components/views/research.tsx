@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -17,9 +17,11 @@ import {
   Minus,
   Check,
   X,
+  Info,
 } from "lucide-react";
 import type { AnalystOutput, SupervisorOutput } from "@/lib/ai/schemas";
 import type { StockSnapshot } from "@/lib/data/yahoo";
+import DisclaimerModal from "@/components/disclaimer-modal";
 
 type ModelKey = "claude" | "gpt" | "gemini";
 type ModelResult = {
@@ -130,11 +132,31 @@ export default function ResearchView() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ResearchResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [disclaimerOpen, setDisclaimerOpen] = useState(false);
+  const [disclaimerChecked, setDisclaimerChecked] = useState(false);
+
+  // First-run acknowledgment state
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/user/disclaimer")
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        setDisclaimerChecked(true);
+        if (!data.accepted) setDisclaimerOpen(true);
+      })
+      .catch(() => setDisclaimerChecked(true));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     const ticker = query.trim().toUpperCase();
     if (!ticker) return;
+
+    if (disclaimerChecked && disclaimerOpen) return;
 
     setLoading(true);
     setError(null);
@@ -164,6 +186,10 @@ export default function ResearchView() {
 
   return (
     <div className="space-y-6">
+      <DisclaimerModal
+        open={disclaimerOpen}
+        onAccept={() => setDisclaimerOpen(false)}
+      />
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Research</h2>
         <p className="text-sm text-muted-foreground">
@@ -171,6 +197,18 @@ export default function ResearchView() {
           Every claim traceable to a source.
         </p>
       </div>
+
+      <Card className="border-[var(--hold)]/30 bg-[var(--hold)]/5">
+        <CardContent className="flex items-start gap-3 py-3 text-xs">
+          <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-[var(--hold)]" />
+          <div>
+            <span className="font-medium">For informational purposes only.</span>{" "}
+            Not investment advice. Not a recommendation to buy or sell any
+            security. Consult a licensed financial advisor before making any
+            decision with your money.
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="p-4">

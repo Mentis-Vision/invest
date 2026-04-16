@@ -1,4 +1,11 @@
-import yahooFinance from "yahoo-finance2";
+import { default as YahooFinanceCtor } from "yahoo-finance2";
+
+// yahoo-finance2 v3 requires instantiation. Cache one instance for the process.
+// Signed errors via notices are on by default — we silence the transient
+// deprecation notice to keep logs quiet.
+const yahooFinance = new YahooFinanceCtor({
+  suppressNotices: ["yahooSurvey", "ripHistorical"],
+});
 
 export type StockSnapshot = {
   symbol: string;

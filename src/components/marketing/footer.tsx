@@ -20,7 +20,7 @@ export default function MarketingFooter() {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-10 text-sm">
+          <div className="grid grid-cols-3 gap-10 text-sm">
             <div>
               <h4 className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
                 Product
@@ -40,17 +40,51 @@ export default function MarketingFooter() {
                 <li><a href="mailto:hello@clearpath-invest.com" className="text-foreground/80 hover:text-foreground">Contact</a></li>
               </ul>
             </div>
+            <div>
+              <h4 className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                Legal
+              </h4>
+              <ul className="space-y-2">
+                <li><Link href="/terms" className="text-foreground/80 hover:text-foreground">Terms</Link></li>
+                <li><Link href="/privacy" className="text-foreground/80 hover:text-foreground">Privacy</Link></li>
+                <li><Link href="/disclosures" className="text-foreground/80 hover:text-foreground">Disclosures</Link></li>
+              </ul>
+            </div>
           </div>
         </div>
 
-        <div className="mt-10 flex flex-col gap-4 border-t border-border/60 pt-6 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between">
-          <p>
-            © 2026 ClearPath Invest. Informational purposes only. Not investment
-            advice.
+        <div className="mt-10 border-t border-border/60 pt-6 text-xs leading-relaxed text-muted-foreground">
+          <p className="max-w-4xl">
+            <strong className="text-foreground/80">Important:</strong> ClearPath
+            Invest provides <em className="font-[family-name:var(--font-display)]">research tools and
+            informational content only</em>. Nothing on this site is investment,
+            tax, legal, or accounting advice. ClearPath is not a registered
+            investment advisor, broker-dealer, or fiduciary. Any analyses or
+            track-record data are historical and informational — past
+            performance does not guarantee future results. AI models produce
+            output that may be incomplete, inaccurate, or incorrect. Always
+            consult a licensed professional before acting on information from
+            this site.
           </p>
-          <p className="font-mono uppercase tracking-[0.2em]">
-            Data sources: <span className="text-foreground/70">SEC · FRED · Yahoo Finance · + 9 more</span>
-          </p>
+          <div className="mt-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <p>
+              © 2026 ClearPath Invest.{" "}
+              <Link href="/terms" className="underline">
+                Terms
+              </Link>
+              {" · "}
+              <Link href="/privacy" className="underline">
+                Privacy
+              </Link>
+              {" · "}
+              <Link href="/disclosures" className="underline">
+                Disclosures
+              </Link>
+            </p>
+            <p className="font-mono uppercase tracking-[0.2em]">
+              Data sources: <span className="text-foreground/70">SEC · FRED · Yahoo Finance · + 9 more</span>
+            </p>
+          </div>
         </div>
       </div>
     </footer>

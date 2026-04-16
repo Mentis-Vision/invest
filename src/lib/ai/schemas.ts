@@ -4,6 +4,10 @@ import { z } from "zod";
  * Structured output schema enforced on every individual model analysis.
  * Using a rigid schema makes consensus comparison mechanical, not fuzzy.
  */
+// Schema constraints kept loose (no minItems > 1) for compatibility with
+// Claude's structured output (which only supports 0 or 1), and with Gemini
+// (which is strict about multi-item minimums). We enforce 2–5 keySignals
+// via prompt guidance + runtime trimming on the consumer side.
 export const AnalystOutputSchema = z.object({
   recommendation: z.enum(["BUY", "HOLD", "SELL", "INSUFFICIENT_DATA"]),
   confidence: z.enum(["LOW", "MEDIUM", "HIGH"]),
@@ -16,10 +20,9 @@ export const AnalystOutputSchema = z.object({
         direction: z.enum(["BULLISH", "BEARISH", "NEUTRAL"]),
       })
     )
-    .min(2)
-    .max(5),
-  riskFactors: z.array(z.string()).min(1).max(4).describe("What would change the view"),
-  missingData: z.array(z.string()).max(4).describe("Data points that would increase confidence"),
+    .describe("2–5 key signals. Each signal.datum must quote verbatim from the DATA block."),
+  riskFactors: z.array(z.string()).describe("1–4 risks: what would change the view."),
+  missingData: z.array(z.string()).describe("Up to 4 data points that would increase confidence"),
 });
 
 export type AnalystOutput = z.infer<typeof AnalystOutputSchema>;
@@ -75,8 +78,7 @@ export const PortfolioAnalystOutputSchema = z.object({
         concern: z.string(),
       })
     )
-    .max(5)
-    .describe("Single-position concentrations worth flagging"),
+    .describe("Up to 5 single-position concentrations worth flagging"),
   sectorImbalances: z
     .array(
       z.object({
@@ -85,11 +87,10 @@ export const PortfolioAnalystOutputSchema = z.object({
         observation: z.string(),
       })
     )
-    .max(5),
+    .describe("Up to 5 sector imbalances"),
   macroAlignment: z
     .array(z.string())
-    .max(5)
-    .describe("Statements on how the portfolio aligns or mis-aligns with current macro regime"),
+    .describe("Up to 5 statements on how the portfolio aligns or mis-aligns with current macro regime"),
   rebalancingSuggestions: z
     .array(
       z.object({
@@ -98,9 +99,8 @@ export const PortfolioAnalystOutputSchema = z.object({
         rationale: z.string(),
       })
     )
-    .max(5)
-    .describe("Generic directional suggestions. Not investment advice."),
-  redFlags: z.array(z.string()).max(5),
+    .describe("Up to 5 generic directional suggestions. Not investment advice."),
+  redFlags: z.array(z.string()).describe("Up to 5 red flags"),
 });
 
 export type PortfolioAnalystOutput = z.infer<typeof PortfolioAnalystOutputSchema>;
@@ -128,7 +128,7 @@ export const PortfolioSupervisorOutputSchema = z.object({
         rationale: z.string(),
       })
     )
-    .max(5),
+    .describe("Up to 5 top actions, highest priority first"),
   dataAsOf: z.string(),
 });
 

@@ -17,6 +17,8 @@ type HoldingRow = {
   ticker: string;
   shares: string | number;
   avgPrice: string | number | null;
+  lastPrice: string | number | null;
+  lastValue: string | number | null;
   costBasis: string | number | null;
   accountName: string | null;
 };
@@ -62,8 +64,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const { rows } = await pool.query(
-      `SELECT ticker, shares, "avgPrice", "costBasis", "accountName"
-       FROM "holding" WHERE "userId" = $1 ORDER BY shares * COALESCE("avgPrice", 0) DESC`,
+      `SELECT ticker, shares, "avgPrice", "lastPrice", "lastValue", "costBasis", "accountName"
+       FROM "holding"
+       WHERE "userId" = $1
+       ORDER BY COALESCE("lastValue", shares * COALESCE("lastPrice", "avgPrice", 0)) DESC`,
       [userId]
     );
 
@@ -79,10 +83,14 @@ export async function POST(req: NextRequest) {
     }
 
     const holdings = rows as HoldingRow[];
-    const totalValue = holdings.reduce(
-      (sum, h) => sum + Number(h.shares) * Number(h.avgPrice ?? 0),
-      0
-    );
+    const marketValue = (h: HoldingRow) => {
+      const lv = h.lastValue !== null && h.lastValue !== undefined ? Number(h.lastValue) : 0;
+      if (lv > 0) return lv;
+      const shares = Number(h.shares);
+      const price = Number(h.lastPrice ?? h.avgPrice ?? 0);
+      return shares * price;
+    };
+    const totalValue = holdings.reduce((sum, h) => sum + marketValue(h), 0);
 
     const macro = await getMacroSnapshot();
     const dataAsOf = new Date().toISOString();
@@ -90,16 +98,20 @@ export async function POST(req: NextRequest) {
     const dataBlock = [
       `PORTFOLIO SNAPSHOT (as of ${dataAsOf}):`,
       `Total positions: ${holdings.length}`,
-      `Estimated total value: $${totalValue.toFixed(2)} USD`,
+      `Estimated market value: $${totalValue.toFixed(2)} USD`,
       ``,
-      `POSITIONS (sorted largest first):`,
+      `POSITIONS (sorted largest first, using last-synced price from brokerage):`,
       ...holdings.map((h) => {
         const shares = Number(h.shares);
-        const price = Number(h.avgPrice ?? 0);
-        const value = shares * price;
+        const current = Number(h.lastPrice ?? h.avgPrice ?? 0);
+        const value = marketValue(h);
         const pct = totalValue > 0 ? (value / totalValue) * 100 : 0;
-        return `- ${h.ticker}: ${shares} shares @ $${price.toFixed(2)} ≈ $${value.toFixed(2)} (${pct.toFixed(1)}% of portfolio)${h.accountName ? ` [${h.accountName}]` : ""}`;
+        const avgCost = h.avgPrice !== null && h.avgPrice !== undefined ? Number(h.avgPrice) : null;
+        const costLabel = avgCost != null ? ` · avg cost $${avgCost.toFixed(2)}` : "";
+        return `- ${h.ticker}: ${shares} shares @ $${current.toFixed(2)}${costLabel} ≈ $${value.toFixed(2)} (${pct.toFixed(1)}% of portfolio)${h.accountName ? ` [${h.accountName}]` : ""}`;
       }),
+      ``,
+      `NOTE: Prices are last-synced from the user's brokerage via SnapTrade; they may be intraday-stale. Sector data is NOT included in this block.`,
       ``,
       formatMacroForAI(macro),
     ].join("\n");
