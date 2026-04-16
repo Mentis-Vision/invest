@@ -99,14 +99,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       <div className="pointer-events-none absolute bottom-0 right-0 h-[400px] w-[400px] translate-x-1/4 translate-y-1/4 rounded-full bg-emerald-500/[0.02] blur-[100px]" />
 
       {/* Content */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: "easeOut" }}
-        className="relative z-10 w-full max-w-[420px] px-6"
-      >
-        {children}
-      </motion.div>
+      <div className="relative z-10 w-full max-w-[420px] px-6">{children}</div>
 
       <TickerTape />
     </div>
