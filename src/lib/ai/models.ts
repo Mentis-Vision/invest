@@ -12,7 +12,7 @@ let _vertex: ReturnType<typeof createVertex> | null = null;
 function getVertex() {
   if (!_vertex) {
     _vertex = createVertex({
-      apiKey: process.env.GOOGLE_VERTEX_API_KEY,
+      apiKey: process.env.GOOGLE_VERTEX_API_KEY ?? process.env.VERTEX_SERVICE_KEY,
       project: process.env.GOOGLE_VERTEX_PROJECT,
       location: process.env.GOOGLE_VERTEX_LOCATION ?? "us-central1",
     });
