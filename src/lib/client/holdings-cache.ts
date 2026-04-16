@@ -27,6 +27,7 @@ export type Holding = {
   accountName: string | null;
   sector: string | null;
   industry: string | null;
+  assetClass?: string;
 };
 
 export type HoldingsSnapshot = {

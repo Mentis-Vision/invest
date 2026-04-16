@@ -21,6 +21,7 @@ type Holding = {
   accountName: string | null;
   sector: string | null;
   industry: string | null;
+  assetClass?: string;
 };
 
 type HoldingsResponse = {

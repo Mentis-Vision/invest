@@ -73,6 +73,7 @@ export async function GET(_req: NextRequest) {
       accountName: string | null;
       sector: string | null;
       industry: string | null;
+      assetClass: string;
     };
 
     type PendingUpsert = {
@@ -155,6 +156,7 @@ export async function GET(_req: NextRequest) {
         name: null,
         sector: null,
         industry: null,
+        assetClass: "equity" as const,
       };
       const displayName = md.name ?? p.ticker;
       const acct = accounts.find((a) => a.id === p.accountId);
@@ -170,12 +172,13 @@ export async function GET(_req: NextRequest) {
         accountName: p.accountName,
         sector: md.sector,
         industry: md.industry,
+        assetClass: md.assetClass,
       });
 
       try {
         await pool.query(
-          `INSERT INTO "holding" (id, "userId", ticker, shares, "costBasis", "avgPrice", "lastPrice", "lastValue", currency, "accountName", "plaidAccountId", sector, industry, source, "lastSyncedAt")
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'snaptrade', NOW())
+          `INSERT INTO "holding" (id, "userId", ticker, shares, "costBasis", "avgPrice", "lastPrice", "lastValue", currency, "accountName", "plaidAccountId", sector, industry, "assetClass", source, "lastSyncedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'snaptrade', NOW())
            ON CONFLICT ("userId", ticker, COALESCE("accountName", ''))
            DO UPDATE SET
              shares = EXCLUDED.shares,
@@ -185,6 +188,7 @@ export async function GET(_req: NextRequest) {
              "lastValue" = EXCLUDED."lastValue",
              sector = COALESCE(EXCLUDED.sector, "holding".sector),
              industry = COALESCE(EXCLUDED.industry, "holding".industry),
+             "assetClass" = COALESCE(EXCLUDED."assetClass", "holding"."assetClass"),
              "lastSyncedAt" = NOW()`,
           [
             crypto.randomUUID(),
@@ -200,6 +204,7 @@ export async function GET(_req: NextRequest) {
             p.accountId,
             md.sector,
             md.industry,
+            md.assetClass,
           ]
         );
       } catch (err) {

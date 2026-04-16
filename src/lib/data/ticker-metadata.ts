@@ -1,6 +1,11 @@
 import { default as YahooFinanceCtor } from "yahoo-finance2";
 import { pool } from "../db";
 import { log, errorInfo } from "../log";
+import {
+  classifyAsset,
+  isKnownCrypto,
+  type AssetClass,
+} from "../asset-class";
 
 /**
  * Ticker metadata cache (sector + industry + name).
@@ -25,6 +30,7 @@ export type TickerMetadata = {
   name: string | null;
   sector: string | null;
   industry: string | null;
+  assetClass: AssetClass;
 };
 
 /**
@@ -40,7 +46,7 @@ export async function getTickerMetadata(ticker: string): Promise<TickerMetadata>
   // 1. Postgres cache
   try {
     const { rows } = await pool.query(
-      `SELECT ticker, name, sector, industry, "updatedAt"
+      `SELECT ticker, name, sector, industry, "assetClass", "updatedAt"
        FROM "ticker_metadata" WHERE ticker = $1`,
       [upper]
     );
@@ -50,6 +56,7 @@ export async function getTickerMetadata(ticker: string): Promise<TickerMetadata>
         name: string | null;
         sector: string | null;
         industry: string | null;
+        assetClass: string | null;
         updatedAt: Date;
       };
       const ageDays =
@@ -60,6 +67,9 @@ export async function getTickerMetadata(ticker: string): Promise<TickerMetadata>
           name: r.name,
           sector: r.sector,
           industry: r.industry,
+          assetClass:
+            (r.assetClass as AssetClass | null) ??
+            (isKnownCrypto(r.ticker) ? "crypto" : "equity"),
         };
         memo.set(upper, cached);
         return cached;
@@ -72,32 +82,75 @@ export async function getTickerMetadata(ticker: string): Promise<TickerMetadata>
     });
   }
 
-  // 2. Yahoo lookup
+  // 2a. Shortcut for known crypto — don't pound Yahoo on every BTC/ETH lookup.
+  // Yahoo DOES return crypto (e.g. "BTC-USD") but the API pattern differs
+  // and sector/industry are null anyway.
+  if (isKnownCrypto(upper)) {
+    const metadata: TickerMetadata = {
+      ticker: upper,
+      name: upper,
+      sector: null,
+      industry: null,
+      assetClass: "crypto",
+    };
+    pool
+      .query(
+        `INSERT INTO "ticker_metadata" (ticker, name, sector, industry, "assetClass", "updatedAt")
+         VALUES ($1, $2, NULL, NULL, 'crypto', NOW())
+         ON CONFLICT (ticker) DO UPDATE SET
+           "assetClass" = 'crypto',
+           "updatedAt" = NOW()`,
+        [upper, upper]
+      )
+      .catch(() => {});
+    memo.set(upper, metadata);
+    return metadata;
+  }
+
+  // 2b. Yahoo lookup for everything else
   try {
     const s = (await yahoo.quoteSummary(upper, {
       modules: ["assetProfile", "price"],
     })) as unknown as {
       assetProfile?: { sector?: string; industry?: string };
-      price?: { longName?: string; shortName?: string };
+      price?: {
+        longName?: string;
+        shortName?: string;
+        quoteType?: string;
+        typeDisp?: string;
+      };
     };
+
+    const assetClass = classifyAsset(upper, {
+      quoteType: s.price?.quoteType ?? null,
+      typeDisp: s.price?.typeDisp ?? null,
+    });
+
     const metadata: TickerMetadata = {
       ticker: upper,
       name: s.price?.longName ?? s.price?.shortName ?? null,
       sector: s.assetProfile?.sector ?? null,
       industry: s.assetProfile?.industry ?? null,
+      assetClass: assetClass === "unknown" ? "equity" : assetClass,
     };
 
-    // Write-back to cache. Ignore errors — the in-memory + Yahoo path is enough.
     pool
       .query(
-        `INSERT INTO "ticker_metadata" (ticker, name, sector, industry, "updatedAt")
-         VALUES ($1, $2, $3, $4, NOW())
+        `INSERT INTO "ticker_metadata" (ticker, name, sector, industry, "assetClass", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, NOW())
          ON CONFLICT (ticker) DO UPDATE SET
            name = EXCLUDED.name,
            sector = EXCLUDED.sector,
            industry = EXCLUDED.industry,
+           "assetClass" = EXCLUDED."assetClass",
            "updatedAt" = NOW()`,
-        [upper, metadata.name, metadata.sector, metadata.industry]
+        [
+          upper,
+          metadata.name,
+          metadata.sector,
+          metadata.industry,
+          metadata.assetClass,
+        ]
       )
       .catch(() => {});
 
@@ -108,11 +161,14 @@ export async function getTickerMetadata(ticker: string): Promise<TickerMetadata>
       ticker: upper,
       ...errorInfo(err),
     });
+    // Fall back: guess from ticker alone (known-crypto list already handled).
+    const fallbackClass = classifyAsset(upper);
     const empty: TickerMetadata = {
       ticker: upper,
       name: null,
       sector: null,
       industry: null,
+      assetClass: fallbackClass === "unknown" ? "equity" : fallbackClass,
     };
     memo.set(upper, empty);
     return empty;
