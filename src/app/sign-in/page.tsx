@@ -24,11 +24,11 @@ export default function SignInPage() {
       setLoading(false);
       return;
     }
-    router.push("/");
+    router.push("/app");
   }
 
   async function handleGoogleSignIn() {
-    await authClient.signIn.social({ provider: "google", callbackURL: "/" });
+    await authClient.signIn.social({ provider: "google", callbackURL: "/app" });
   }
 
   return (

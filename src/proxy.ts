@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 
-const publicPaths = ["/sign-in", "/sign-up", "/api/auth"];
-
 function isStaticAsset(pathname: string): boolean {
   return (
     pathname.startsWith("/_next/") ||
@@ -14,10 +12,21 @@ function isStaticAsset(pathname: string): boolean {
   );
 }
 
+/**
+ * Only /app/* and app-only API routes require auth.
+ * Everything else (marketing pages, /sign-in, /sign-up, /api/auth, /api/waitlist) is public.
+ */
+function requiresAuth(pathname: string): boolean {
+  if (pathname.startsWith("/app")) return true;
+  if (pathname.startsWith("/api/research")) return true;
+  if (pathname.startsWith("/api/strategy")) return true;
+  return false;
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (isStaticAsset(pathname) || publicPaths.some((p) => pathname.startsWith(p))) {
+  if (isStaticAsset(pathname) || !requiresAuth(pathname)) {
     return NextResponse.next();
   }
 
