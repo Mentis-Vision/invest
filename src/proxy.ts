@@ -4,10 +4,20 @@ import { auth } from "@/lib/auth";
 
 const publicPaths = ["/sign-in", "/sign-up", "/api/auth"];
 
+function isStaticAsset(pathname: string): boolean {
+  return (
+    pathname.startsWith("/_next/") ||
+    pathname.startsWith("/favicon") ||
+    pathname === "/robots.txt" ||
+    pathname === "/sitemap.xml" ||
+    /\.(css|js|map|png|jpg|jpeg|gif|svg|ico|webp|woff|woff2|ttf|otf)$/i.test(pathname)
+  );
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (publicPaths.some((p) => pathname.startsWith(p))) {
+  if (isStaticAsset(pathname) || publicPaths.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }
 
@@ -21,3 +31,7 @@ export async function proxy(request: NextRequest) {
 
   return NextResponse.next();
 }
+
+export const config = {
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+};
