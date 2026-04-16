@@ -1,14 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
 import AuthLayout from "@/components/auth-layout";
 import { Loader2 } from "lucide-react";
 
 export default function SignUpPage() {
-  const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -25,7 +23,8 @@ export default function SignUpPage() {
       setLoading(false);
       return;
     }
-    router.push("/app");
+    // Full page reload ensures the Set-Cookie from sign-up is sent with the next request.
+    window.location.href = "/app";
   }
 
   return (

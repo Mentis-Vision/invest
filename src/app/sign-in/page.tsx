@@ -1,14 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
 import AuthLayout from "@/components/auth-layout";
 import { Loader2 } from "lucide-react";
 
 export default function SignInPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -24,7 +22,9 @@ export default function SignInPage() {
       setLoading(false);
       return;
     }
-    router.push("/app");
+    // Full page reload ensures the Set-Cookie from sign-in is sent with the next request.
+    // router.push() races the cookie commit and can fail auth check on /app.
+    window.location.href = "/app";
   }
 
   async function handleGoogleSignIn() {
