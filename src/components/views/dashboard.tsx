@@ -12,6 +12,14 @@ import HitRateGauge from "@/components/dashboard/hit-rate-gauge";
 import UpcomingEvaluations from "@/components/dashboard/upcoming-evaluations";
 import MacroContext from "@/components/dashboard/macro-context";
 import LargestPosition from "@/components/dashboard/largest-position";
+import PortfolioSparkline from "@/components/dashboard/portfolio-sparkline";
+import AlertFeed from "@/components/dashboard/alert-feed";
+
+type PortfolioPoint = {
+  date: string;
+  totalValue: number;
+  positionCount: number;
+};
 
 type TrackRecord = {
   totals: { total: number; buys: number; sells: number; holds: number };
@@ -22,6 +30,7 @@ type TrackRecord = {
     flats: number;
     acted: number;
   };
+  portfolioSeries?: PortfolioPoint[];
 };
 
 type Macro = Array<{
@@ -157,6 +166,16 @@ export default function DashboardView() {
 
       {/* Today's macro context */}
       <MacroContext macro={macro} loading={loading} />
+
+      {/* Overnight-changes alert feed — $0 cost, rule-based from free data.
+          Only renders when there are undismissed alerts. */}
+      <AlertFeed />
+
+      {/* Portfolio value sparkline — data from nightly portfolio_snapshot cron */}
+      <PortfolioSparkline
+        series={track?.portfolioSeries ?? []}
+        loading={loading}
+      />
 
       {/* Portfolio row: allocation donut + largest position */}
       <div className="grid gap-4 md:grid-cols-3">
