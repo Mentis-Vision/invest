@@ -24,11 +24,19 @@ import type { StockSnapshot } from "@/lib/data/yahoo";
 import DisclaimerModal from "@/components/disclaimer-modal";
 
 type ModelKey = "claude" | "gpt" | "gemini";
+type ToolCallTrace = {
+  toolName: string;
+  input: unknown;
+  outputSummary: string;
+};
 type ModelResult = {
   model: ModelKey;
   status: "ok" | "failed";
   output?: AnalystOutput;
   error?: string;
+  tokensUsed?: number;
+  toolCalls?: ToolCallTrace[];
+  steps?: number;
 };
 
 type ResearchResponse = {
@@ -36,12 +44,18 @@ type ResearchResponse = {
   snapshot: StockSnapshot;
   analyses: ModelResult[];
   supervisor: SupervisorOutput;
+  supervisorModel?: string;
+  recommendationId?: string | null;
+  toolCalls?: number;
 };
 
-const MODEL_META: Record<ModelKey, { label: string; color: string }> = {
-  claude: { label: "Claude Sonnet 4.6", color: "text-[var(--decisive)]" },
-  gpt: { label: "GPT-5.2", color: "text-[var(--buy)]" },
-  gemini: { label: "Gemini 3 Pro", color: "text-[var(--hold)]" },
+const MODEL_META: Record<
+  ModelKey,
+  { label: string; lens: string; color: string }
+> = {
+  claude: { label: "Claude Sonnet 4.6", lens: "Value", color: "text-[var(--decisive)]" },
+  gpt: { label: "GPT-5.2", lens: "Growth", color: "text-[var(--buy)]" },
+  gemini: { label: "Gemini 2.5 Pro", lens: "Macro", color: "text-[var(--hold)]" },
 };
 
 function recColor(rec: string) {
@@ -77,7 +91,9 @@ function ModelCard({ result }: { result: ModelResult }) {
       <Card className="border-red-500/20 bg-red-500/5">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <span className={`font-mono text-xs ${meta.color}`}>{meta.label}</span>
+            <span className={`font-mono text-xs ${meta.color}`}>
+              {meta.label} · {meta.lens}
+            </span>
             <Badge variant="outline" className="border-red-500/30 text-[10px] text-red-300">
               FAILED
             </Badge>
@@ -91,11 +107,14 @@ function ModelCard({ result }: { result: ModelResult }) {
   }
 
   const o = result.output!;
+  const tools = result.toolCalls ?? [];
   return (
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <span className={`font-mono text-xs ${meta.color}`}>{meta.label}</span>
+          <span className={`font-mono text-xs ${meta.color}`}>
+            {meta.label} · {meta.lens}
+          </span>
           <div className="flex items-center gap-1.5">
             <Badge className={`${recColor(o.recommendation)} border text-[10px]`}>
               {o.recommendation}
@@ -108,6 +127,25 @@ function ModelCard({ result }: { result: ModelResult }) {
       </CardHeader>
       <CardContent className="space-y-3 pt-0 text-xs">
         <p className="text-muted-foreground leading-relaxed">{o.thesis}</p>
+        {tools.length > 0 && (
+          <div className="rounded-md border border-border/60 bg-muted/40 p-2">
+            <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
+              Tools called ({tools.length})
+            </div>
+            <ul className="space-y-0.5 font-mono text-[10px] text-muted-foreground/90">
+              {tools.map((t, i) => (
+                <li key={i} className="truncate" title={t.outputSummary}>
+                  <span className="text-foreground">{t.toolName}</span>
+                  <span className="ml-1 text-muted-foreground/70">
+                    {typeof t.input === "object" && t.input !== null
+                      ? JSON.stringify(t.input)
+                      : String(t.input)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <Separator />
         <div className="space-y-1.5">
           {o.keySignals.map((s, i) => (
@@ -369,8 +407,13 @@ export default function ResearchView() {
 
           {/* Per-model panel */}
           <div>
-            <h3 className="mb-3 font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
-              Individual Analyses · Each model saw the same data independently
+            <h3 className="mb-3 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
+              <span>Individual Analyses · Value / Growth / Macro lenses</span>
+              {result.toolCalls !== undefined && result.toolCalls > 0 && (
+                <span className="rounded-sm border border-border/60 px-1.5 py-0.5 normal-case tracking-normal text-muted-foreground/80">
+                  {result.toolCalls} live tool {result.toolCalls === 1 ? "call" : "calls"}
+                </span>
+              )}
             </h3>
             <div className="grid gap-4 lg:grid-cols-3">
               {result.analyses.map((a) => (

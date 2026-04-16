@@ -1,4 +1,4 @@
-import { generateObject } from "ai";
+import { generateText, generateObject, stepCountIs, Output } from "ai";
 import { models } from "./models";
 import {
   AnalystOutputSchema,
@@ -6,6 +6,7 @@ import {
   type AnalystOutput,
   type SupervisorOutput,
 } from "./schemas";
+import { analystTools } from "./tools";
 import { log, errorInfo } from "../log";
 
 /**
@@ -13,10 +14,12 @@ import { log, errorInfo } from "../log";
  * Only the PERSONA preamble differs.
  */
 const ZERO_HALLUCINATION_RULES = `ABSOLUTE RULES (non-negotiable):
-1. You may ONLY cite numbers and facts explicitly present in the DATA block.
-2. If a data point is "N/A" or missing, say so in missingData — do not invent, estimate, or round from memory.
+1. You may ONLY cite numbers and facts from (a) the DATA block or (b) the structured output of a tool call you made this session. Do not invent or round from memory.
+2. If a data point is missing, say so in missingData — then decide whether a single tool call would close the gap. Never speculate.
 3. Bias toward HOLD when evidence is ambiguous. Cautious calls beat confident wrong ones.
-4. In keySignals.datum, quote the exact value from the DATA block verbatim (e.g., "P/E (Trailing): 28.5").
+4. In keySignals.datum, quote the exact value verbatim, and include its source tag: "[DATA] P/E (Trailing): 28.5" or "[getFinancialsSummary] income.netIncome=93,736,000,000".
+5. You have up to 3 tool calls. Use them only when they will materially change your view. If the DATA block already contains what you need, DO NOT call tools.
+6. Never cite news tone or sentiment as a numeric claim. News is qualitative context only.
 
 You are NOT a licensed advisor. Your output is informational only.`;
 
@@ -29,36 +32,46 @@ const PERSONAS: Record<"claude" | "gpt" | "gemini", string> = {
   claude: `You are a disciplined value investor in the Graham-Dodd tradition.
 Prioritize: margin of safety, valuation relative to intrinsic value, durable cash flow, balance-sheet strength.
 De-prioritize: near-term momentum, narrative-driven pricing, consensus estimates.
-Be skeptical of premium multiples without commensurate return on capital.`,
+Be skeptical of premium multiples without commensurate return on capital.
+Prefer calling getFinancialsSummary over anything else when deciding if the business is a good business at this price.`,
 
   gpt: `You are a growth-focused analyst.
 Prioritize: revenue trajectory, TAM expansion, competitive moats, reinvestment quality, operating leverage.
 De-prioritize: near-term valuation optics when the compounding case is intact.
-Be skeptical of value traps where the business is structurally shrinking.`,
+Be skeptical of value traps where the business is structurally shrinking.
+Prefer calling getFinancialsSummary (for trend) or getFilingText on the latest 10-K (for business segments / MD&A).`,
 
   gemini: `You are a macro-aware contrarian.
 Prioritize: regime risk (rates, liquidity, dollar, geopolitical), crowded positioning, downside scenarios, correlation breakdowns.
 De-prioritize: bottom-up narratives in macro-dominated regimes.
-Assume consensus is mispriced and stress-test each bullish claim.`,
+Assume consensus is mispriced and stress-test each bullish claim.
+Prefer calling getFredSeriesHistory for the 12–24 month rates/inflation trajectory before committing to a view.`,
 };
 
 function buildAnalystSystem(persona: string): string {
   return `${persona}\n\n${ZERO_HALLUCINATION_RULES}`;
 }
 
-const SUPERVISOR_PROMPT = `You are the supervisor. Three independent analysts reviewed the same DATA block from different analytical lenses (value, growth, macro-contrarian). Your job:
+const SUPERVISOR_PROMPT = `You are the supervisor. Three independent analysts reviewed the same DATA block plus any tool calls they chose to make. Your job:
 
 1. Compare their conclusions. Flag real disagreements (BUY vs SELL is real; thesis wording is not).
-2. Verify their claims. If any analyst cites a fact NOT in the DATA block, flag it in redFlags.
-3. Downgrade confidence if analysts disagreed, if any claimed unverified facts, or if the data is sparse.
-4. Produce the final recommendation using this logic:
+2. Verify every numeric claim in each analyst's keySignals. The claim must either (a) appear verbatim in the DATA block you will see, or (b) be tagged with a tool source like [getFinancialsSummary] that the analyst actually produced.
+3. If an analyst makes a numeric claim that is NOT in the DATA block and is NOT tagged with a tool source the analyst actually used, flag it in redFlags with the analyst name and claim.
+4. Downgrade confidence if analysts disagreed, if any claimed unverified facts, or if the data is sparse.
+5. Produce the final recommendation using this logic:
    - UNANIMOUS (3/3) → keep their confidence
    - MAJORITY (2/3) → downgrade one level (HIGH→MEDIUM, MEDIUM→LOW)
    - SPLIT (no agreement) → recommendation: HOLD, confidence: LOW
    - Any INSUFFICIENT_DATA → recommendation: INSUFFICIENT_DATA, confidence: LOW
-5. Write the summary in plain language. A 60-year-old investor should understand it immediately.
-6. Do NOT introduce new facts. Your job is to synthesize, not analyze.
-7. Remember: disagreement between lenses is NORMAL and informative — surface it, don't paper over it.`;
+6. Write the summary in plain language. A 60-year-old investor should understand it immediately.
+7. Do NOT introduce new facts. Your job is to synthesize, not analyze.
+8. Disagreement between lenses is NORMAL and informative — surface it, don't paper over it.`;
+
+export type ToolCallTrace = {
+  toolName: string;
+  input: unknown;
+  outputSummary: string;
+};
 
 export type ModelResult = {
   model: "claude" | "gpt" | "gemini";
@@ -66,32 +79,87 @@ export type ModelResult = {
   output?: AnalystOutput;
   error?: string;
   tokensUsed?: number;
+  toolCalls?: ToolCallTrace[];
+  steps?: number;
 };
+
+/**
+ * Summarize a tool output into a short string for downstream logging /
+ * supervisor review. Avoids flooding logs with full filing text.
+ */
+function summarizeToolOutput(output: unknown): string {
+  if (!output) return "(empty)";
+  if (typeof output === "string")
+    return output.length > 200 ? output.slice(0, 200) + "…" : output;
+  if (typeof output === "object") {
+    const keys = Object.keys(output as Record<string, unknown>);
+    const preview = keys.slice(0, 5).join(", ");
+    try {
+      const json = JSON.stringify(output).slice(0, 300);
+      return `{${preview}} ${json.length >= 300 ? "…" : ""}`;
+    } catch {
+      return `{${preview}}`;
+    }
+  }
+  return String(output);
+}
 
 export async function runAnalystPanel(
   ticker: string,
   dataBlock: string
 ): Promise<ModelResult[]> {
-  const userMessage = `Analyze ${ticker} using ONLY the data below.\n\n--- DATA (verified source) ---\n${dataBlock}\n--- END DATA ---`;
+  const userMessage = `Analyze ${ticker} using the verified DATA below. You may call up to 3 tools if a deeper look would materially change your view.\n\n--- DATA (verified source) ---\n${dataBlock}\n--- END DATA ---`;
 
   const jobs: Array<Promise<ModelResult>> = (
     ["claude", "gpt", "gemini"] as const
   ).map(async (key) => {
     try {
-      const result = await generateObject({
+      const traces: ToolCallTrace[] = [];
+      const result = await generateText({
         model: models[key],
-        schema: AnalystOutputSchema,
         system: buildAnalystSystem(PERSONAS[key]),
         prompt: userMessage,
+        tools: analystTools,
+        // stopWhen: stop after 5 steps total (each step = model turn + optional tools)
+        // so we cap at roughly 3 tool calls + final structured output.
+        stopWhen: stepCountIs(5),
+        experimental_output: Output.object({ schema: AnalystOutputSchema }),
+        onStepFinish: ({ toolCalls, toolResults }) => {
+          for (let i = 0; i < toolCalls.length; i++) {
+            const call = toolCalls[i];
+            const resp = toolResults[i];
+            traces.push({
+              toolName: call.toolName,
+              input: call.input,
+              outputSummary: summarizeToolOutput(resp?.output),
+            });
+          }
+        },
       });
+
+      const analysisOutput = result.experimental_output as AnalystOutput | undefined;
       const tokens =
         result.usage?.totalTokens ??
         (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0);
+
+      if (!analysisOutput) {
+        return {
+          model: key,
+          status: "failed" as const,
+          error: "No structured output produced by model",
+          tokensUsed: tokens,
+          toolCalls: traces,
+          steps: result.steps?.length ?? 1,
+        };
+      }
+
       return {
         model: key,
         status: "ok" as const,
-        output: result.object,
+        output: analysisOutput,
         tokensUsed: tokens,
+        toolCalls: traces,
+        steps: result.steps?.length ?? 1,
       };
     } catch (err) {
       log.error("consensus.analyst", "model call failed", {
@@ -111,21 +179,15 @@ export async function runAnalystPanel(
 }
 
 /**
- * P3.2 — Supervisor rotation.
- *
- * Rotate the supervisor model by day-of-year to avoid same-family bias.
- * Using Haiku (smaller/cheaper from Anthropic) when Claude was already an
- * analyst, and full GPT/Gemini otherwise.
- *
- * This is deterministic by day so within a single session all users see
- * the same supervisor — simpler to reason about in production.
+ * P3.2 — Supervisor rotation by day-of-year across Haiku / GPT / Gemini.
+ * Deterministic by day so within a single session everyone sees the same
+ * supervisor.
  */
 function pickSupervisor(): {
   key: "claude-haiku" | "gpt" | "gemini";
   label: string;
   pricingKey: string;
 } {
-  // Rotate across 3 supervisors by day-of-year
   const now = new Date();
   const startOfYear = new Date(now.getFullYear(), 0, 0);
   const diff = now.getTime() - startOfYear.getTime();
@@ -134,7 +196,7 @@ function pickSupervisor(): {
   const options = [
     { key: "claude-haiku" as const, label: "Claude Haiku 4.5", pricingKey: "haiku" },
     { key: "gpt" as const, label: "GPT-5.2", pricingKey: "gpt" },
-    { key: "gemini" as const, label: "Gemini 3 Pro", pricingKey: "gemini" },
+    { key: "gemini" as const, label: "Gemini 2.5 Pro", pricingKey: "gemini" },
   ];
   return options[dayOfYear % options.length];
 }
@@ -167,7 +229,12 @@ export async function runSupervisor(
       redFlags: analyses.map((a) => `${a.model}: ${a.error ?? "no output"}`),
       dataAsOf,
     };
-    return { output, supervisorModel: picked.label, tokensUsed: 0, pricingKey: picked.pricingKey };
+    return {
+      output,
+      supervisorModel: picked.label,
+      tokensUsed: 0,
+      pricingKey: picked.pricingKey,
+    };
   }
 
   const analysesText = analyses
@@ -176,8 +243,12 @@ export async function runSupervisor(
         return `[${a.model.toUpperCase()}] FAILED: ${a.error}`;
       }
       const o = a.output;
+      const toolsUsed = (a.toolCalls ?? [])
+        .map((t) => `  - ${t.toolName}(${JSON.stringify(t.input)}) → ${t.outputSummary}`)
+        .join("\n");
       return [
         `[${a.model.toUpperCase()} — ${personaLabel(a.model)}]`,
+        `Tools called (${a.toolCalls?.length ?? 0}):${toolsUsed ? "\n" + toolsUsed : " (none)"}`,
         `Recommendation: ${o.recommendation} (confidence: ${o.confidence})`,
         `Thesis: ${o.thesis}`,
         `Key signals:`,
@@ -189,9 +260,8 @@ export async function runSupervisor(
     })
     .join("\n\n");
 
-  const supervisorModel = models[
-    picked.key === "claude-haiku" ? "haikuSupervisor" : picked.key
-  ];
+  const supervisorModel =
+    models[picked.key === "claude-haiku" ? "haikuSupervisor" : picked.key];
 
   try {
     const result = await generateObject({
@@ -215,7 +285,6 @@ export async function runSupervisor(
       supervisor: picked.label,
       ...errorInfo(err),
     });
-    // Fall back to a deterministic synthesis so the user still gets a verdict.
     const output = fallbackSynthesis(successful, analyses, dataAsOf);
     return {
       output,
@@ -239,10 +308,6 @@ function personaLabel(model: string): string {
   }
 }
 
-/**
- * Deterministic fallback when the supervisor model itself fails.
- * Much worse than a real synthesis but keeps the UX from breaking.
- */
 function fallbackSynthesis(
   successful: ModelResult[],
   all: ModelResult[],

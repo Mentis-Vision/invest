@@ -145,6 +145,11 @@ export async function POST(req: NextRequest) {
     // 1% opportunistic sweep of stale rate limit buckets
     if (Math.random() < 0.01) sweepStaleBuckets();
 
+    const totalToolCalls = analyses.reduce(
+      (sum, a) => sum + (a.toolCalls?.length ?? 0),
+      0
+    );
+
     return NextResponse.json({
       ticker,
       snapshot: snap,
@@ -152,6 +157,7 @@ export async function POST(req: NextRequest) {
       supervisor: supervisor.output,
       supervisorModel: supervisor.supervisorModel,
       recommendationId: recordId,
+      toolCalls: totalToolCalls,
       sources: {
         yahoo: true,
         sec: filings.length > 0,
