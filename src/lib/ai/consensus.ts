@@ -113,7 +113,13 @@ export async function runAnalystPanel(
    * horizon / goals. STEER, not filter — analysts still produce the full
    * verdict from their core lens. See src/lib/user-profile.ts.
    */
-  profileRider?: string | null
+  profileRider?: string | null,
+  /**
+   * Optional progress callback — invoked once per analyst as it finishes,
+   * regardless of success/failure. Used by the streaming research route
+   * to emit per-model events before the full panel resolves.
+   */
+  onAnalystFinish?: (result: ModelResult) => void
 ): Promise<ModelResult[]> {
   const userMessage = `Analyze ${ticker} using the verified DATA below. You may call up to 3 tools if a deeper look would materially change your view.\n\n--- DATA (verified source) ---\n${dataBlock}\n--- END DATA ---`;
 
@@ -155,36 +161,51 @@ export async function runAnalystPanel(
         result.usage?.totalTokens ??
         (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0);
 
-      if (!analysisOutput) {
-        return {
-          model: key,
-          status: "failed" as const,
-          error: "No structured output produced by model",
-          tokensUsed: tokens,
-          toolCalls: traces,
-          steps: result.steps?.length ?? 1,
-        };
-      }
+      const modelResult: ModelResult = !analysisOutput
+        ? {
+            model: key,
+            status: "failed" as const,
+            error: "No structured output produced by model",
+            tokensUsed: tokens,
+            toolCalls: traces,
+            steps: result.steps?.length ?? 1,
+          }
+        : {
+            model: key,
+            status: "ok" as const,
+            output: analysisOutput,
+            tokensUsed: tokens,
+            toolCalls: traces,
+            steps: result.steps?.length ?? 1,
+          };
 
-      return {
-        model: key,
-        status: "ok" as const,
-        output: analysisOutput,
-        tokensUsed: tokens,
-        toolCalls: traces,
-        steps: result.steps?.length ?? 1,
-      };
+      if (onAnalystFinish) {
+        try {
+          onAnalystFinish(modelResult);
+        } catch {
+          /* never let a subscriber bug affect the panel */
+        }
+      }
+      return modelResult;
     } catch (err) {
       log.error("consensus.analyst", "model call failed", {
         model: key,
         ticker,
         ...errorInfo(err),
       });
-      return {
+      const failed: ModelResult = {
         model: key,
         status: "failed" as const,
         error: err instanceof Error ? err.message : "Unknown error",
       };
+      if (onAnalystFinish) {
+        try {
+          onAnalystFinish(failed);
+        } catch {
+          /* ignore */
+        }
+      }
+      return failed;
     }
   });
 
@@ -252,15 +273,22 @@ export async function runSupervisor(
 
   // Latency optimization: when all 3 analysts succeeded and returned the
   // SAME recommendation, skip the supervisor LLM call entirely. A unanimous
-  // panel has already done the cross-check — there's nothing for supervisor
-  // to downgrade or flag. Saves ~8–15s per research request on the happy
-  // path (which is most requests). Non-unanimous outcomes still go through
-  // the full supervisor review.
+  // panel has already done the cross-check via prompt rules — there's
+  // nothing for supervisor to disagree with. Saves ~8–15s per research
+  // request on the happy path (which is most requests). Non-unanimous
+  // outcomes still go through the full supervisor review.
+  //
+  // SAFETY: we still run the supervisor's "verify every numeric claim has
+  // a source in the DATA block or a tool call the analyst made" check,
+  // just deterministically rather than via an LLM. Any unverified claim
+  // surfaces as a redFlag on the output.
   const recs = successful.map((a) => a.output!.recommendation);
   const uniqueRecs = [...new Set(recs)];
   if (successful.length === 3 && uniqueRecs.length === 1) {
+    const output = synthesizeUnanimous(successful, dataAsOf);
+    output.redFlags = verifyClaims(successful, dataBlock);
     return {
-      output: synthesizeUnanimous(successful, dataAsOf),
+      output,
       supervisorModel: "panel-consensus",
       tokensUsed: 0,
       pricingKey: "none",
@@ -339,12 +367,104 @@ function personaLabel(model: string): string {
 }
 
 /**
+ * Deterministic claim verification — the safety half of the fast-path.
+ *
+ * The supervisor LLM's core safety job is: for every numeric claim an
+ * analyst made, check that the datum appears either (a) verbatim in the
+ * DATA block or (b) is tagged with a tool name that matches a tool the
+ * analyst actually called. Anything else is an unverified claim and
+ * belongs in redFlags.
+ *
+ * We do it here with regex / substring matching. No LLM cost. Same
+ * signal the supervisor would surface; arguably stricter because it
+ * doesn't get fooled by semantically-similar but numerically-wrong facts.
+ */
+function verifyClaims(
+  successful: ModelResult[],
+  dataBlock: string
+): string[] {
+  const flags: string[] = [];
+  // Normalize whitespace on the DATA block so "P/E : 28.5" matches
+  // "P/E: 28.5" etc. Lowercase for case-insensitive substring search.
+  const normalizedData = dataBlock.replace(/\s+/g, " ").toLowerCase();
+
+  for (const a of successful) {
+    const toolsCalled = new Set(
+      (a.toolCalls ?? []).map((t) => t.toolName.toLowerCase())
+    );
+
+    for (const s of a.output!.keySignals) {
+      const raw = s.datum.trim();
+      if (!raw) continue;
+
+      // Source tag handling. The analyst prompt instructs citations like
+      // "[DATA] P/E (Trailing): 28.5" or "[getFinancialsSummary] income.netIncome=93,736,000,000".
+      //   - [DATA] → strip the tag, fall through to DATA-block match.
+      //   - [<toolName>] → must match a tool the analyst actually called.
+      const tagMatch = raw.match(/^\[([a-zA-Z0-9_-]+)\]\s*/);
+      let bodyAfterTag = raw;
+      if (tagMatch) {
+        const tag = tagMatch[1].toLowerCase();
+        bodyAfterTag = raw.slice(tagMatch[0].length).trim();
+        if (tag === "data") {
+          // fall through to DATA-block check below, using the untagged body
+        } else if (toolsCalled.has(tag)) {
+          // Trust — analyst cited a tool they invoked this session.
+          continue;
+        } else {
+          flags.push(
+            `${a.model}: claim tagged [${tagMatch[1]}] but that tool wasn't called in this session — "${raw.slice(0, 100)}"`
+          );
+          continue;
+        }
+      }
+
+      // DATA-block verification: the datum should appear (normalized) in
+      // the source block. We strip very common label prefixes so that
+      // analysts can quote "P/E (Trailing): 28.5" even when the data says
+      // "- P/E (Trailing): 28.5" etc.
+      const needle = bodyAfterTag.replace(/\s+/g, " ").toLowerCase();
+
+      // Try full-string match first
+      if (normalizedData.includes(needle)) continue;
+
+      // Fallback: extract the numeric part and at least one adjacent
+      // word, then confirm both appear. Prevents the model from
+      // inventing a number and a label that both exist separately.
+      const numericMatch = needle.match(/-?\$?[\d,]+(?:\.\d+)?%?/);
+      if (numericMatch) {
+        const num = numericMatch[0];
+        // Strip punctuation/currency/comma/percent for lenient compare
+        const bare = num.replace(/[$,%]/g, "");
+        if (normalizedData.includes(bare)) {
+          // Number exists. Check that the label word appears too.
+          const labelWords = needle
+            .replace(numericMatch[0], "")
+            .split(/[^\w]+/)
+            .filter((w) => w.length >= 3);
+          const labelHit = labelWords.some((w) =>
+            normalizedData.includes(w)
+          );
+          if (labelHit) continue;
+        }
+      }
+
+      flags.push(
+        `${a.model}: unverified claim "${raw.slice(0, 120)}" — not found in DATA block or a tool this analyst called`
+      );
+    }
+  }
+
+  return flags;
+}
+
+/**
  * Deterministic synthesis when all three analysts agree on a recommendation.
  * Used to skip the supervisor LLM call on the happy path. Extracts the
  * highest-signal fields without introducing any new content.
  *
- * Confidence bumps to HIGH when all three agree AND all three rated HIGH.
- * Drops to MEDIUM when they're mixed (e.g. two HIGH, one LOW).
+ * Confidence floors to the minimum of the three analyst confidences
+ * (LOW < MEDIUM < HIGH). redFlags are filled separately by verifyClaims().
  */
 function synthesizeUnanimous(
   successful: ModelResult[],

@@ -23,6 +23,7 @@ import {
 import type { AnalystOutput, SupervisorOutput } from "@/lib/ai/schemas";
 import type { StockSnapshot } from "@/lib/data/yahoo";
 import DisclaimerModal from "@/components/disclaimer-modal";
+import { getHoldings } from "@/lib/client/holdings-cache";
 
 type ModelKey = "claude" | "gpt" | "gemini";
 type ToolCallTrace = {
@@ -270,6 +271,38 @@ export default function ResearchView() {
     };
   }, []);
 
+  // Pre-warm public-data fetches for the user's top 10 holdings on mount.
+  // When they subsequently research one of those tickers, the data block
+  // assembly is ~instant instead of ~3–6s of upstream HTTP.
+  // Safe by construction: server-side endpoint is auth-gated, rate-limited,
+  // and never calls any AI models.
+  useEffect(() => {
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const snap = await getHoldings();
+        if (cancelled || !snap.connected || !snap.holdings.length) return;
+        const topTickers = snap.holdings
+          .slice()
+          .sort((a, b) => b.value - a.value)
+          .slice(0, 10)
+          .map((h) => h.ticker);
+        if (topTickers.length === 0) return;
+        fetch("/api/research/prewarm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tickers: topTickers }),
+        }).catch(() => {});
+      } catch {
+        /* silent — pre-warm is a best-effort perf optimization */
+      }
+    }, 300); // small delay so the tab transition renders first
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, []);
+
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     const ticker = query.trim().toUpperCase();
@@ -316,23 +349,103 @@ export default function ResearchView() {
       })
       .catch(() => {});
 
+    // Progressive streaming via NDJSON. Each event updates UI immediately,
+    // so the snapshot lands in ~3–5s while the AI pipeline continues.
     try {
       const res = await fetch("/api/research", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/x-ndjson",
+        },
         body: JSON.stringify({ ticker }),
       });
 
-      if (!res.ok) {
+      if (!res.ok || !res.body) {
         const data = await res.json().catch(() => ({}));
         setError(data.error ?? `Request failed (${res.status})`);
         return;
       }
 
-      const data: ResearchResponse = await res.json();
-      setResult(data);
+      // Partial accumulator for the verdict — stream may deliver snapshot,
+      // analysts (3), and verdict events in order. We merge as they land.
+      const partial: Partial<ResearchResponse> & {
+        analyses?: ModelResult[];
+      } = { analyses: [] };
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // NDJSON: one JSON object per line. Keep the trailing partial
+        // line in the buffer for the next chunk.
+        let nlIdx: number;
+        while ((nlIdx = buffer.indexOf("\n")) >= 0) {
+          const line = buffer.slice(0, nlIdx).trim();
+          buffer = buffer.slice(nlIdx + 1);
+          if (!line) continue;
+          let evt: Record<string, unknown>;
+          try {
+            evt = JSON.parse(line);
+          } catch {
+            continue;
+          }
+
+          switch (evt.type) {
+            case "snapshot": {
+              partial.ticker = evt.ticker as string;
+              partial.snapshot = evt.snapshot as StockSnapshot;
+              // Show a skeleton result with just the snapshot so the
+              // ticker / price / day-change header appears immediately.
+              setResult({
+                ...(partial as ResearchResponse),
+                analyses: [],
+                supervisor: {
+                  finalRecommendation: "INSUFFICIENT_DATA",
+                  confidence: "LOW",
+                  consensus: "INSUFFICIENT",
+                  summary: "",
+                  agreedPoints: [],
+                  disagreements: [],
+                  redFlags: [],
+                  dataAsOf: (evt.snapshot as StockSnapshot)?.asOf ?? "",
+                },
+              });
+              break;
+            }
+            case "analyst": {
+              const a = evt.analyst as ModelResult;
+              partial.analyses = [...(partial.analyses ?? []), a];
+              setResult((prev) => {
+                if (!prev) return prev;
+                return { ...prev, analyses: [...(partial.analyses ?? [])] };
+              });
+              break;
+            }
+            case "verdict": {
+              setResult(evt as unknown as ResearchResponse);
+              break;
+            }
+            case "error": {
+              setError((evt.message as string) ?? "Research failed.");
+              return;
+            }
+            case "done":
+            case "sources":
+            default:
+              break;
+          }
+        }
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to analyze. Please try again.");
+      setError(
+        err instanceof Error ? err.message : "Failed to analyze. Please try again."
+      );
     } finally {
       setLoading(false);
     }
