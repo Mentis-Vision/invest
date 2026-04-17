@@ -14,7 +14,7 @@
 4. **Don't touch `proxy.ts` matcher without re-testing CSS loading.** The matcher must exclude `_next/static`.
 5. **Direct provider keys, not AI Gateway.** Don't migrate back.
 6. **Motion-library wrappers are banned around content.** Decorative animation only.
-7. **Demo user is `demo@clearpath.com` / `DemoPass2026!`** — use it for all Plaid/brokerage testing. Don't delete.
+7. **Demo user is `demo@clearpathinvest.app` / `DemoPass2026!`** — use it for all Plaid/brokerage testing. Don't delete.
 
 ---
 
@@ -77,7 +77,7 @@ The `/app/portfolio` view has a "Connect Brokerage" button that goes nowhere. Th
 
 **Security:** encrypt `access_token` at rest — use a symmetric key from env (`PLAID_ENCRYPTION_KEY`, 32 bytes). Don't store unencrypted.
 
-**Accept when:** signing in as `demo@clearpath.com`, clicking "Connect Brokerage," choosing a Plaid Sandbox brokerage, completing the flow, and seeing the holdings table populated with real sandbox data.
+**Accept when:** signing in as `demo@clearpathinvest.app`, clicking "Connect Brokerage," choosing a Plaid Sandbox brokerage, completing the flow, and seeing the holdings table populated with real sandbox data.
 
 ### 2.2 Portfolio-level analysis
 
@@ -247,7 +247,7 @@ These are "nice to have" after P1–P5. Don't start before the basics are solid.
 
 ## How to test the full loop
 
-1. Sign in at `/sign-in` as `demo@clearpath.com` / `DemoPass2026!`.
+1. Sign in at `/sign-in` as `demo@clearpathinvest.app` / `DemoPass2026!`.
 2. Click Research → enter `NVDA` → click Analyze.
 3. Expect ~20–30s for the triple-model + supervisor pipeline.
 4. Verify the verdict card shows rec/confidence/consensus.

@@ -498,7 +498,7 @@ Tracking recommendation outcomes is powerful but creates a regulatory surface:
 Before marking this done, verify:
 
 - [ ] All 6 tables exist on Neon with correct indexes
-- [ ] Running `/api/research` for `demo@clearpath.com` on ticker `AAPL` inserts 1 row in `recommendation` and 4 rows in `recommendation_outcome`
+- [ ] Running `/api/research` for `demo@clearpathinvest.app` on ticker `AAPL` inserts 1 row in `recommendation` and 4 rows in `recommendation_outcome`
 - [ ] The `analysisJson` column contains the full supervisor + 3-model payload (check with `SELECT "analysisJson"->>'supervisor' FROM recommendation LIMIT 1;`)
 - [ ] Cron endpoint `/api/cron/evaluate-outcomes` requires `CRON_SECRET` bearer token
 - [ ] Manually setting an outcome row's `checkAt` to 1 minute ago and hitting the cron evaluates it correctly

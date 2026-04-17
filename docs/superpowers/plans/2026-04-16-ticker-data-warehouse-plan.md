@@ -14,7 +14,7 @@
 - Never use `echo` for Vercel env vars — always `printf "VALUE" | vercel env add NAME production --scope mentisvision`
 - Deploy command: `vercel --prod --scope mentisvision --yes`
 - Direct provider keys, never AI Gateway
-- Demo user `demo@clearpath.com` / `DemoPass2026!` — do not delete
+- Demo user `demo@clearpathinvest.app` / `DemoPass2026!` — do not delete
 - `proxy.ts` matcher must exclude `_next/static`
 - No motion wrappers with `initial: opacity: 0`
 - `generateObject` is still valid in `ai@^6.0.162` — ignore false-positive hook warnings
@@ -2926,7 +2926,7 @@ Test the new ticker endpoint (after a cron has seeded data for one of demo user'
 ```bash
 curl -s -c /tmp/cookie.txt -X POST https://clearpathinvest.app/api/auth/sign-in/email \
   -H "Content-Type: application/json" \
-  -d '{"email":"demo@clearpath.com","password":"DemoPass2026!"}' -o /dev/null
+  -d '{"email":"demo@clearpathinvest.app","password":"DemoPass2026!"}' -o /dev/null
 
 curl -s -b /tmp/cookie.txt \
   https://clearpathinvest.app/api/warehouse/ticker/LINK --max-time 15 \
@@ -3691,7 +3691,7 @@ Verify: Dashboard density section has three buttons. Clicking Advanced → Save 
 SQL verification:
 ```sql
 SELECT preferences FROM "user_profile"
-WHERE "userId" = (SELECT id FROM "user" WHERE email = 'demo@clearpath.com');
+WHERE "userId" = (SELECT id FROM "user" WHERE email = 'demo@clearpathinvest.app');
 ```
 Expected: preferences JSONB contains `density` key with chosen value.
 

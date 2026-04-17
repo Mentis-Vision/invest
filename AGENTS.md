@@ -16,7 +16,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 4. **Do not migrate AI calls to Vercel AI Gateway.** User's explicit choice: direct provider keys (Anthropic / OpenAI / Google Vertex) for billing consolidation with Mentis Vision.
 5. **Do not touch `proxy.ts` matcher without re-testing CSS.** It must exclude `_next/static` or page styling breaks.
 6. **Brokerage integration is SnapTrade, not Plaid.** (Plaid was scaffolded and removed — do not re-add it.) SnapTrade uses per-user `(userId, userSecret)`. `userSecret` is encrypted with AES-256-GCM via `SNAPTRADE_ENCRYPTION_KEY`.
-7. **Demo user:** `demo@clearpath.com` / `DemoPass2026!`. Do not delete.
+7. **Demo user:** `demo@clearpathinvest.app` / `DemoPass2026!`. Do not delete.
 
 ## Warehouse rules (ticker-keyed data layer)
 

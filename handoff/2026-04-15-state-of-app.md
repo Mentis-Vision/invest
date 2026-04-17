@@ -150,7 +150,7 @@ UI surfaces: final verdict (BUY/HOLD/SELL + confidence + consensus strength), ag
 - **FRED** (REST, needs `FRED_API_KEY`) — 6 series cached 1h
 
 ### Test accounts
-- **Demo user:** `demo@clearpath.com` / `DemoPass2026!` (created 2026-04-15)
+- **Demo user:** `demo@clearpathinvest.app` / `DemoPass2026!` (created 2026-04-15)
 
 ---
 
@@ -209,7 +209,7 @@ SELECT email, source, "createdAt" FROM waitlist ORDER BY "createdAt" DESC;
 - **Marketing at `/`, app at `/app/*`** — clean public/private split. `proxy.ts` only gates `/app` and the AI API routes. Everything else is public.
 - **Editorial Warm theme + Fraunces italic** — positioning the product as "trusted financial publication," not "another SaaS dashboard." Italic on emphasis words (`*considered*`, `*your money*`) is the signature move.
 - **Vercel deploy, not Sliplane.** User runs Mentis Vision on Sliplane; ClearPath is Vercel-native to avoid noisy-neighbor CPU contention with business-critical Mentis workloads.
-- **Demo user exists for Plaid/brokerage testing** — don't delete `demo@clearpath.com`.
+- **Demo user exists for Plaid/brokerage testing** — don't delete `demo@clearpathinvest.app`.
 
 ---
 
