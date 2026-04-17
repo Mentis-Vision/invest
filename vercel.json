@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/evaluate-outcomes",
       "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron/warehouse-retention",
+      "schedule": "0 3 * * 0"
     }
   ]
 }
