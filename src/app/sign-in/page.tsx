@@ -16,6 +16,16 @@ export default function SignInPage() {
     e.preventDefault();
     setError("");
     setLoading(true);
+
+    // Clear any stale session before the new sign-in — avoids identity
+    // confusion when the device previously held a different user's cookie
+    // (e.g. shared laptop with an old demo session still live).
+    try {
+      await authClient.signOut();
+    } catch {
+      /* no-op */
+    }
+
     const { error } = await authClient.signIn.email({ email, password });
     if (error) {
       setError(error.message ?? "Sign in failed");
@@ -28,6 +38,11 @@ export default function SignInPage() {
   }
 
   async function handleGoogleSignIn() {
+    try {
+      await authClient.signOut();
+    } catch {
+      /* no-op */
+    }
     await authClient.signIn.social({ provider: "google", callbackURL: "/app" });
   }
 

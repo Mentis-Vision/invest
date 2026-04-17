@@ -19,6 +19,19 @@ export default function SignUpPage() {
     e.preventDefault();
     setError("");
     setLoading(true);
+
+    // Kill any existing session BEFORE creating the new account. Without
+    // this, a user signing up while a prior cookie (e.g. the demo account
+    // or someone else's session on a shared device) is still valid would
+    // get redirected to /app still authenticated as the old identity —
+    // especially when verification is required and autoSignIn returns
+    // token:null. Best-effort: a missing/expired session is fine.
+    try {
+      await authClient.signOut();
+    } catch {
+      /* no-op — no prior session */
+    }
+
     const { error } = await authClient.signUp.email({ name, email, password });
     if (error) {
       setError(error.message ?? "Sign up failed");
@@ -29,7 +42,10 @@ export default function SignUpPage() {
     // "check your email" state. In dev/without verification, the session is
     // created immediately and we can redirect to /app.
     const { data: session } = await authClient.getSession();
-    if (session?.user) {
+    if (session?.user && session.user.email === email) {
+      // Only redirect if the current session truly matches the user we
+      // just created — otherwise we're still on a stale session that
+      // signOut didn't clear. Falling through to verificationSent is safer.
       window.location.href = "/app";
     } else {
       setVerificationSent(true);
@@ -38,6 +54,13 @@ export default function SignUpPage() {
   }
 
   async function handleGoogleSignUp() {
+    // Same guard as the email path: clear stale sessions before the OAuth
+    // handoff so we don't round-trip back into someone else's identity.
+    try {
+      await authClient.signOut();
+    } catch {
+      /* no-op */
+    }
     await authClient.signIn.social({ provider: "google", callbackURL: "/app" });
   }
 
