@@ -198,17 +198,23 @@ CREATE INDEX "ticker_sentiment_daily_date_idx"
   ON "ticker_sentiment_daily" (captured_at DESC)
 
 -- Statement 12
+-- NOTE: PostgreSQL does NOT allow expressions in PRIMARY KEY constraints.
+-- Use the same pattern as alert_event_dedup_uniq: no PK, use UNIQUE INDEX
+-- on the COALESCE expression instead (Statement 13 below).
 CREATE TABLE "system_aggregate_daily" (
   captured_at DATE NOT NULL,
   metric_name TEXT NOT NULL,
   dimension TEXT,
   value_numeric NUMERIC(18,4),
   value_json JSONB,
-  as_of TIMESTAMP NOT NULL DEFAULT NOW(),
-  PRIMARY KEY (captured_at, metric_name, COALESCE(dimension, ''))
+  as_of TIMESTAMP NOT NULL DEFAULT NOW()
 )
 
--- Statement 13
+-- Statement 13 (unique index replaces the expression-PK from the original design)
+CREATE UNIQUE INDEX "system_aggregate_daily_pk"
+  ON "system_aggregate_daily" (captured_at, metric_name, COALESCE(dimension, ''))
+
+-- Statement 14
 CREATE INDEX "system_aggregate_daily_metric_idx"
   ON "system_aggregate_daily" (metric_name, captured_at DESC)
 ```
@@ -232,9 +238,9 @@ GROUP BY table_name ORDER BY table_name;
 Expected (row order: alphabetical):
 - `system_aggregate_daily` — 6 cols
 - `ticker_events` — 8 cols
-- `ticker_fundamentals` — 28 cols
-- `ticker_market_daily` — 33 cols
-- `ticker_sentiment_daily` — 11 cols
+- `ticker_fundamentals` — 30 cols
+- `ticker_market_daily` — 34 cols
+- `ticker_sentiment_daily` — 12 cols
 
 - [ ] **Step 4: Verify privacy-boundary assertion (no userId columns)**
 
