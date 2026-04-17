@@ -28,6 +28,33 @@ export const AnalystOutputSchema = z.object({
 export type AnalystOutput = z.infer<typeof AnalystOutputSchema>;
 
 /**
+ * Quick Scan schema — the cheapest research product. Single Haiku model,
+ * ~2-3k tokens. Built for triaging lots of candidates fast, NOT for
+ * high-conviction decisions.
+ *
+ * Intentionally lighter than AnalystOutputSchema:
+ *   - 3 signals max (not 2-5) — speed over depth
+ *   - No datum citation required — cheap means looser
+ *   - 1 riskFactor max, not 1-4 — just the headline concern
+ *   - No missingData — out of scope for a quick read
+ */
+export const QuickScanOutputSchema = z.object({
+  recommendation: z.enum(["BUY", "HOLD", "SELL", "INSUFFICIENT_DATA"]),
+  confidence: z.enum(["LOW", "MEDIUM", "HIGH"]),
+  oneLiner: z
+    .string()
+    .describe("One sentence, max 24 words, summarizing the call."),
+  signals: z
+    .array(z.string())
+    .describe("Up to 3 bullet signals driving the call."),
+  primaryRisk: z
+    .string()
+    .describe("One sentence — the single biggest risk to this call."),
+});
+
+export type QuickScanOutput = z.infer<typeof QuickScanOutputSchema>;
+
+/**
  * The supervisor's final synthesis — reviews all 3 model outputs + raw data,
  * flags disagreements, downgrades confidence where needed.
  */

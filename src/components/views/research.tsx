@@ -43,6 +43,32 @@ type ModelResult = {
   steps?: number;
 };
 
+type QuickScanResponse = {
+  ticker: string;
+  mode: "quick";
+  output: {
+    recommendation: "BUY" | "HOLD" | "SELL" | "INSUFFICIENT_DATA";
+    confidence: "LOW" | "MEDIUM" | "HIGH";
+    oneLiner: string;
+    signals: string[];
+    primaryRisk: string;
+  };
+  snapshot: StockSnapshot;
+  tokensUsed: number;
+  costCents: number;
+  usage?: { tier: string; remainingCents: number };
+};
+
+type StandardResponse = {
+  ticker: string;
+  mode: "standard";
+  lens: "claude" | "gpt" | "gemini";
+  snapshot: StockSnapshot;
+  analysis: ModelResult;
+  tokensUsed: number;
+  usage?: { tier: string; remainingCents: number };
+};
+
 type ResearchResponse = {
   ticker: string;
   snapshot: StockSnapshot;
@@ -269,6 +295,11 @@ export default function ResearchView({
   const [query, setQuery] = useState(initialTicker ?? "");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ResearchResponse | null>(null);
+  const [mode, setMode] = useState<"quick" | "standard" | "full">("quick");
+  const [quickResult, setQuickResult] = useState<QuickScanResponse | null>(null);
+  const [standardResult, setStandardResult] = useState<StandardResponse | null>(
+    null
+  );
   const [error, setError] = useState<string | null>(null);
   const [disclaimerOpen, setDisclaimerOpen] = useState(false);
   const [disclaimerChecked, setDisclaimerChecked] = useState(false);
@@ -362,9 +393,22 @@ export default function ResearchView({
     if (!ticker) return;
     if (disclaimerChecked && disclaimerOpen) return;
 
+    // Unified-B tier dispatch:
+    //   quick    → /api/research/quick-scan   — Haiku, ~$0.004
+    //   standard → /api/research/standard     — single top-tier model, ~$0.06
+    //   full     → /api/research              — 3-model panel, ~$0.21
+    if (mode === "quick") {
+      return runQuickScan(ticker);
+    }
+    if (mode === "standard") {
+      return runStandard(ticker);
+    }
+
     setLoading(true);
     setError(null);
     setResult(null);
+    setQuickResult(null);
+    setStandardResult(null);
     setTrackRecord(null);
     setInsider(null);
     setNews(null);
@@ -503,6 +547,58 @@ export default function ResearchView({
     }
   }
 
+  async function runQuickScan(ticker: string) {
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    setQuickResult(null);
+    setStandardResult(null);
+    setTrackRecord(null);
+    try {
+      const res = await fetch("/api/research/quick-scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticker }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.message ?? data.error ?? "Quick scan failed.");
+        return;
+      }
+      setQuickResult(data as QuickScanResponse);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Quick scan failed.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function runStandard(ticker: string) {
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    setQuickResult(null);
+    setStandardResult(null);
+    setTrackRecord(null);
+    try {
+      const res = await fetch("/api/research/standard", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticker, lens: "claude" }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.message ?? data.error ?? "Standard research failed.");
+        return;
+      }
+      setStandardResult(data as StandardResponse);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Standard research failed.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <DisclaimerModal
@@ -536,6 +632,64 @@ export default function ResearchView({
         </CardContent>
       </Card>
 
+      {/* Mode switcher — three research products at three cost points.
+          Quick Scan default: fast triage read, ~$0.004 / run. Standard:
+          single top-tier lens with tool use, ~$0.06. Full Panel: three
+          models + supervisor, ~$0.21. All three count against the same
+          monthly AI budget; the tier cap is a dollar ceiling, not a
+          per-product quota. */}
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        {(
+          [
+            {
+              value: "quick" as const,
+              label: "Quick Scan",
+              cost: "~$0.004",
+              desc: "1-line verdict + 3 signals. Ideal for triaging 30-50 candidates.",
+            },
+            {
+              value: "standard" as const,
+              label: "Standard",
+              cost: "~$0.06",
+              desc: "Full thesis from one top-tier lens with tool use. Deep read, single opinion.",
+            },
+            {
+              value: "full" as const,
+              label: "Full Panel",
+              cost: "~$0.21",
+              desc: "Three models + supervisor cross-verify. Use for high-conviction decisions.",
+            },
+          ] as const
+        ).map((opt) => {
+          const active = mode === opt.value;
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setMode(opt.value)}
+              disabled={loading}
+              className={`rounded-lg border p-3 text-left transition-all ${
+                active
+                  ? "border-[var(--buy)]/50 bg-[var(--buy)]/5"
+                  : "border-[var(--border)] bg-[var(--card)] hover:border-[var(--foreground)]/30"
+              } disabled:opacity-60`}
+            >
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-sm font-medium text-[var(--foreground)]">
+                  {opt.label}
+                </span>
+                <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
+                  {opt.cost}
+                </span>
+              </div>
+              <p className="mt-1 text-[11px] leading-snug text-[var(--muted-foreground)]">
+                {opt.desc}
+              </p>
+            </button>
+          );
+        })}
+      </div>
+
       <Card>
         <CardContent className="p-4">
           <form onSubmit={handleSearch} className="flex gap-3">
@@ -553,10 +707,18 @@ export default function ResearchView({
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Analyzing
+                  {mode === "quick"
+                    ? "Scanning"
+                    : mode === "standard"
+                      ? "Analyzing"
+                      : "Running panel"}
                 </>
+              ) : mode === "quick" ? (
+                "Quick scan"
+              ) : mode === "standard" ? (
+                "Standard research"
               ) : (
-                "Analyze"
+                "Run full panel"
               )}
             </Button>
           </form>
@@ -565,7 +727,11 @@ export default function ResearchView({
               <Loader2 className="h-3 w-3 animate-spin" />
               {result?.cached
                 ? "Loading cached analysis…"
-                : "Fetching data · Running 3 models · Supervisor review... (takes ~30s)"}
+                : mode === "quick"
+                  ? "Quick scan · single model · ~2 seconds"
+                  : mode === "standard"
+                    ? "Single-lens deep read · ~15-30 seconds"
+                    : "Fetching data · Running 3 models · Supervisor review... (takes ~30s)"}
             </div>
           )}
         </CardContent>
@@ -580,10 +746,210 @@ export default function ResearchView({
         </Card>
       )}
 
+      {/* Quick Scan result — compact, one-liner + signals + primary risk.
+          Ends with an obvious "Run full panel" button for when the scan
+          result is interesting enough to warrant a deeper look. */}
+      {quickResult && !loading && (
+        <Card>
+          <CardHeader className="pb-2 border-b border-[var(--border)]">
+            <div className="flex items-baseline justify-between">
+              <CardTitle className="font-serif text-2xl tracking-tight">
+                {quickResult.ticker}
+                <span className="ml-3 text-[11px] font-sans uppercase tracking-widest text-[var(--muted-foreground)]">
+                  Quick scan
+                </span>
+              </CardTitle>
+              <Badge
+                className={`${
+                  quickResult.output.recommendation === "BUY"
+                    ? "bg-[var(--buy)]/15 text-[var(--buy)] border-[var(--buy)]/30"
+                    : quickResult.output.recommendation === "SELL"
+                      ? "bg-[var(--sell)]/15 text-[var(--sell)] border-[var(--sell)]/30"
+                      : "bg-[var(--hold)]/15 text-[var(--hold)] border-[var(--hold)]/30"
+                } font-mono tracking-wider`}
+              >
+                {quickResult.output.recommendation} ·{" "}
+                {quickResult.output.confidence}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4 pt-4">
+            <p className="font-serif text-lg leading-snug text-[var(--foreground)]">
+              {quickResult.output.oneLiner}
+            </p>
+
+            {quickResult.output.signals.length > 0 && (
+              <div>
+                <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+                  Key signals
+                </div>
+                <ul className="space-y-1.5">
+                  {quickResult.output.signals.map((s, i) => (
+                    <li
+                      key={i}
+                      className="flex gap-2 text-sm leading-relaxed"
+                    >
+                      <span className="mt-1.5 inline-block h-1 w-1 shrink-0 rounded-full bg-[var(--foreground)]/40" />
+                      <span>{s}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {quickResult.output.primaryRisk && (
+              <div>
+                <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--sell)]/80">
+                  Primary risk
+                </div>
+                <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
+                  {quickResult.output.primaryRisk}
+                </p>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between border-t border-[var(--border)] pt-3">
+              <div className="font-mono text-[10px] text-[var(--muted-foreground)]">
+                {quickResult.tokensUsed.toLocaleString("en-US")} tokens · $
+                {(quickResult.costCents / 100).toFixed(3)}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setMode("standard");
+                    void runStandard(quickResult.ticker);
+                  }}
+                  disabled={loading}
+                >
+                  Upgrade to Standard
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setMode("full");
+                    setQuickResult(null);
+                    void runAnalysis(quickResult.ticker, false);
+                  }}
+                  disabled={loading}
+                >
+                  Run full panel
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Standard result — single-lens full thesis. Reuses the analyst-card
+          shape from the panel view; one card instead of three. */}
+      {standardResult && !loading && (
+        <Card>
+          <CardHeader className="pb-2 border-b border-[var(--border)]">
+            <div className="flex items-baseline justify-between">
+              <CardTitle className="font-serif text-2xl tracking-tight">
+                {standardResult.ticker}
+                <span className="ml-3 text-[11px] font-sans uppercase tracking-widest text-[var(--muted-foreground)]">
+                  Standard · {standardResult.lens} lens
+                </span>
+              </CardTitle>
+              {standardResult.analysis.status === "ok" &&
+                standardResult.analysis.output && (
+                  <Badge
+                    className={`${
+                      standardResult.analysis.output.recommendation === "BUY"
+                        ? "bg-[var(--buy)]/15 text-[var(--buy)] border-[var(--buy)]/30"
+                        : standardResult.analysis.output.recommendation ===
+                            "SELL"
+                          ? "bg-[var(--sell)]/15 text-[var(--sell)] border-[var(--sell)]/30"
+                          : "bg-[var(--hold)]/15 text-[var(--hold)] border-[var(--hold)]/30"
+                    } font-mono tracking-wider`}
+                  >
+                    {standardResult.analysis.output.recommendation} ·{" "}
+                    {standardResult.analysis.output.confidence}
+                  </Badge>
+                )}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4 pt-4">
+            {standardResult.analysis.status !== "ok" ||
+            !standardResult.analysis.output ? (
+              <p className="text-sm text-muted-foreground">
+                {standardResult.analysis.error ??
+                  "Standard analysis returned no output."}
+              </p>
+            ) : (
+              <>
+                <p className="font-serif text-lg leading-snug">
+                  {standardResult.analysis.output.thesis}
+                </p>
+
+                {standardResult.analysis.output.keySignals.length > 0 && (
+                  <div>
+                    <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+                      Key signals
+                    </div>
+                    <ul className="space-y-2">
+                      {standardResult.analysis.output.keySignals.map((s, i) => (
+                        <li key={i} className="text-sm">
+                          <div>{s.signal}</div>
+                          <div className="font-mono text-[10px] text-[var(--muted-foreground)]">
+                            {s.datum}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {standardResult.analysis.output.riskFactors.length > 0 && (
+                  <div>
+                    <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--sell)]/80">
+                      Risk factors
+                    </div>
+                    <ul className="space-y-1">
+                      {standardResult.analysis.output.riskFactors.map(
+                        (r, i) => (
+                          <li
+                            key={i}
+                            className="flex gap-2 text-sm leading-relaxed"
+                          >
+                            <span className="mt-1.5 inline-block h-1 w-1 shrink-0 rounded-full bg-[var(--sell)]/60" />
+                            <span>{r}</span>
+                          </li>
+                        )
+                      )}
+                    </ul>
+                  </div>
+                )}
+              </>
+            )}
+
+            <div className="flex items-center justify-between border-t border-[var(--border)] pt-3">
+              <div className="font-mono text-[10px] text-[var(--muted-foreground)]">
+                {standardResult.tokensUsed.toLocaleString("en-US")} tokens
+              </div>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setMode("full");
+                  setStandardResult(null);
+                  void runAnalysis(standardResult.ticker, false);
+                }}
+                disabled={loading}
+              >
+                Run full panel
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Editorial empty-state: rich context so the page is never blank.
           Holdings chips · earnings this week · recent filings · recent queries
           · trending. Chip click kicks runAnalysis directly. */}
-      {!loading && !result && (
+      {!loading && !result && !quickResult && !standardResult && (
         <ResearchStarter
           onPick={(ticker) => {
             const t = ticker.trim().toUpperCase();

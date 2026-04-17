@@ -14,7 +14,7 @@ import { log, errorInfo } from "./log";
  * true invoice is the source of truth; this is a protective pre-check.
  */
 
-export type Tier = "beta" | "individual" | "advisor";
+export type Tier = "beta" | "individual" | "active" | "advisor";
 
 export type TierLimits = {
   /** Max tokens in a calendar month (input + output combined). */
@@ -23,23 +23,44 @@ export type TierLimits = {
   maxCostCents: number;
   /** Human-readable label. */
   label: string;
+  /** Monthly subscription price in cents (0 for beta). */
+  priceCents: number;
 };
 
+/**
+ * Unified-B tier scheme. Each tier's AI budget is sized so:
+ *   - All Quick Scans (~$0.004/run) → many thousand scans
+ *   - Or all Full Panel runs ($0.21/run) → a sensible deep-dive allotment
+ *   - Or any mix. The dollar cap enforces itself naturally; we don't
+ *     need per-product quotas.
+ *
+ * AI budget = ~50% of subscription revenue (target gross margin on AI
+ * only, before infra + fixed costs).
+ */
 export const TIER_LIMITS: Record<Tier, TierLimits> = {
   beta: {
     maxTokens: 500_000,
-    maxCostCents: 200, // $2.00/mo — enough for ~50-100 research queries
+    maxCostCents: 200, // $2.00 AI budget — loss-leader for acquisition
     label: "Beta",
+    priceCents: 0,
   },
   individual: {
     maxTokens: 5_000_000,
-    maxCostCents: 2900, // $29 subscription — model spend budget matches
+    maxCostCents: 1400, // $14 AI budget on a $29 price point
     label: "Individual",
+    priceCents: 2900,
+  },
+  active: {
+    maxTokens: 20_000_000,
+    maxCostCents: 4000, // $40 AI budget on a $79 price point — portfolio builders
+    label: "Active",
+    priceCents: 7900,
   },
   advisor: {
     maxTokens: 50_000_000,
-    maxCostCents: 50000, // enterprise / negotiated
+    maxCostCents: 25000, // $250 AI budget on $500 — effectively uncapped
     label: "Advisor",
+    priceCents: 50000,
   },
 };
 

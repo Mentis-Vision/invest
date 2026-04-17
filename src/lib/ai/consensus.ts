@@ -213,6 +213,86 @@ export async function runAnalystPanel(
 }
 
 /**
+ * Single-analyst path for the Standard research product. One model, tool
+ * use allowed, same schema as the panel — but no supervisor pass and no
+ * cross-model consensus. ~1/3 the cost of the full panel, still usable
+ * for conviction-grade decisions on a single ticker.
+ *
+ * Default model is Claude (value lens) since value discipline is the
+ * safest single-lens default. Caller can pick gpt or gemini via the
+ * `model` argument.
+ */
+export async function runSingleAnalyst(
+  ticker: string,
+  dataBlock: string,
+  model: "claude" | "gpt" | "gemini" = "claude",
+  profileRider?: string | null
+): Promise<ModelResult> {
+  const userMessage = `Analyze ${ticker} using the verified DATA below. You may call up to 3 tools if a deeper look would materially change your view.\n\n--- DATA (verified source) ---\n${dataBlock}\n--- END DATA ---`;
+  const systemText = profileRider
+    ? `${buildAnalystSystem(PERSONAS[model])}\n\n${profileRider}`
+    : buildAnalystSystem(PERSONAS[model]);
+
+  try {
+    const traces: ToolCallTrace[] = [];
+    const result = await generateText({
+      model: models[model],
+      system: systemText,
+      prompt: userMessage,
+      tools: analystTools,
+      stopWhen: stepCountIs(3),
+      experimental_output: Output.object({ schema: AnalystOutputSchema }),
+      onStepFinish: ({ toolCalls, toolResults }) => {
+        for (let i = 0; i < toolCalls.length; i++) {
+          const call = toolCalls[i];
+          const resp = toolResults[i];
+          traces.push({
+            toolName: call.toolName,
+            input: call.input,
+            outputSummary: summarizeToolOutput(resp?.output),
+          });
+        }
+      },
+    });
+
+    const analysisOutput = result.experimental_output as AnalystOutput | undefined;
+    const tokens =
+      result.usage?.totalTokens ??
+      (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0);
+
+    if (!analysisOutput) {
+      return {
+        model,
+        status: "failed",
+        error: "No structured output produced by model",
+        tokensUsed: tokens,
+        toolCalls: traces,
+        steps: result.steps?.length ?? 1,
+      };
+    }
+    return {
+      model,
+      status: "ok",
+      output: analysisOutput,
+      tokensUsed: tokens,
+      toolCalls: traces,
+      steps: result.steps?.length ?? 1,
+    };
+  } catch (err) {
+    log.error("consensus.analyst-standard", "model call failed", {
+      model,
+      ticker,
+      ...errorInfo(err),
+    });
+    return {
+      model,
+      status: "failed",
+      error: err instanceof Error ? err.message : "Unknown error",
+    };
+  }
+}
+
+/**
  * P3.2 — Supervisor rotation by day-of-year across Haiku / GPT / Gemini.
  * Deterministic by day so within a single session everyone sees the same
  * supervisor.
