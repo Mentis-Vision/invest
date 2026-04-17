@@ -49,7 +49,7 @@ function DashboardClientInner({
 
   return (
     <AppShell user={user} currentView={currentView} onViewChange={setCurrentView}>
-      {currentView === "dashboard" && <DashboardView />}
+      {currentView === "dashboard" && <DashboardView userName={user.name} />}
       {currentView === "portfolio" && <PortfolioView />}
       {currentView === "research" && <ResearchView />}
       {currentView === "strategy" && <StrategyView />}
