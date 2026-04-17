@@ -23,8 +23,8 @@
 - Types: `./node_modules/.bin/tsc --noEmit`
 - Build: `npm run build`
 - SQL verification: Neon MCP (`run_sql`, `describe_table_schema`)
-- Deployed smoke: `curl` against `https://clearpath-invest.vercel.app` with demo session cookie
-- Cron trigger: `curl -H "Authorization: Bearer $CRON_SECRET" https://clearpath-invest.vercel.app/api/cron/evaluate-outcomes`
+- Deployed smoke: `curl` against `https://clearpathinvest.app` with demo session cookie
+- Cron trigger: `curl -H "Authorization: Bearer $CRON_SECRET" https://clearpathinvest.app/api/cron/evaluate-outcomes`
 
 ---
 
@@ -1097,7 +1097,7 @@ vercel --prod --scope mentisvision --yes
 
 Smoke test:
 ```bash
-curl -s https://clearpath-invest.vercel.app/ -o /dev/null -w "%{http_code}\n"
+curl -s https://clearpathinvest.app/ -o /dev/null -w "%{http_code}\n"
 # Expected: 200
 ```
 
@@ -2615,7 +2615,7 @@ export CRON_SECRET=$(grep "^CRON_SECRET=" /tmp/prodenv | sed 's/CRON_SECRET="//'
 Trigger cron:
 ```bash
 curl -s -H "Authorization: Bearer $CRON_SECRET" \
-  https://clearpath-invest.vercel.app/api/cron/evaluate-outcomes \
+  https://clearpathinvest.app/api/cron/evaluate-outcomes \
   --max-time 300 | python3 -m json.tool | grep -A 20 '"warehouse"'
 ```
 
@@ -2924,12 +2924,12 @@ vercel --prod --scope mentisvision --yes
 
 Test the new ticker endpoint (after a cron has seeded data for one of demo user's held tickers):
 ```bash
-curl -s -c /tmp/cookie.txt -X POST https://clearpath-invest.vercel.app/api/auth/sign-in/email \
+curl -s -c /tmp/cookie.txt -X POST https://clearpathinvest.app/api/auth/sign-in/email \
   -H "Content-Type: application/json" \
   -d '{"email":"demo@clearpath.com","password":"DemoPass2026!"}' -o /dev/null
 
 curl -s -b /tmp/cookie.txt \
-  https://clearpath-invest.vercel.app/api/warehouse/ticker/LINK --max-time 15 \
+  https://clearpathinvest.app/api/warehouse/ticker/LINK --max-time 15 \
   | python3 -m json.tool | head -40
 ```
 Expected: JSON with `market`, `fundamentals`, `upcomingEvents`, `recentEvents`, `sentiment` keys. `market` has a populated row if warehouse ran for LINK; may be null for crypto (Yahoo coverage varies).
@@ -2937,7 +2937,7 @@ Expected: JSON with `market`, `fundamentals`, `upcomingEvents`, `recentEvents`, 
 Re-trigger the daily cron manually to verify alerts scanner still works with warehouse:
 ```bash
 curl -s -H "Authorization: Bearer $CRON_SECRET" \
-  https://clearpath-invest.vercel.app/api/cron/evaluate-outcomes \
+  https://clearpathinvest.app/api/cron/evaluate-outcomes \
   --max-time 300 | python3 -c "import sys, json; d = json.load(sys.stdin); print('priceMoves:', d.get('alerts', {}).get('priceMoves'))"
 ```
 Expected: `{'created': 0, 'skippedSuspicious': 0}` (consistent with Phase B steady state — crypto still skipped).
@@ -3236,7 +3236,7 @@ vercel --prod --scope mentisvision --yes
 Test: run research on a warehouse-populated ticker (the demo user's holdings have been run through the cron by now):
 ```bash
 curl -s -b /tmp/cookie.txt -X POST \
-  https://clearpath-invest.vercel.app/api/research \
+  https://clearpathinvest.app/api/research \
   -H "Content-Type: application/json" \
   -d '{"ticker":"LINK"}' --max-time 150 \
   | python3 -c "import sys, json; d = json.load(sys.stdin); print('verdict:', d.get('supervisor', {}).get('finalRecommendation'), d.get('supervisor', {}).get('consensus'))"
@@ -3678,13 +3678,13 @@ vercel --prod --scope mentisvision --yes
 
 Sign in as demo user and visit:
 ```
-https://clearpath-invest.vercel.app/app
+https://clearpathinvest.app/app
 ```
 Verify: new portfolio cards exist and default to Basic tier. Clicking "Show more" expands to Standard then Advanced, with content visible at each tier.
 
 Visit Settings:
 ```
-https://clearpath-invest.vercel.app/app/settings
+https://clearpathinvest.app/app/settings
 ```
 Verify: Dashboard density section has three buttons. Clicking Advanced → Save → return to dashboard — cards now render Advanced by default.
 
@@ -3863,7 +3863,7 @@ vercel --prod --scope mentisvision --yes
 Manually trigger (use the CRON_SECRET captured earlier):
 ```bash
 curl -s -H "Authorization: Bearer $CRON_SECRET" \
-  https://clearpath-invest.vercel.app/api/cron/warehouse-retention \
+  https://clearpathinvest.app/api/cron/warehouse-retention \
   --max-time 60 | python3 -m json.tool
 ```
 
