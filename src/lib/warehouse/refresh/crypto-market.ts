@@ -5,6 +5,7 @@ import {
   getCryptoDaily,
   getCryptoSpot,
 } from "../../data/alpha-vantage";
+import { getCryptoSpotCoinGecko } from "../../data/coingecko";
 
 /**
  * Crypto-specific market refresh.
@@ -19,12 +20,14 @@ import {
  *   correctly resolve to the actual coin. We route crypto through here
  *   so the warehouse stores accurate values.
  *
- * Pricing strategy per ticker:
- *   1. CURRENCY_EXCHANGE_RATE (lighter, realtime spot) — primary
- *   2. DIGITAL_CURRENCY_DAILY (heavier, historical OHLCV) — fallback +
- *      provides the open/high/low we want in the warehouse row
+ * Pricing strategy per ticker (in order):
+ *   1. AV DIGITAL_CURRENCY_DAILY  — primary; gives OHLCV
+ *   2. AV CURRENCY_EXCHANGE_RATE  — fallback; lighter, just spot
+ *   3. CoinGecko /simple/price    — tertiary; covers tokens AV doesn't
+ *      list (SPK, HYPE, newer DeFi). Free + key-less.
  *
- * Source of stored row: 'alpha_vantage'
+ * Source of stored row: 'alpha_vantage' or 'coingecko' depending on
+ * which step actually returned the price.
  */
 
 export type CryptoMarketRefreshResult = {
@@ -42,18 +45,12 @@ export async function refreshCryptoMarket(
   if (cryptoTickers.length === 0) {
     return { attempted: 0, written: 0, skipped: 0, failed: [] };
   }
+  // We can still serve crypto via CoinGecko even when AV is missing.
   if (!alphaVantageConfigured()) {
     log.warn(
       "warehouse.refresh.crypto",
-      "alpha vantage not configured — crypto skipped"
+      "alpha vantage not configured — relying on CoinGecko for crypto"
     );
-    return {
-      attempted,
-      written: 0,
-      skipped: attempted,
-      failed: [],
-      reason: "alpha_vantage_not_configured",
-    };
   }
 
   let written = 0;
@@ -66,40 +63,77 @@ export async function refreshCryptoMarket(
   for (const rawTicker of cryptoTickers) {
     const ticker = rawTicker.toUpperCase();
     try {
-      // Try the daily series first — it gives us OHLCV for one round trip.
-      const daily = await getCryptoDaily(ticker, "USD");
-      let close: number | null = daily?.close ?? null;
-      let open: number | null = daily?.open ?? null;
-      let high: number | null = daily?.high ?? null;
-      let low: number | null = daily?.low ?? null;
-      // ticker_market_daily.volume is BIGINT — crypto trades fractional
-      // units, so AV's DIGITAL_CURRENCY_DAILY returns volume as a
-      // decimal. Round to integer; for very high volume coins this loses
-      // sub-unit precision which is fine at warehouse granularity.
-      let volume: number | null =
-        daily?.volume != null ? Math.round(daily.volume) : null;
+      let close: number | null = null;
+      let open: number | null = null;
+      let high: number | null = null;
+      let low: number | null = null;
+      let volume: number | null = null;
+      let source: "alpha_vantage" | "coingecko" = "alpha_vantage";
+      let changePct: number | null = null;
 
-      // Fall back to spot price if the daily call failed or returned no data.
+      // 1. AV daily — gives OHLCV in one round trip.
+      if (alphaVantageConfigured()) {
+        const daily = await getCryptoDaily(ticker, "USD");
+        if (daily) {
+          close = daily.close ?? null;
+          open = daily.open ?? null;
+          high = daily.high ?? null;
+          low = daily.low ?? null;
+          // ticker_market_daily.volume is BIGINT — crypto trades
+          // fractional units, so DIGITAL_CURRENCY_DAILY returns volume
+          // as a decimal. Round to integer; sub-unit precision loss is
+          // fine at warehouse granularity.
+          volume = daily.volume != null ? Math.round(daily.volume) : null;
+        }
+
+        // 2. AV spot — lighter fallback when daily call failed.
+        if (close == null) {
+          const spot = await getCryptoSpot(ticker, "USD");
+          if (spot?.price) close = spot.price;
+        }
+      }
+
+      // 3. CoinGecko — covers AV-missing tokens (SPK, HYPE, smaller-cap).
+      //    Only call when nothing else worked; cheap (key-less) but we
+      //    don't want to burn rate limit when AV already answered.
       if (close == null) {
-        const spot = await getCryptoSpot(ticker, "USD");
-        close = spot?.price ?? null;
+        const cg = await getCryptoSpotCoinGecko(ticker);
+        if (cg?.price) {
+          close = cg.price;
+          source = "coingecko";
+          // CG gives us 24h change and 24h volume but not open/high/low.
+          // Synthesize open from change so the AI prompt + drill have
+          // SOMETHING to anchor on.
+          if (cg.change24hPct != null) {
+            // close = open * (1 + change/100) → open = close / (1+change/100)
+            const ratio = 1 + cg.change24hPct / 100;
+            if (ratio > 0) open = close / ratio;
+            changePct = cg.change24hPct;
+          }
+          if (cg.volume24h != null) {
+            volume = Math.round(cg.volume24h);
+          }
+        }
       }
 
       if (close == null || close <= 0) {
         skipped++;
-        log.warn("warehouse.refresh.crypto", "no price returned", { ticker });
+        log.warn("warehouse.refresh.crypto", "no price from any source", {
+          ticker,
+        });
         continue;
       }
 
-      // change_pct vs previous close, if we have both
-      const changePct =
-        open != null && open > 0 ? ((close - open) / open) * 100 : null;
+      // change_pct vs open of today's bar (when we have it from AV daily).
+      if (changePct == null && open != null && open > 0) {
+        changePct = ((close - open) / open) * 100;
+      }
 
       await pool.query(
         `INSERT INTO "ticker_market_daily"
           (ticker, captured_at, source,
            open, high, low, close, volume, change_pct)
-         VALUES ($1, CURRENT_DATE, 'alpha_vantage', $2, $3, $4, $5, $6, $7)
+         VALUES ($1, CURRENT_DATE, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (ticker, captured_at) DO UPDATE SET
            open = EXCLUDED.open,
            high = EXCLUDED.high,
@@ -107,9 +141,9 @@ export async function refreshCryptoMarket(
            close = EXCLUDED.close,
            volume = EXCLUDED.volume,
            change_pct = EXCLUDED.change_pct,
-           source = 'alpha_vantage',
+           source = EXCLUDED.source,
            as_of = NOW()`,
-        [ticker, open, high, low, close, volume, changePct]
+        [ticker, source, open, high, low, close, volume, changePct]
       );
       written++;
     } catch (err) {
