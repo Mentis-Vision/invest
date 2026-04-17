@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { getStockSnapshot, formatSnapshotForAI } from "@/lib/data/yahoo";
+import {
+  getStockSnapshot,
+  formatWarehouseEnhancedDataBlock,
+} from "@/lib/data/yahoo";
 import { getRecentFilings, formatFilingsForAI } from "@/lib/data/sec";
 import { getMacroSnapshot, formatMacroForAI } from "@/lib/data/fred";
 import {
@@ -239,8 +242,12 @@ export async function POST(req: NextRequest) {
       };
       emit({ type: "sources", sources });
 
+      // Warehouse-enhanced DATA block: pulls valuation/technicals/fundamentals
+      // from ticker_market_daily + ticker_fundamentals when populated, falling
+      // back to live Yahoo fields when the warehouse hasn't seen the ticker.
+      // Each section is tagged [WAREHOUSE] or [LIVE] for prompt-level audit.
       const dataBlock = [
-        formatSnapshotForAI(snap),
+        await formatWarehouseEnhancedDataBlock(snap),
         "",
         formatFilingsForAI(filings),
         "",
