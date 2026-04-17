@@ -25,7 +25,12 @@ export async function sendEmail(
   input: SendEmailInput
 ): Promise<{ ok: boolean; id?: string; skipped?: boolean }> {
   const key = process.env.RESEND_API_KEY;
-  const from = process.env.RESEND_FROM_EMAIL || "ClearPath Invest <no-reply@clearpath-invest.com>";
+  // Fallback sender uses the real production domain. If RESEND_FROM_EMAIL
+  // is unset in prod, emails still attempt to send from a Resend-verified
+  // clearpathinvest.app address rather than the old (dead) .com domain.
+  const from =
+    process.env.RESEND_FROM_EMAIL ||
+    "ClearPath Invest <no-reply@clearpathinvest.app>";
 
   if (!key) {
     log.warn("email", "RESEND_API_KEY not set — dev-mode skip", {
