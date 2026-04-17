@@ -13,6 +13,7 @@ import {
   scanConcentration,
 } from "@/lib/alerts";
 import { getMacroSnapshot } from "@/lib/data/fred";
+import { refreshWarehouse } from "@/lib/warehouse/refresh";
 
 /**
  * Daily cron:
@@ -106,6 +107,16 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     log.warn("cron", "prewarm failed", errorInfo(err));
     result.prewarm = { error: "failed" };
+  }
+
+  // 8. Warehouse refresh — populates 5 ticker-keyed tables from free sources.
+  //    $0 AI. Universe is the set of tickers currently held by any user;
+  //    getTickerUniverse() returns only string[], no userId ever leaves it.
+  try {
+    result.warehouse = await refreshWarehouse();
+  } catch (err) {
+    log.error("cron", "warehouse refresh failed", errorInfo(err));
+    result.warehouse = { error: "failed" };
   }
 
   result.durationMs = Date.now() - started;
