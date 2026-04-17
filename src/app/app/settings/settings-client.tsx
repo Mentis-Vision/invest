@@ -244,6 +244,65 @@ export default function SettingsClient({
         <CardContent className="space-y-4">
           <div>
             <label className="mb-1.5 block text-xs font-medium">
+              Dashboard density
+            </label>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {(
+                [
+                  {
+                    value: "basic",
+                    label: "Basic",
+                    desc: "Price, P/E, yield, top headlines — calm and digestible.",
+                  },
+                  {
+                    value: "standard",
+                    label: "Standard",
+                    desc: "Adds forward P/E, P/B, 50d/200d MA, beta, sentiment %.",
+                  },
+                  {
+                    value: "advanced",
+                    label: "Advanced",
+                    desc: "Everything — RSI/MACD/Bollinger, full fundamentals, Form 4 trail.",
+                  },
+                ] as const
+              ).map((opt) => {
+                const active =
+                  (profile.preferences.density ?? "basic") === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() =>
+                      setProfile((p) => ({
+                        ...p,
+                        preferences: {
+                          ...p.preferences,
+                          density: opt.value,
+                        },
+                      }))
+                    }
+                    className={`flex flex-col items-start rounded-md border p-3 text-left text-sm transition-colors ${
+                      active
+                        ? "border-[var(--buy)]/40 bg-[var(--buy)]/5"
+                        : "border-border hover:bg-accent/40"
+                    }`}
+                  >
+                    <span className="font-medium">{opt.label}</span>
+                    <span className="mt-1 text-xs text-muted-foreground">
+                      {opt.desc}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              Analyst prompts always receive the full warehouse view —
+              this only changes what you see on the dashboard.
+            </p>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium">
               Excluded sectors
               <span className="ml-2 font-normal text-muted-foreground">
                 comma-separated, e.g. <em>Tobacco, Firearms, Gambling</em>
