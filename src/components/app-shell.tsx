@@ -53,7 +53,7 @@ const dashboardNavItems: DashboardNav[] = [
   { kind: "view", id: "portfolio", label: "My Portfolio", icon: PieChart },
   { kind: "view", id: "research", label: "Research", icon: Search },
   { kind: "view", id: "strategy", label: "AI Strategy", icon: Lightbulb },
-  { kind: "view", id: "integrations", label: "Data & APIs", icon: Plug },
+  { kind: "view", id: "integrations", label: "Account", icon: Plug },
 ];
 
 const linkNavItems: LinkNav[] = [

@@ -61,10 +61,12 @@ type QuickScanResponse = {
 
 type StandardResponse = {
   ticker: string;
-  mode: "standard";
+  mode: "deep" | "standard";
   lens: "claude" | "gpt" | "gemini";
   snapshot: StockSnapshot;
   analysis: ModelResult;
+  /** Bull/Bear adversarial debate run on the single analyst's output. */
+  debate?: DebateResult | null;
   tokensUsed: number;
   usage?: { tier: string; remainingCents: number };
 };
@@ -432,45 +434,11 @@ export default function ResearchView({
     e.preventDefault();
     const t = query.trim().toUpperCase();
     if (!t) return;
-    // Smart-routing: if the user already holds this ticker AND the user
-    // has explicit prior research on it, upgrade to Panel depth by
-    // default — they're more likely to be making a decision rather than
-    // exploring. For unknown/unheld tickers Quick is the right default
-    // (exploration). Users can still override via "Adjust depth".
-    let autoMode = mode;
-    if (!showDepthPicker) {
-      const holds = userHoldings.some(
-        (h) => h.toUpperCase() === t
-      );
-      const hasPriorResearch = recentlyResearched.includes(t);
-      if (holds && hasPriorResearch) {
-        autoMode = "full";
-      } else if (holds) {
-        autoMode = "standard";
-      } else {
-        autoMode = "quick";
-      }
-      if (autoMode !== mode) setMode(autoMode);
-    }
-    await runAnalysisWithMode(t, false, autoMode);
-  }
-
-  async function runAnalysisWithMode(
-    ticker: string,
-    force: boolean,
-    explicitMode: "quick" | "standard" | "full"
-  ) {
-    if (explicitMode === "quick") return runQuickScan(ticker);
-    if (explicitMode === "standard") return runStandard(ticker);
-    return runAnalysis(ticker, force);
-  }
-
-  function modeCopy(m: "quick" | "standard" | "full"): string {
-    if (m === "quick")
-      return "Quick read — headline verdict in a few seconds.";
-    if (m === "standard")
-      return "Deep read — one lens, full thesis with sources.";
-    return "Panel — three lenses cross-examine, for decisions you'll act on.";
+    // Always start with a Quick scan. The result includes a "Go deeper"
+    // button that triggers Deep read (single best model + bull/bear debate)
+    // when the user wants more rigor.
+    setMode("quick");
+    await runQuickScan(t);
   }
 
   async function runAnalysis(ticker: string, force: boolean) {
@@ -707,7 +675,7 @@ export default function ResearchView({
       <OutcomePing />
 
       <div>
-        <h2 className="font-serif text-3xl tracking-tight text-[var(--foreground)]">
+        <h2 className="text-3xl font-semibold tracking-tight text-[var(--foreground)]">
           Research
         </h2>
         <p className="text-sm text-muted-foreground">
@@ -729,70 +697,13 @@ export default function ResearchView({
         </CardContent>
       </Card>
 
-      {/* Depth switcher — hidden by default behind "Adjust depth".
-          Auto-routing picks the right mode based on context so users
-          don't have to think about it (and in practice would always
-          pick the most expensive option if asked). Override is still
-          available for users who want it, but it's a secondary affordance. */}
-      <div>
-        <div className="flex items-baseline justify-between">
-          <p className="text-[11px] text-[var(--muted-foreground)]">
-            {modeCopy(mode)}
-          </p>
-          <button
-            type="button"
-            onClick={() => setShowDepthPicker((s) => !s)}
-            className="text-[11px] text-[var(--muted-foreground)] underline underline-offset-4 hover:text-[var(--foreground)]"
-          >
-            {showDepthPicker ? "Hide depth options" : "Adjust depth"}
-          </button>
-        </div>
-        {showDepthPicker && (
-          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
-            {(
-              [
-                {
-                  value: "quick" as const,
-                  label: "Quick read",
-                  desc: "Fast triage — a headline verdict and the three signals driving it.",
-                },
-                {
-                  value: "standard" as const,
-                  label: "Deep read",
-                  desc: "One lens applied with full rigor. A real thesis with sources.",
-                },
-                {
-                  value: "full" as const,
-                  label: "Panel",
-                  desc: "Three lenses cross-examine each other. For decisions you'll act on.",
-                },
-              ] as const
-            ).map((opt) => {
-              const active = mode === opt.value;
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => setMode(opt.value)}
-                  disabled={loading}
-                  className={`rounded-lg border p-3 text-left transition-all ${
-                    active
-                      ? "border-[var(--buy)]/50 bg-[var(--buy)]/5"
-                      : "border-[var(--border)] bg-[var(--card)] hover:border-[var(--foreground)]/30"
-                  } disabled:opacity-60`}
-                >
-                  <div className="text-sm font-medium text-[var(--foreground)]">
-                    {opt.label}
-                  </div>
-                  <p className="mt-1 text-[11px] leading-snug text-[var(--muted-foreground)]">
-                    {opt.desc}
-                  </p>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      {/* Single-button flow:
+          - Click "Analyze" → instant Quick scan (no mode picker)
+          - On the Quick result card → "Go deeper" runs the Deep read
+            (single best-in-class model + adversarial debate)
+          The depth selector was removed deliberately. Users defaulted to
+          the most expensive option if asked; auto-routing + escape-hatch-
+          to-deeper is the cleaner pattern. */}
 
       <Card>
         <CardContent className="p-4">
@@ -825,9 +736,7 @@ export default function ResearchView({
                 ? "Loading cached analysis…"
                 : mode === "quick"
                   ? "Reading the signals…"
-                  : mode === "standard"
-                    ? "Applying the value lens…"
-                    : "Cross-examining across three lenses…"}
+                  : "Going deeper — full thesis with adversarial debate…"}
             </div>
           )}
         </CardContent>
@@ -849,7 +758,7 @@ export default function ResearchView({
         <Card>
           <CardHeader className="pb-2 border-b border-[var(--border)]">
             <div className="flex items-baseline justify-between">
-              <CardTitle className="font-serif text-2xl tracking-tight">
+              <CardTitle className="text-2xl font-semibold tracking-tight">
                 {quickResult.ticker}
                 <span className="ml-3 text-[11px] font-sans uppercase tracking-widest text-[var(--muted-foreground)]">
                   Quick read
@@ -870,7 +779,7 @@ export default function ResearchView({
             </div>
           </CardHeader>
           <CardContent className="space-y-4 pt-4">
-            <p className="font-serif text-lg leading-snug text-[var(--foreground)]">
+            <p className="text-base leading-snug text-[var(--foreground)]">
               {quickResult.output.oneLiner}
             </p>
 
@@ -907,25 +816,13 @@ export default function ResearchView({
             <div className="flex items-center justify-end gap-2 border-t border-[var(--border)] pt-3">
               <Button
                 size="sm"
-                variant="outline"
                 onClick={() => {
                   setMode("standard");
                   void runStandard(quickResult.ticker);
                 }}
                 disabled={loading}
               >
-                Go deeper
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => {
-                  setMode("full");
-                  setQuickResult(null);
-                  void runAnalysis(quickResult.ticker, false);
-                }}
-                disabled={loading}
-              >
-                Run panel
+                Go deeper — full thesis with debate
               </Button>
             </div>
           </CardContent>
@@ -938,16 +835,10 @@ export default function ResearchView({
         <Card>
           <CardHeader className="pb-2 border-b border-[var(--border)]">
             <div className="flex items-baseline justify-between">
-              <CardTitle className="font-serif text-2xl tracking-tight">
+              <CardTitle className="font-sans text-2xl font-semibold tracking-tight">
                 {standardResult.ticker}
                 <span className="ml-3 text-[11px] font-sans uppercase tracking-widest text-[var(--muted-foreground)]">
-                  Deep read ·{" "}
-                  {standardResult.lens === "claude"
-                    ? "Value"
-                    : standardResult.lens === "gpt"
-                      ? "Growth"
-                      : "Macro"}{" "}
-                  lens
+                  Deep read
                 </span>
               </CardTitle>
               {standardResult.analysis.status === "ok" &&
@@ -977,7 +868,7 @@ export default function ResearchView({
               </p>
             ) : (
               <>
-                <p className="font-serif text-lg leading-snug">
+                <p className="text-base leading-snug">
                   {standardResult.analysis.output.thesis}
                 </p>
 
@@ -1022,22 +913,97 @@ export default function ResearchView({
               </>
             )}
 
-            <div className="flex items-center justify-end border-t border-[var(--border)] pt-3">
-              <Button
-                size="sm"
-                onClick={() => {
-                  setMode("full");
-                  setStandardResult(null);
-                  void runAnalysis(standardResult.ticker, false);
-                }}
-                disabled={loading}
-              >
-                Run panel
-              </Button>
-            </div>
           </CardContent>
         </Card>
       )}
+
+      {/* Adversarial debate cards on the Deep read result. The bull/bear
+          pass + the "what would change my mind" line is the differentiator
+          no other consumer research tool surfaces. */}
+      {standardResult?.debate &&
+        (standardResult.debate.bull || standardResult.debate.bear) && (
+          <div>
+            <h3 className="mb-3 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
+              <span>Adversarial debate · the case for and against</span>
+            </h3>
+            <div className="grid gap-4 lg:grid-cols-2">
+              {standardResult.debate.bull && (
+                <Card className="border-[var(--buy)]/30 bg-[var(--buy)]/5">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-baseline justify-between text-sm">
+                      <span className="text-[var(--buy)] font-mono uppercase tracking-widest">
+                        Bull case
+                      </span>
+                      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                        arguing for action
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 text-sm">
+                    <p className="leading-relaxed">
+                      {standardResult.debate.bull.thesis}
+                    </p>
+                    <ul className="space-y-2">
+                      {standardResult.debate.bull.reasons.map((r, i) => (
+                        <li key={i}>
+                          <div>{r.point}</div>
+                          <div className="mt-0.5 font-mono text-[10px] text-muted-foreground/80">
+                            cite: {r.citation}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="rounded-md border border-[var(--buy)]/20 bg-[var(--background)] p-2.5 text-xs">
+                      <div className="mb-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                        What would change the bull&rsquo;s mind
+                      </div>
+                      <div className="leading-relaxed">
+                        {standardResult.debate.bull.conditionThatWouldChangeMind}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+              {standardResult.debate.bear && (
+                <Card className="border-[var(--sell)]/30 bg-[var(--sell)]/5">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-baseline justify-between text-sm">
+                      <span className="text-[var(--sell)] font-mono uppercase tracking-widest">
+                        Bear case
+                      </span>
+                      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                        arguing against action
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 text-sm">
+                    <p className="leading-relaxed">
+                      {standardResult.debate.bear.thesis}
+                    </p>
+                    <ul className="space-y-2">
+                      {standardResult.debate.bear.reasons.map((r, i) => (
+                        <li key={i}>
+                          <div>{r.point}</div>
+                          <div className="mt-0.5 font-mono text-[10px] text-muted-foreground/80">
+                            cite: {r.citation}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="rounded-md border border-[var(--sell)]/20 bg-[var(--background)] p-2.5 text-xs">
+                      <div className="mb-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                        What would change the bear&rsquo;s mind
+                      </div>
+                      <div className="leading-relaxed">
+                        {standardResult.debate.bear.conditionThatWouldChangeMind}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </div>
+        )}
 
       {/* Editorial empty-state: rich context so the page is never blank.
           Holdings chips · earnings this week · recent filings · recent queries

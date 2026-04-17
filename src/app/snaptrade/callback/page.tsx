@@ -57,7 +57,7 @@ export default function SnapTradeCallback() {
             <path d="M20 6 9 17l-5-5" />
           </svg>
         </div>
-        <h1 className="font-serif text-2xl tracking-tight">
+        <h1 className="text-2xl font-semibold tracking-tight">
           Connection complete
         </h1>
         <p className="mt-2 text-sm text-[var(--muted-foreground)]">

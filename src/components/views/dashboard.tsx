@@ -293,7 +293,7 @@ function DashboardBody({ userName }: { userName: string }) {
       {!loading && connected && holdings.length === 0 && (
         <Card className="border-[var(--hold)]/30 bg-[var(--hold)]/5">
           <CardContent className="py-5 text-center">
-            <p className="font-serif text-base text-[var(--foreground)]">
+            <p className="text-base font-medium text-[var(--foreground)]">
               Connected, but no positions are showing yet.
             </p>
             <p className="mt-1 text-xs text-[var(--muted-foreground)]">
@@ -343,7 +343,7 @@ function DashboardBody({ userName }: { userName: string }) {
       {holdings.length > 0 && (
         <section className="space-y-3">
           <div className="flex items-baseline justify-between border-b border-[var(--border)] pb-2">
-            <h3 className="font-serif text-xl tracking-tight">
+            <h3 className="text-xl font-semibold tracking-tight">
               Holdings
               <span className="ml-3 text-[11px] uppercase tracking-[0.22em] text-[var(--muted-foreground)] font-sans font-normal">
                 at a glance
@@ -420,7 +420,7 @@ function DashboardBody({ userName }: { userName: string }) {
       {!loading && !hasTrackRecord && (
         <Card>
           <CardContent className="py-8 text-center">
-            <p className="font-serif text-lg text-[var(--foreground)]">
+            <p className="text-lg font-medium text-[var(--foreground)]">
               Your research desk is empty.
             </p>
             <p className="mt-1 text-sm text-[var(--muted-foreground)]">

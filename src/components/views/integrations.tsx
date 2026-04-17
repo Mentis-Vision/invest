@@ -1,59 +1,47 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   CheckCircle2,
   AlertCircle,
-  BookOpen,
   Landmark,
-  LineChart,
-  FileText,
-  BarChart3,
-  Newspaper,
-  Database,
-  Mail,
-  Shield,
-  Cpu,
-  Server,
   Loader2,
+  Settings,
+  Bell,
+  Download,
+  KeyRound,
+  Mail,
+  Trash2,
+  ExternalLink,
 } from "lucide-react";
 import { getHoldings } from "@/lib/client/holdings-cache";
 
 /**
- * Data & APIs page — full transparency on every data source that powers
- * ClearPath. Organized by role so users understand what's "always on"
- * versus what's linked to their account.
+ * Account & connections — the admin hub.
  *
- * Previously this page showed a small hardcoded list that included Plaid
- * (removed months ago) and omitted half the real sources. Fixed.
+ * Stripped down from the previous "Data & APIs" listing. The data-source
+ * transparency that used to live here (Yahoo / SEC / FRED / Finnhub /
+ * AI panel / infrastructure cards) was removed at user request — those
+ * are platform implementation details, not user-facing controls.
+ *
+ * What lives here now:
+ *   - Linked brokerage accounts (compact)
+ *   - Account info (email, tier, password)
+ *   - Notification preferences
+ *   - Data export / delete
+ *   - Support links
  */
 
-type SourceCategory =
-  | "always_on"
-  | "optional"
-  | "user_linked"
-  | "ai_panel"
-  | "infrastructure";
-
-type Source = {
-  name: string;
-  role: string;
-  description: string;
-  docsUrl?: string;
-  icon: React.ComponentType<{ className?: string }>;
-  category: SourceCategory;
-  /** Optional runtime status; when null we fall back to category default */
-  status?: "active" | "linked" | "not_linked" | "optional" | "unknown";
-  /** Optional status detail — freshness timestamp, username, etc. */
-  detail?: string;
+type LinkedAccount = {
+  institution: string;
+  positions: number;
+  status: "linked" | "not_linked" | "unknown";
 };
 
 export default function IntegrationsView() {
   const [connected, setConnected] = useState<boolean | null>(null);
-  const [institutions, setInstitutions] = useState<string[]>([]);
+  const [accounts, setAccounts] = useState<LinkedAccount[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -62,7 +50,20 @@ export default function IntegrationsView() {
       .then((d) => {
         if (!alive) return;
         setConnected(!!d.connected);
-        setInstitutions(d.institutions ?? []);
+        const counts: Record<string, number> = {};
+        for (const h of d.holdings ?? []) {
+          const inst =
+            h.institutionName ?? h.accountName ?? "Linked account";
+          counts[inst] = (counts[inst] ?? 0) + 1;
+        }
+        const next: LinkedAccount[] = Object.entries(counts).map(
+          ([institution, positions]) => ({
+            institution,
+            positions,
+            status: "linked",
+          })
+        );
+        setAccounts(next);
         setLoading(false);
       })
       .catch(() => {
@@ -73,230 +74,160 @@ export default function IntegrationsView() {
     };
   }, []);
 
-  const sources: Source[] = [
-    // Always-on public data
-    {
-      name: "Yahoo Finance",
-      role: "Quotes, charts, company snapshot",
-      description:
-        "Live and historical prices, 52-week ranges, quote-summary modules for valuation & analyst targets, calendar events.",
-      docsUrl: "https://finance.yahoo.com",
-      icon: LineChart,
-      category: "always_on",
-    },
-    {
-      name: "SEC EDGAR",
-      role: "Regulatory filings & insider",
-      description:
-        "10-K/10-Q/8-K filings, Form 4 insider transactions, company facts. Official primary source — no intermediary.",
-      docsUrl: "https://www.sec.gov/edgar",
-      icon: FileText,
-      category: "always_on",
-    },
-    {
-      name: "FRED",
-      role: "Macro indicators",
-      description:
-        "Federal Reserve Economic Data: Treasury yields, Fed Funds, CPI YoY, unemployment, VIX. Updates daily at release cadence.",
-      docsUrl: "https://fred.stlouisfed.org",
-      icon: BarChart3,
-      category: "always_on",
-    },
-    {
-      name: "Finnhub",
-      role: "News headlines & sentiment",
-      description:
-        "Per-ticker news feed with bullish/bearish sentiment scoring. Optional — when unconfigured, news features degrade gracefully.",
-      docsUrl: "https://finnhub.io",
-      icon: Newspaper,
-      category: "optional",
-    },
-
-    // User-linked
-    {
-      name: "SnapTrade",
-      role: "Brokerage read-only",
-      description:
-        "Secure read-only access to holdings, positions, and trade history across 15+ brokerages (Coinbase, Robinhood, Fidelity, Schwab, etc.). You never share credentials — SnapTrade handles OAuth.",
-      docsUrl: "https://snaptrade.com",
-      icon: Landmark,
-      category: "user_linked",
-      status: loading ? "unknown" : connected ? "linked" : "not_linked",
-      detail:
-        !loading && connected && institutions.length > 0
-          ? institutions.slice(0, 3).join(", ") +
-            (institutions.length > 3 ? ` +${institutions.length - 3}` : "")
-          : undefined,
-    },
-
-    // AI analyst panel — transparency
-    {
-      name: "Anthropic Claude",
-      role: "Analyst · value lens",
-      description:
-        "Independent analyst with a value-investor lens. One of three AI models that analyze each research query in parallel.",
-      docsUrl: "https://www.anthropic.com",
-      icon: Cpu,
-      category: "ai_panel",
-    },
-    {
-      name: "OpenAI GPT",
-      role: "Analyst · growth lens",
-      description:
-        "Independent analyst with a growth-investor lens. Runs in parallel with Claude and Gemini for cross-verification.",
-      docsUrl: "https://openai.com",
-      icon: Cpu,
-      category: "ai_panel",
-    },
-    {
-      name: "Google Vertex (Gemini)",
-      role: "Analyst · macro lens",
-      description:
-        "Independent analyst with a macro-aware lens. Third member of the panel; supervisor compares all three verdicts.",
-      docsUrl: "https://cloud.google.com/vertex-ai",
-      icon: Cpu,
-      category: "ai_panel",
-    },
-
-    // Infrastructure — lower priority but mentioned for transparency
-    {
-      name: "Neon Postgres",
-      role: "Database",
-      description:
-        "Your holdings, research history, alerts, and the nightly warehouse all live in a serverless Neon Postgres instance. Backups: 7-day PITR.",
-      docsUrl: "https://neon.tech",
-      icon: Database,
-      category: "infrastructure",
-    },
-    {
-      name: "Vercel",
-      role: "Hosting & cron",
-      description:
-        "Serverless compute, nightly cron jobs, CDN. Fluid Compute keeps cold starts negligible.",
-      docsUrl: "https://vercel.com",
-      icon: Server,
-      category: "infrastructure",
-    },
-    {
-      name: "Resend",
-      role: "Transactional email",
-      description:
-        "Verification emails, password reset, receipts. Domain-verified for clearpathinvest.app.",
-      docsUrl: "https://resend.com",
-      icon: Mail,
-      category: "infrastructure",
-    },
-    {
-      name: "BetterAuth + Google OAuth",
-      role: "Authentication",
-      description:
-        "Session management, email/password, Google sign-in. Sessions stored in Neon; no third-party session provider.",
-      docsUrl: "https://www.better-auth.com",
-      icon: Shield,
-      category: "infrastructure",
-    },
-  ];
-
-  const grouped: Record<SourceCategory, Source[]> = {
-    always_on: [],
-    optional: [],
-    user_linked: [],
-    ai_panel: [],
-    infrastructure: [],
-  };
-  for (const s of sources) grouped[s.category].push(s);
-
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="font-serif text-3xl tracking-tight text-[var(--foreground)]">
-          Data &amp; sources
+        <h2 className="text-3xl font-semibold tracking-tight text-[var(--foreground)]">
+          Account
         </h2>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-          Every signal that touches your research — public feeds we pull on
-          your behalf, brokerages you link, the AI analyst panel, and the
-          infrastructure underneath.
+          Manage your linked brokerages, preferences, and data.
         </p>
       </div>
 
-      <Group
-        title="Always on"
-        description="Public data we pull automatically — no setup, no credentials from you."
-      >
-        {grouped.always_on.map((s) => (
-          <SourceCard key={s.name} s={s} />
-        ))}
-      </Group>
-
-      {grouped.optional.length > 0 && (
-        <Group
-          title="Optional"
-          description="Wired in when the operator configures the API key — feature degrades gracefully when absent."
-        >
-          {grouped.optional.map((s) => (
-            <SourceCard key={s.name} s={s} />
-          ))}
-        </Group>
-      )}
-
-      <Group
-        title="Your linked accounts"
-        description="Read-only connections to your brokerages. You control them from here."
+      <Section
+        title="Linked accounts"
+        description="Brokerages we sync read-only. Add a new connection any time."
         action={
           <Link
             href="/app?view=portfolio"
-            className="text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] underline underline-offset-4"
+            className="inline-flex items-center gap-1 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] underline underline-offset-4"
           >
-            Manage connections →
+            Manage from Portfolio
+            <ExternalLink className="h-3 w-3" />
           </Link>
         }
       >
-        {grouped.user_linked.map((s) => (
-          <SourceCard key={s.name} s={s} />
-        ))}
-      </Group>
+        {loading ? (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3">
+            {[...Array(2)].map((_, i) => (
+              <div
+                key={i}
+                className="h-16 animate-pulse rounded-md border border-[var(--border)] bg-[var(--secondary)]/40"
+              />
+            ))}
+          </div>
+        ) : connected && accounts.length > 0 ? (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3">
+            {accounts.map((a) => (
+              <CompactCard
+                key={a.institution}
+                title={a.institution}
+                subtitle={`${a.positions} position${a.positions === 1 ? "" : "s"}`}
+                icon={Landmark}
+                status="linked"
+              />
+            ))}
+            <Link
+              href="/app?view=portfolio"
+              className="flex h-full items-center justify-center rounded-md border border-dashed border-[var(--border)] bg-[var(--background)] px-3 py-3 text-xs text-[var(--muted-foreground)] hover:border-[var(--foreground)]/30 hover:text-[var(--foreground)]"
+            >
+              + Link another account
+            </Link>
+          </div>
+        ) : (
+          <CompactCard
+            title="No accounts linked yet"
+            subtitle="Link a brokerage to sync holdings, trades, and balances."
+            icon={Landmark}
+            status="not_linked"
+            action={
+              <Link
+                href="/app?view=portfolio"
+                className="inline-flex items-center rounded-md bg-[var(--buy)] px-3 py-1.5 text-xs font-medium text-[var(--primary-foreground)] hover:opacity-90"
+              >
+                Link an account
+              </Link>
+            }
+          />
+        )}
+      </Section>
 
-      <Group
-        title="AI analyst panel"
-        description="Three independent models cross-verify every research call. Disagreement between them is reported — it's often the most informative outcome."
+      <Section
+        title="Account"
+        description="Profile, password, and preferences."
       >
-        {grouped.ai_panel.map((s) => (
-          <SourceCard key={s.name} s={s} />
-        ))}
-      </Group>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3">
+          <AdminTile
+            href="/app/settings"
+            icon={Settings}
+            title="Profile & preferences"
+            subtitle="Risk, horizon, dashboard density"
+          />
+          <AdminTile
+            href="/forgot-password"
+            icon={KeyRound}
+            title="Change password"
+            subtitle="Email-based reset"
+          />
+          <AdminTile
+            icon={Bell}
+            title="Notification preferences"
+            subtitle="Soon — alert + brief delivery"
+            disabled
+          />
+        </div>
+      </Section>
 
-      <Group
-        title="Platform infrastructure"
-        description="The pipes. Listed for transparency — you don't configure these."
+      <Section
+        title="Data & privacy"
+        description="Export everything we have on you, or delete your account."
       >
-        {grouped.infrastructure.map((s) => (
-          <SourceCard key={s.name} s={s} />
-        ))}
-      </Group>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <AdminTile
+            icon={Download}
+            title="Export your data"
+            subtitle="Soon — JSON download of holdings + research history"
+            disabled
+          />
+          <AdminTile
+            icon={Trash2}
+            title="Delete account"
+            subtitle="Soon — permanent removal + 30-day grace"
+            disabled
+            destructive
+          />
+        </div>
+      </Section>
 
-      <Card className="border-[var(--hold)]/30 bg-[var(--hold)]/5">
-        <CardContent className="flex items-start gap-3 py-3 text-xs">
-          <BookOpen className="mt-0.5 h-4 w-4 flex-shrink-0 text-[var(--hold)]" />
-          <div className="text-[var(--muted-foreground)]">
-            ClearPath is informational only — we don&rsquo;t execute trades,
-            don&rsquo;t hold custody of funds, and don&rsquo;t receive
-            brokerage credentials. Every data source listed above is audited
-            in our{" "}
+      <Section title="Support" description="Reach us when you need to.">
+        <div className="rounded-md border border-[var(--border)] bg-[var(--card)] p-4 text-sm">
+          <p className="text-[var(--muted-foreground)]">
+            Questions, issues, or feedback?{" "}
+            <a
+              href="mailto:hello@clearpathinvest.app"
+              className="text-[var(--foreground)] underline underline-offset-4 hover:text-[var(--buy)]"
+            >
+              hello@clearpathinvest.app
+            </a>
+          </p>
+          <div className="mt-3 flex gap-3 text-xs text-[var(--muted-foreground)]">
             <Link
               href="/disclosures"
               className="underline underline-offset-4 hover:text-[var(--foreground)]"
             >
-              disclosures
+              Disclosures
             </Link>
-            .
+            <Link
+              href="/terms"
+              className="underline underline-offset-4 hover:text-[var(--foreground)]"
+            >
+              Terms
+            </Link>
+            <Link
+              href="/privacy"
+              className="underline underline-offset-4 hover:text-[var(--foreground)]"
+            >
+              Privacy
+            </Link>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </Section>
     </div>
   );
 }
 
-function Group({
+function Section({
   title,
   description,
   action,
@@ -304,14 +235,14 @@ function Group({
 }: {
   title: string;
   description?: string;
-  action?: React.ReactNode;
-  children: React.ReactNode;
+  action?: ReactNode;
+  children: ReactNode;
 }) {
   return (
     <section>
       <header className="mb-3 flex items-baseline justify-between border-b border-[var(--border)] pb-2">
         <div>
-          <h3 className="font-serif text-lg tracking-tight text-[var(--foreground)]">
+          <h3 className="text-lg font-semibold tracking-tight text-[var(--foreground)]">
             {title}
           </h3>
           {description && (
@@ -322,92 +253,108 @@ function Group({
         </div>
         {action}
       </header>
-      <div className="grid gap-3 sm:grid-cols-2">{children}</div>
+      {children}
     </section>
   );
 }
 
-function SourceCard({ s }: { s: Source }) {
-  const Icon = s.icon;
-  const status = s.status ?? (s.category === "optional" ? "optional" : "active");
-
+function CompactCard({
+  title,
+  subtitle,
+  icon: Icon,
+  status,
+  action,
+}: {
+  title: string;
+  subtitle: string;
+  icon: React.ComponentType<{ className?: string }>;
+  status: "linked" | "not_linked" | "unknown";
+  action?: ReactNode;
+}) {
   const StatusBadge = () => {
-    if (status === "linked") {
+    if (status === "linked")
       return (
-        <Badge className="gap-1 bg-[var(--buy)]/15 text-[var(--buy)] border-[var(--buy)]/30">
-          <CheckCircle2 className="h-3 w-3" />
-          Linked
-        </Badge>
+        <span className="inline-flex items-center gap-1 text-[10px] text-[var(--buy)]">
+          <CheckCircle2 className="h-3 w-3" /> Linked
+        </span>
       );
-    }
-    if (status === "not_linked") {
+    if (status === "not_linked")
       return (
-        <Badge
-          variant="outline"
-          className="gap-1 text-[var(--muted-foreground)]"
-        >
-          <AlertCircle className="h-3 w-3" />
-          Not linked
-        </Badge>
+        <span className="inline-flex items-center gap-1 text-[10px] text-[var(--muted-foreground)]">
+          <AlertCircle className="h-3 w-3" /> Not linked
+        </span>
       );
-    }
-    if (status === "optional") {
-      return (
-        <Badge variant="outline" className="text-[var(--muted-foreground)]">
-          Optional
-        </Badge>
-      );
-    }
-    if (status === "unknown") {
-      return (
-        <Badge variant="outline" className="gap-1">
-          <Loader2 className="h-3 w-3 animate-spin" />
-          checking
-        </Badge>
-      );
-    }
     return (
-      <Badge className="gap-1 bg-[var(--buy)]/15 text-[var(--buy)] border-[var(--buy)]/30">
-        <CheckCircle2 className="h-3 w-3" />
-        Active
-      </Badge>
+      <span className="inline-flex items-center gap-1 text-[10px] text-[var(--muted-foreground)]">
+        <Loader2 className="h-3 w-3 animate-spin" />
+      </span>
     );
   };
-
   return (
-    <Card className="h-full">
-      <CardHeader className="pb-2">
-        <div className="flex items-start justify-between gap-3">
-          <CardTitle className="flex items-center gap-2 text-sm font-medium">
-            <Icon className="h-4 w-4 text-[var(--muted-foreground)]" />
-            {s.name}
-          </CardTitle>
-          <StatusBadge />
+    <div className="flex items-center justify-between gap-3 rounded-md border border-[var(--border)] bg-[var(--card)] px-3 py-3">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <Icon className="h-4 w-4 text-[var(--muted-foreground)] shrink-0" />
+        <div className="min-w-0">
+          <div className="truncate text-sm font-medium text-[var(--foreground)]">
+            {title}
+          </div>
+          <div className="truncate text-[11px] text-[var(--muted-foreground)]">
+            {subtitle}
+          </div>
         </div>
-        <p className="mt-0.5 text-[11px] uppercase tracking-wider text-[var(--muted-foreground)]">
-          {s.role}
-        </p>
-      </CardHeader>
-      <CardContent className="pt-0 pb-3">
-        <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
-          {s.description}
-        </p>
-        {s.detail && (
-          <p className="mt-1.5 text-[11px] font-mono text-[var(--foreground)]/80">
-            {s.detail}
-          </p>
-        )}
-        {s.docsUrl && (
-          <a
-            href={s.docsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-2 inline-flex items-center gap-1 text-[11px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:underline underline-offset-4"
-          >
-            Docs ↗
-          </a>
-        )}
-      </CardContent>
-    </Card>
+      </div>
+      <div className="shrink-0">{action ?? <StatusBadge />}</div>
+    </div>
+  );
+}
+
+function AdminTile({
+  href,
+  icon: Icon,
+  title,
+  subtitle,
+  disabled,
+  destructive,
+}: {
+  href?: string;
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  subtitle: string;
+  disabled?: boolean;
+  destructive?: boolean;
+}) {
+  const cls = `flex items-start gap-2.5 rounded-md border border-[var(--border)] bg-[var(--card)] p-3 transition-colors ${
+    disabled
+      ? "opacity-60"
+      : destructive
+        ? "hover:border-[var(--sell)]/40 hover:bg-[var(--sell)]/5"
+        : "hover:border-[var(--foreground)]/30 hover:bg-[var(--secondary)]/40"
+  }`;
+  const inner = (
+    <>
+      <Icon
+        className={`mt-0.5 h-4 w-4 shrink-0 ${
+          destructive
+            ? "text-[var(--sell)]"
+            : "text-[var(--muted-foreground)]"
+        }`}
+      />
+      <div className="min-w-0">
+        <div className="text-sm font-medium text-[var(--foreground)]">
+          {title}
+        </div>
+        <div className="mt-0.5 text-[11px] text-[var(--muted-foreground)]">
+          {subtitle}
+        </div>
+      </div>
+    </>
+  );
+  if (disabled || !href) {
+    return <div className={cls}>{inner}</div>;
+  }
+  return (
+    <Link href={href} className={cls}>
+      {inner}
+    </Link>
   );
 }

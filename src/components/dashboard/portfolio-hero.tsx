@@ -136,13 +136,13 @@ export default function PortfolioHero({
                     ariaLabel="Open details on total portfolio value"
                     className="!hover:no-underline"
                   >
-                    <span className="font-serif font-light tracking-tight leading-[0.95] text-[clamp(44px,6vw,82px)] text-[var(--foreground)]">
+                    <span className="font-semibold tracking-tight leading-[0.95] text-[clamp(40px,5.5vw,72px)] text-[var(--foreground)]">
                       {moneyFull(totalValue)}
                     </span>
                   </Drillable>
                 )
               ) : (
-                <span className="font-serif font-light tracking-tight leading-[0.95] text-[clamp(44px,6vw,82px)] text-[var(--muted-foreground)]">
+                <span className="font-semibold tracking-tight leading-[0.95] text-[clamp(40px,5.5vw,72px)] text-[var(--muted-foreground)]">
                   Not connected
                 </span>
               )}

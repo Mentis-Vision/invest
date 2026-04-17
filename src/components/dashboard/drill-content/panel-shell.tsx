@@ -34,7 +34,7 @@ export function DrillHeader({
       <div className="text-[10px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
         {eyebrow}
       </div>
-      <h2 className="mt-1.5 font-serif text-3xl leading-tight text-[var(--foreground)] tracking-tight">
+      <h2 className="mt-1.5 text-2xl font-semibold leading-tight text-[var(--foreground)] tracking-tight">
         {title}
       </h2>
       {subtitle && (

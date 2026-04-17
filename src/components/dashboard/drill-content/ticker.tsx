@@ -209,7 +209,7 @@ export function DrillTicker({ ticker }: { ticker: string }) {
                 Fresh · {freshness(data.dossier.asOf)}
               </span>
             </div>
-            <p className="font-serif text-lg leading-snug text-[var(--foreground)]">
+            <p className="text-base font-medium leading-snug text-[var(--foreground)]">
               {data.dossier.headline}
             </p>
             {data.dossier.signals.length > 0 && (

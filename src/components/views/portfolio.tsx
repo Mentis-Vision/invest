@@ -192,7 +192,7 @@ function PortfolioBody() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="font-serif text-3xl tracking-tight text-[var(--foreground)]">
+          <h2 className="text-3xl font-semibold tracking-tight text-[var(--foreground)]">
             My Portfolio
           </h2>
           <p className="text-sm text-muted-foreground">

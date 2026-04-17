@@ -91,7 +91,7 @@ export default function ResearchStarter({
     return (
       <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-6 text-center">
         <Sparkles className="mx-auto h-6 w-6 text-[var(--muted-foreground)]" />
-        <p className="mt-2 font-serif text-base text-[var(--foreground)]">
+        <p className="mt-2 text-base font-medium text-[var(--foreground)]">
           Ready to research?
         </p>
         <p className="mt-1 text-xs text-[var(--muted-foreground)]">

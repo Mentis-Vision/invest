@@ -58,7 +58,7 @@ export default function AllocationTable({
     <Card className="h-full">
       <CardHeader className="pb-2 border-b border-[var(--border)]">
         <div className="flex items-baseline justify-between">
-          <CardTitle className="font-serif text-lg tracking-tight">
+          <CardTitle className="text-lg font-semibold tracking-tight">
             Allocation
           </CardTitle>
           {topShare > 0 && (

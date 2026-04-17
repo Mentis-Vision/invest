@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { runSingleAnalyst } from "@/lib/ai/consensus";
+import { runSingleAnalyst, runBullBearDebate } from "@/lib/ai/consensus";
 import { checkRateLimit, RULES, getClientIp } from "@/lib/rate-limit";
 import { checkUsageCap, recordUsage, TIER_LIMITS } from "@/lib/usage";
 import { getStockSnapshot, formatWarehouseEnhancedDataBlock } from "@/lib/data/yahoo";
@@ -130,16 +130,28 @@ export async function POST(req: NextRequest) {
       profileRider
     );
 
-    const tokensUsed = result.tokensUsed ?? 0;
-    void recordUsage(session.user.id, lensChoice, tokensUsed);
+    // Adversarial debate runs on the single analyst's output. Two cheap
+    // Haiku calls (~$0.012). The same architecture the Full Panel uses,
+    // just with one analyst feeding the debate instead of three. Gives
+    // Deep Read the differentiating bull/bear cards without the cost
+    // of the 3-model panel.
+    const debate = await runBullBearDebate(ticker, dataBlock, [result]);
+
+    const analystTokens = result.tokensUsed ?? 0;
+    const debateTokens = (debate.bullTokens ?? 0) + (debate.bearTokens ?? 0);
+    void recordUsage(session.user.id, lensChoice, analystTokens);
+    if (debateTokens > 0) {
+      void recordUsage(session.user.id, "haiku", debateTokens);
+    }
 
     return NextResponse.json({
       ticker,
       snapshot,
-      mode: "standard",
+      mode: "deep",
       lens: lensChoice,
       analysis: result,
-      tokensUsed,
+      debate,
+      tokensUsed: analystTokens + debateTokens,
       usage: {
         tier: usage.tier,
         remainingCents: usage.remainingCents,
