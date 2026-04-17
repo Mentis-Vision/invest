@@ -23,6 +23,17 @@ export type SaveRecommendationInput = {
   supervisor: SupervisorOutput;
   sources: { yahoo: boolean; sec: boolean; fred: boolean };
   supervisorModel: string;
+  /**
+   * Optional adversarial debate transcript. When present, persisted with
+   * the rest of the analysis so the recommendation detail page can render
+   * the bull/bear cards alongside the verdict.
+   */
+  debate?: {
+    bull: unknown;
+    bear: unknown;
+    bullTokens: number;
+    bearTokens: number;
+  } | null;
 };
 
 /**
@@ -54,6 +65,7 @@ export async function saveRecommendationAndSchedule(
     supervisor: input.supervisor,
     supervisorModel: input.supervisorModel,
     sources: input.sources,
+    debate: input.debate ?? null,
   });
 
   try {

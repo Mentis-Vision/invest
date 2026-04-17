@@ -9,6 +9,7 @@ import { getRecentFilings, formatFilingsForAI } from "@/lib/data/sec";
 import { getMacroSnapshot, formatMacroForAI } from "@/lib/data/fred";
 import {
   runAnalystPanel,
+  runBullBearDebate,
   runSupervisor,
   type ModelResult,
 } from "@/lib/ai/consensus";
@@ -265,11 +266,23 @@ export async function POST(req: NextRequest) {
         }
       );
 
+      // Adversarial debate layer — runs BEFORE the supervisor so the
+      // final synthesis incorporates both sides. Two cheap Haiku calls
+      // (~$0.012 total). Streamed to the UI as a separate event so the
+      // client can render the bull/bear cards before the verdict lands.
+      const debate = await runBullBearDebate(
+        ticker!,
+        dataBlock,
+        analyses
+      );
+      emit({ type: "debate", debate });
+
       const supervisor = await runSupervisor(
         ticker!,
         dataBlock,
         analyses,
-        snap.asOf
+        snap.asOf,
+        debate
       );
 
       // Fire-and-forget usage + persistence (same as before)
@@ -284,6 +297,11 @@ export async function POST(req: NextRequest) {
           supervisor.tokensUsed
         ).catch(() => {});
       }
+      // Bull/Bear debate cost — both sides on Haiku.
+      const debateTokens = (debate.bullTokens ?? 0) + (debate.bearTokens ?? 0);
+      if (debateTokens > 0) {
+        recordUsage(userId, "haiku", debateTokens).catch(() => {});
+      }
 
       const recordId = await saveRecommendationAndSchedule({
         userId,
@@ -293,6 +311,7 @@ export async function POST(req: NextRequest) {
         supervisor: supervisor.output,
         sources,
         supervisorModel: supervisor.supervisorModel,
+        debate,
       }).catch((err) => {
         log.error("research", "saveRecommendation failed", {
           userId,
@@ -314,6 +333,7 @@ export async function POST(req: NextRequest) {
         ticker,
         snapshot: snap,
         analyses,
+        debate,
         supervisor: supervisor.output,
         supervisorModel: supervisor.supervisorModel,
         recommendationId: recordId,

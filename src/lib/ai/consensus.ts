@@ -3,8 +3,10 @@ import { models } from "./models";
 import {
   AnalystOutputSchema,
   SupervisorOutputSchema,
+  BullBearSideSchema,
   type AnalystOutput,
   type SupervisorOutput,
+  type BullBearSide,
 } from "./schemas";
 import { analystTools } from "./tools";
 import { log, errorInfo } from "../log";
@@ -297,6 +299,151 @@ export async function runSingleAnalyst(
  * Deterministic by day so within a single session everyone sees the same
  * supervisor.
  */
+/**
+ * Bull/Bear adversarial debate layer.
+ *
+ * Runs AFTER the lens analysts and BEFORE the supervisor. Two cheap
+ * Haiku calls in parallel — one argues the strongest case TO act on the
+ * leaning verdict, the other argues the strongest case AGAINST. Their
+ * structured outputs feed into the supervisor's final synthesis so the
+ * verdict has been adversarially stress-tested before it ships.
+ *
+ * Architectural inspiration: TradingAgents (Tauric Research) academic
+ * framework, adapted for our consumer "second opinion" positioning.
+ * We don't replicate their trader/portfolio-manager agents (we're
+ * read-only) but the bull/bear debate is the high-value differentiator
+ * we can add cheaply.
+ *
+ * Cost: ~$0.012 per Full Panel run (two ~3k-token Haiku calls).
+ */
+const BULL_PROMPT = `You are the BULL researcher in a structured debate. Three lens analysts (Value, Growth, Macro) have already analyzed this ticker; their views are below.
+
+YOUR JOB:
+- Argue the strongest case TO ACT on what the panel is leaning toward. If the panel leans BUY, argue why this is a buy. If the panel leans SELL, argue why this is a sell. If they lean HOLD, argue for the most justifiable directional move (whichever side has more evidence).
+- Cite the SPECIFIC analyst observations or DATA points that support your case. Quote them verbatim where possible.
+- Name 3 reasons. No fluff.
+- Name ONE specific, observable condition that would WEAKEN your case (price level, fundamental shift, earnings miss, macro event). This forces honesty.
+
+ABSOLUTE RULES:
+1. You may not invent facts. Your reasons must trace back to analyst outputs or the DATA block.
+2. You may not contradict the data. If a number is bearish, you can't claim it's bullish.
+3. Keep claims tight and falsifiable.
+
+You are not a licensed advisor. Your output is informational only.`;
+
+const BEAR_PROMPT = `You are the BEAR researcher in a structured debate. Three lens analysts (Value, Growth, Macro) have already analyzed this ticker; their views are below.
+
+YOUR JOB:
+- Argue the strongest case AGAINST acting on what the panel is leaning toward. If the panel leans BUY, argue why NOT to buy. If the panel leans SELL, argue why NOT to sell. If they lean HOLD, argue why a directional move is unjustified.
+- Cite the SPECIFIC analyst observations or DATA points that support your case. Quote them verbatim where possible.
+- Name 3 reasons. No fluff.
+- Name ONE specific, observable condition that would WEAKEN your case. This forces honesty.
+
+ABSOLUTE RULES:
+1. You may not invent facts. Your reasons must trace back to analyst outputs or the DATA block.
+2. You may not contradict the data. If a number is bullish, you can't claim it's bearish.
+3. Keep claims tight and falsifiable.
+
+You are not a licensed advisor. Your output is informational only.`;
+
+export type DebateResult = {
+  bull: BullBearSide | null;
+  bear: BullBearSide | null;
+  bullTokens: number;
+  bearTokens: number;
+};
+
+/**
+ * Format the lens analyst outputs into a compact prompt-ready summary
+ * the bull/bear researchers can read. Trims to keep token cost bounded.
+ */
+function summarizeLensesForDebate(analyses: ModelResult[]): string {
+  const lensLabel: Record<string, string> = {
+    claude: "VALUE LENS",
+    gpt: "GROWTH LENS",
+    gemini: "MACRO LENS",
+  };
+  const blocks: string[] = [];
+  for (const a of analyses) {
+    if (a.status !== "ok" || !a.output) continue;
+    const o = a.output;
+    const signals = o.keySignals
+      .slice(0, 5)
+      .map((s) => `  • ${s.signal} [${s.direction}] — datum: ${s.datum}`)
+      .join("\n");
+    const risks =
+      o.riskFactors.length > 0
+        ? `\n  RISK FACTORS:\n${o.riskFactors.map((r) => `  • ${r}`).join("\n")}`
+        : "";
+    blocks.push(
+      `${lensLabel[a.model] ?? a.model.toUpperCase()} — ${o.recommendation} (${o.confidence}):\n  THESIS: ${o.thesis}\n  KEY SIGNALS:\n${signals}${risks}`
+    );
+  }
+  return blocks.join("\n\n---\n\n");
+}
+
+export async function runBullBearDebate(
+  ticker: string,
+  dataBlock: string,
+  analyses: ModelResult[]
+): Promise<DebateResult> {
+  const successful = analyses.filter(
+    (a) => a.status === "ok" && a.output
+  );
+
+  // No point debating an empty panel — bail out cleanly.
+  if (successful.length === 0) {
+    return { bull: null, bear: null, bullTokens: 0, bearTokens: 0 };
+  }
+
+  const lensSummary = summarizeLensesForDebate(successful);
+  const userMessage = `Ticker: ${ticker}\n\n--- LENS ANALYSES ---\n${lensSummary}\n--- END LENS ANALYSES ---\n\n--- VERIFIED DATA ---\n${dataBlock}\n--- END VERIFIED DATA ---`;
+
+  const [bullResult, bearResult] = await Promise.allSettled([
+    generateObject({
+      model: models.haikuSupervisor,
+      schema: BullBearSideSchema,
+      system: BULL_PROMPT,
+      prompt: userMessage,
+      maxOutputTokens: 1500,
+    }),
+    generateObject({
+      model: models.haikuSupervisor,
+      schema: BullBearSideSchema,
+      system: BEAR_PROMPT,
+      prompt: userMessage,
+      maxOutputTokens: 1500,
+    }),
+  ]);
+
+  function unwrap(
+    r: PromiseSettledResult<Awaited<ReturnType<typeof generateObject>>>
+  ): { side: BullBearSide | null; tokens: number } {
+    if (r.status !== "fulfilled") {
+      log.warn("consensus.debate", "side failed", {
+        ticker,
+        reason:
+          r.reason instanceof Error ? r.reason.message : String(r.reason),
+      });
+      return { side: null, tokens: 0 };
+    }
+    return {
+      side: r.value.object as BullBearSide,
+      tokens: r.value.usage?.totalTokens ?? 0,
+    };
+  }
+
+  const bull = unwrap(bullResult);
+  const bear = unwrap(bearResult);
+
+  return {
+    bull: bull.side,
+    bear: bear.side,
+    bullTokens: bull.tokens,
+    bearTokens: bear.tokens,
+  };
+}
+
 function pickSupervisor(): {
   key: "claude-haiku" | "gpt" | "gemini";
   label: string;
@@ -326,7 +473,14 @@ export async function runSupervisor(
   ticker: string,
   dataBlock: string,
   analyses: ModelResult[],
-  dataAsOf: string
+  dataAsOf: string,
+  /**
+   * Optional adversarial debate result. When provided, the supervisor's
+   * prompt includes the bull and bear cases so the final synthesis is
+   * informed by both sides. Backward compatible: callers that don't
+   * have a debate result get the original supervisor behavior.
+   */
+  debate?: DebateResult | null
 ): Promise<SupervisorResult> {
   const successful = analyses.filter((a) => a.status === "ok" && a.output);
   const picked = pickSupervisor();
@@ -401,12 +555,22 @@ export async function runSupervisor(
   const supervisorModel =
     models[picked.key === "claude-haiku" ? "haikuSupervisor" : picked.key];
 
+  // Format the debate (when present) for the supervisor's prompt. The
+  // supervisor uses this to weigh the verdict — if bull and bear agree
+  // on the same fact, that fact is rock-solid; if they disagree, that
+  // disagreement should appear in the supervisor's `disagreements`
+  // output. The bull's "what would change my mind" condition becomes a
+  // forward-looking watch-trigger the user can act on.
+  const debateText = debate
+    ? formatDebateForSupervisor(debate)
+    : "";
+
   try {
     const result = await generateObject({
       model: supervisorModel,
       schema: SupervisorOutputSchema,
       system: SUPERVISOR_PROMPT,
-      prompt: `Ticker: ${ticker}\n\n--- VERIFIED DATA ---\n${dataBlock}\n--- END DATA ---\n\n--- ANALYST PANEL OUTPUTS ---\n${analysesText}\n--- END OUTPUTS ---\n\nProduce the supervisor review. The dataAsOf field must be: ${dataAsOf}`,
+      prompt: `Ticker: ${ticker}\n\n--- VERIFIED DATA ---\n${dataBlock}\n--- END DATA ---\n\n--- ANALYST PANEL OUTPUTS ---\n${analysesText}\n--- END OUTPUTS ---${debateText}\n\nProduce the supervisor review. The dataAsOf field must be: ${dataAsOf}`,
     });
     const tokens =
       result.usage?.totalTokens ??
@@ -431,6 +595,38 @@ export async function runSupervisor(
       pricingKey: picked.pricingKey,
     };
   }
+}
+
+function formatDebateForSupervisor(d: DebateResult): string {
+  if (!d.bull && !d.bear) return "";
+  const parts: string[] = ["\n\n--- ADVERSARIAL DEBATE ---"];
+  if (d.bull) {
+    parts.push(`[BULL RESEARCHER]`);
+    parts.push(`Thesis: ${d.bull.thesis}`);
+    parts.push(`Reasons:`);
+    for (const r of d.bull.reasons) {
+      parts.push(`  - ${r.point} (cite: ${r.citation})`);
+    }
+    parts.push(
+      `Condition that would change bull's mind: ${d.bull.conditionThatWouldChangeMind}`
+    );
+  }
+  if (d.bear) {
+    parts.push(`\n[BEAR RESEARCHER]`);
+    parts.push(`Thesis: ${d.bear.thesis}`);
+    parts.push(`Reasons:`);
+    for (const r of d.bear.reasons) {
+      parts.push(`  - ${r.point} (cite: ${r.citation})`);
+    }
+    parts.push(
+      `Condition that would change bear's mind: ${d.bear.conditionThatWouldChangeMind}`
+    );
+  }
+  parts.push("--- END DEBATE ---\n");
+  parts.push(
+    "GUIDANCE: Where bull and bear cite the SAME fact, that fact is high-confidence. Where they disagree on interpretation of the same fact, surface that as a disagreement. The 'condition that would change mind' from each side should inform any forward-looking guidance in your summary."
+  );
+  return parts.join("\n");
 }
 
 function personaLabel(model: string): string {

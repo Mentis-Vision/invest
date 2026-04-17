@@ -69,10 +69,26 @@ type StandardResponse = {
   usage?: { tier: string; remainingCents: number };
 };
 
+type DebateSide = {
+  side: "bull" | "bear";
+  thesis: string;
+  reasons: Array<{ point: string; citation: string }>;
+  conditionThatWouldChangeMind: string;
+};
+
+type DebateResult = {
+  bull: DebateSide | null;
+  bear: DebateSide | null;
+  bullTokens?: number;
+  bearTokens?: number;
+};
+
 type ResearchResponse = {
   ticker: string;
   snapshot: StockSnapshot;
   analyses: ModelResult[];
+  /** Adversarial bull/bear debate that ran between analyst panel and supervisor. */
+  debate?: DebateResult | null;
   supervisor: SupervisorOutput;
   supervisorModel?: string;
   recommendationId?: string | null;
@@ -588,6 +604,18 @@ export default function ResearchView({
               setResult((prev) => {
                 if (!prev) return prev;
                 return { ...prev, analyses: [...(partial.analyses ?? [])] };
+              });
+              break;
+            }
+            case "debate": {
+              // Adversarial bull/bear debate completed — render the cards
+              // immediately, before supervisor synthesis lands. Gives the
+              // user something tangible to read while the verdict cooks.
+              const d = evt.debate as DebateResult;
+              partial.debate = d;
+              setResult((prev) => {
+                if (!prev) return prev;
+                return { ...prev, debate: d };
               });
               break;
             }
@@ -1543,6 +1571,94 @@ export default function ResearchView({
               </div>
             </CardContent>
           </Card>
+
+          {/* Adversarial debate — bull/bear cards. Renders only when the
+              debate ran (Full Panel mode). The "what would change my mind"
+              line is the differentiating trust signal — gives the user a
+              forward-looking trigger to watch instead of a static verdict. */}
+          {result.debate && (result.debate.bull || result.debate.bear) && (
+            <div>
+              <h3 className="mb-3 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
+                <span>Adversarial debate · the case for and against</span>
+              </h3>
+              <div className="grid gap-4 lg:grid-cols-2">
+                {result.debate.bull && (
+                  <Card className="border-[var(--buy)]/30 bg-[var(--buy)]/5">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="flex items-baseline justify-between text-sm">
+                        <span className="text-[var(--buy)] font-mono uppercase tracking-widest">
+                          Bull case
+                        </span>
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                          arguing for action
+                        </span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3 text-sm">
+                      <p className="leading-relaxed">
+                        {result.debate.bull.thesis}
+                      </p>
+                      <ul className="space-y-2">
+                        {result.debate.bull.reasons.map((r, i) => (
+                          <li key={i}>
+                            <div>{r.point}</div>
+                            <div className="mt-0.5 font-mono text-[10px] text-muted-foreground/80">
+                              cite: {r.citation}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="rounded-md border border-[var(--buy)]/20 bg-[var(--background)] p-2.5 text-xs">
+                        <div className="mb-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                          What would change the bull&rsquo;s mind
+                        </div>
+                        <div className="leading-relaxed">
+                          {result.debate.bull.conditionThatWouldChangeMind}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+                {result.debate.bear && (
+                  <Card className="border-[var(--sell)]/30 bg-[var(--sell)]/5">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="flex items-baseline justify-between text-sm">
+                        <span className="text-[var(--sell)] font-mono uppercase tracking-widest">
+                          Bear case
+                        </span>
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                          arguing against action
+                        </span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3 text-sm">
+                      <p className="leading-relaxed">
+                        {result.debate.bear.thesis}
+                      </p>
+                      <ul className="space-y-2">
+                        {result.debate.bear.reasons.map((r, i) => (
+                          <li key={i}>
+                            <div>{r.point}</div>
+                            <div className="mt-0.5 font-mono text-[10px] text-muted-foreground/80">
+                              cite: {r.citation}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="rounded-md border border-[var(--sell)]/20 bg-[var(--background)] p-2.5 text-xs">
+                        <div className="mb-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                          What would change the bear&rsquo;s mind
+                        </div>
+                        <div className="leading-relaxed">
+                          {result.debate.bear.conditionThatWouldChangeMind}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Per-model panel */}
           <div>

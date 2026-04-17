@@ -55,6 +55,51 @@ export const QuickScanOutputSchema = z.object({
 export type QuickScanOutput = z.infer<typeof QuickScanOutputSchema>;
 
 /**
+ * Bull/Bear debate schema — adversarial layer that runs AFTER the lens
+ * analysts and BEFORE the supervisor's final synthesis.
+ *
+ * Architectural inspiration: TradingAgents (Tauric Research) pairs a
+ * bull and bear researcher who debate the analyst team's view. We adapt
+ * it for our consumer-product positioning:
+ *   - One round (not multi-turn) — keeps cost predictable
+ *   - Cheap Haiku model (~$0.005-$0.01 per side) — adds total cost ~$0.02
+ *     to the Full Panel
+ *   - Structured output makes the debate renderable, not just prose
+ *   - Each side names ONE condition that would change their mind —
+ *     forces intellectual honesty and gives the user a forward-looking
+ *     trigger to watch for
+ */
+export const BullBearSideSchema = z.object({
+  side: z.enum(["bull", "bear"]),
+  thesis: z
+    .string()
+    .describe(
+      "The strongest 1-2 sentence case for your side. Plain language."
+    ),
+  reasons: z
+    .array(
+      z.object({
+        point: z.string().describe("One specific claim supporting your side."),
+        citation: z
+          .string()
+          .describe(
+            "The data point or analyst observation backing this claim. " +
+              "Quote verbatim from analyst outputs or the DATA block."
+          ),
+      })
+    )
+    .describe("3 strongest reasons supporting your side."),
+  conditionThatWouldChangeMind: z
+    .string()
+    .describe(
+      "One specific, observable condition (price level, fundamental shift, " +
+        "macro event) that would weaken your side's case. Forces honesty."
+    ),
+});
+
+export type BullBearSide = z.infer<typeof BullBearSideSchema>;
+
+/**
  * The supervisor's final synthesis — reviews all 3 model outputs + raw data,
  * flags disagreements, downgrades confidence where needed.
  */
