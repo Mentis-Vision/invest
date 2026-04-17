@@ -4,10 +4,21 @@ import { sendEmail, renderEmailTemplate } from "./email";
 
 const baseUrl = process.env.BETTER_AUTH_URL || "http://localhost:3000";
 
-// Email verification is opt-in via REQUIRE_EMAIL_VERIFICATION=true. We default
+// Email verification is opt-in via REQUIRE_EMAIL_VERIFICATION. We default
 // to OFF so production deploys don't lock users out when Resend isn't yet
 // configured. Turn on once RESEND_API_KEY is set and tested.
-const requireEmailVerification = process.env.REQUIRE_EMAIL_VERIFICATION === "true";
+//
+// Accept any casing + common truthy strings ("true" / "TRUE" / "1" / "yes"
+// / "on"). A strict === "true" check silently fails when the env var was
+// set as "TRUE" — we had exactly this bug in production once, don't repeat it.
+const requireEmailVerification = isTruthy(
+  process.env.REQUIRE_EMAIL_VERIFICATION
+);
+
+function isTruthy(v: string | undefined | null): boolean {
+  if (!v) return false;
+  return ["true", "1", "yes", "on"].includes(v.trim().toLowerCase());
+}
 
 export const auth = betterAuth({
   database: new Pool({
