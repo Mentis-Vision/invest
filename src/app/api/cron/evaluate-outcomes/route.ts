@@ -14,6 +14,10 @@ import {
 } from "@/lib/alerts";
 import { getMacroSnapshot } from "@/lib/data/fred";
 import { refreshWarehouse } from "@/lib/warehouse/refresh";
+import {
+  generatePortfolioReview,
+  getCachedPortfolioReview,
+} from "@/lib/portfolio-review";
 
 /**
  * Daily cron:
@@ -117,6 +121,19 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     log.error("cron", "warehouse refresh failed", errorInfo(err));
     result.warehouse = { error: "failed" };
+  }
+
+  // 9. Auto-run AI portfolio review per connected user. Pre-computing
+  //    overnight means first-login the next morning loads a stored
+  //    review with $0 spent. Users opted into "auto every night" over
+  //    "click to spend tokens" — the AI is the value, not the gating.
+  //    Skips users who already have today's row (idempotent if cron
+  //    fires twice; safe re-run after partial failures).
+  try {
+    result.portfolioReviews = await runNightlyPortfolioReviews();
+  } catch (err) {
+    log.error("cron", "portfolio reviews failed", errorInfo(err));
+    result.portfolioReviews = { error: "failed" };
   }
 
   result.durationMs = Date.now() - started;
@@ -225,6 +242,54 @@ async function snapshotMacro(): Promise<{ written: boolean }> {
     [JSON.stringify(snapshot)]
   );
   return { written: true };
+}
+
+/**
+ * Pre-compute the AI portfolio review for every user who has holdings.
+ *
+ * Sequential by design — three-model panel + supervisor is moderately
+ * expensive (~$0.21 per user) and we don't want to slam the providers.
+ * Skip-on-cache (today's row already exists) means partial failures are
+ * naturally idempotent: a re-run only generates for users who didn't
+ * succeed the first time.
+ *
+ * Per-user errors are logged but don't fail the batch — one user's
+ * weird holding shouldn't block everyone else's overnight review.
+ */
+async function runNightlyPortfolioReviews(): Promise<{
+  users: number;
+  generated: number;
+  skipped: number;
+  failed: number;
+}> {
+  const { rows } = await pool.query(
+    `SELECT DISTINCT "userId"
+       FROM "holding"
+      WHERE "userId" IS NOT NULL
+        AND "lastValue" > 0`
+  );
+  const userIds = (rows as Array<{ userId: string }>).map((r) => r.userId);
+  let generated = 0;
+  let skipped = 0;
+  let failed = 0;
+  for (const userId of userIds) {
+    try {
+      const cached = await getCachedPortfolioReview(userId);
+      if (cached) {
+        skipped++;
+        continue;
+      }
+      await generatePortfolioReview(userId);
+      generated++;
+    } catch (err) {
+      failed++;
+      log.warn("cron.portfolio-review", "user failed", {
+        userId,
+        ...errorInfo(err),
+      });
+    }
+  }
+  return { users: userIds.length, generated, skipped, failed };
 }
 
 async function syncAllSnaptradeUsers(): Promise<{

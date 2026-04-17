@@ -83,7 +83,22 @@ export function Drillable({
   ariaLabel?: string;
 }) {
   const { open } = useDrill();
-  const handle = useCallback(() => open(target), [open, target]);
+  const handle = useCallback(
+    (e?: React.SyntheticEvent) => {
+      // Defensive: stop the event from bubbling up to ancestors. We had a
+      // bug where Drillable inside a table row caused the slideout to
+      // flash open and then the page to seemingly reload — root cause was
+      // an invalid <button><div></div></button> nesting in one cell, but
+      // belt-and-suspenders here keeps the panel open even if some
+      // ancestor ever installs a click handler.
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      open(target);
+    },
+    [open, target]
+  );
 
   const base =
     "group relative cursor-pointer inline-flex items-baseline gap-1 " +
@@ -97,11 +112,11 @@ export function Drillable({
       <span
         role="button"
         tabIndex={0}
-        onClick={handle}
+        onClick={(e) => handle(e)}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            handle();
+            handle(e);
           }
         }}
         aria-label={ariaLabel}

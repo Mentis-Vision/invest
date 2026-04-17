@@ -131,6 +131,65 @@ export async function saveRecommendationAndSchedule(
 }
 
 /**
+ * Save a lightweight (quick or deep) recommendation for caching only.
+ * No outcome scheduling — quick scans aren't conviction calls and deep
+ * reads already produce too many rows to evaluate every one.
+ *
+ * Use this for /api/research/quick-scan and /api/research/standard so a
+ * second visit to the same ticker on the same day reads from cache
+ * instead of burning AI tokens. The full panel route at /api/research
+ * keeps using saveRecommendationAndSchedule (which DOES schedule
+ * outcomes — those are full conviction calls).
+ */
+export async function saveCacheableRecommendation(input: {
+  userId: string;
+  ticker: string;
+  mode: "quick" | "deep";
+  recommendation: string;
+  confidence: string;
+  consensus: string;
+  summary: string;
+  priceAtRec: number;
+  dataAsOf: Date;
+  payload: Record<string, unknown>;
+}): Promise<string | null> {
+  const id = genId();
+  // Tag the mode inside analysisJson so getCachedRecommendation can
+  // filter by it. Keep the rest of the payload exactly as the route
+  // returns it so cache replays are byte-identical.
+  const analysisJson = JSON.stringify({ ...input.payload, mode: input.mode });
+  try {
+    await pool.query(
+      `INSERT INTO "recommendation"
+        (id, "userId", ticker, recommendation, confidence, consensus,
+         "priceAtRec", summary, "analysisJson", "dataAsOf")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10)`,
+      [
+        id,
+        input.userId,
+        input.ticker,
+        input.recommendation,
+        input.confidence,
+        input.consensus,
+        input.priceAtRec,
+        input.summary.slice(0, 2000),
+        analysisJson,
+        input.dataAsOf,
+      ]
+    );
+    return id;
+  } catch (err) {
+    log.warn("history", "saveCacheableRecommendation failed", {
+      userId: input.userId,
+      ticker: input.ticker,
+      mode: input.mode,
+      ...errorInfo(err),
+    });
+    return null;
+  }
+}
+
+/**
  * Read the history list for a single user.
  * Returns most recent first. Capped at 200 to keep it UI-friendly.
  */
@@ -156,34 +215,51 @@ export type HistoryItem = {
 };
 
 /**
- * Lookup the most recent recommendation for (user, ticker) within a
- * short freshness window. Used by the research route to short-circuit
- * re-runs of the same ticker inside a session — saves the entire AI
- * pipeline + wallet hit on a cache hit.
+ * Lookup the most recent recommendation for (user, ticker, mode) within
+ * a freshness window. Used by every research route to short-circuit
+ * re-runs that would otherwise burn tokens recomputing the same answer.
+ *
+ * The same-day default (24h) was a deliberate change from the original
+ * 10-minute window. Reported by users: "if I research the same stock
+ * twice in a day it pulls fresh AI both times — that's wasteful since
+ * the warehouse only refreshes overnight." Same data → same verdict →
+ * no point spending tokens.
  *
  * Returns null if no sufficiently-recent rec exists.
  *
  * Design notes:
- *   - Only considers the most recent rec. Older ones in the history
- *     are displayed via getUserHistory but never served as a cache hit.
- *   - INSUFFICIENT_DATA recs are excluded: those are genuinely failed
- *     runs and user might be retrying them on purpose.
- *   - The returned item carries its full analysisJson so the caller
+ *   - Only considers the most recent rec for the requested mode. Older
+ *     ones are surfaced via getUserHistory but never served as a cache hit.
+ *   - INSUFFICIENT_DATA recs are excluded: those are failed runs and
+ *     the user might legitimately be retrying.
+ *   - mode='quick' / 'deep' / 'panel' is read from analysisJson.mode.
+ *     If `mode` is omitted in the lookup, we ignore the mode dimension
+ *     (legacy behavior — useful when only the most recent of any kind
+ *     matters).
+ *   - The returned item carries the full analysisJson so the caller
  *     can reconstruct the identical response shape the live pipeline
  *     would have emitted.
  */
 export async function getCachedRecommendation(
   userId: string,
   ticker: string,
-  maxAgeMinutes = 10
+  maxAgeMinutes = 1440, // 24h — covers a full trading day
+  mode?: "quick" | "deep" | "panel"
 ): Promise<{
   id: string;
   ticker: string;
   createdAt: Date;
   analysisJson: Record<string, unknown>;
   snapshot: Record<string, unknown> | null;
+  mode: string | null;
 } | null> {
   try {
+    const params: unknown[] = [userId, ticker, String(maxAgeMinutes)];
+    let modeFilter = "";
+    if (mode) {
+      modeFilter = ` AND "analysisJson"->>'mode' = $4`;
+      params.push(mode);
+    }
     const { rows } = await pool.query(
       `SELECT id, ticker, "createdAt", "analysisJson"
        FROM "recommendation"
@@ -191,9 +267,10 @@ export async function getCachedRecommendation(
          AND ticker = $2
          AND recommendation <> 'INSUFFICIENT_DATA'
          AND "createdAt" > NOW() - ($3 || ' minutes')::interval
+         ${modeFilter}
        ORDER BY "createdAt" DESC
        LIMIT 1`,
-      [userId, ticker, String(maxAgeMinutes)]
+      params
     );
     if (rows.length === 0) return null;
     const r = rows[0] as {
@@ -204,12 +281,17 @@ export async function getCachedRecommendation(
     };
     const snapshot =
       (r.analysisJson?.snapshot as Record<string, unknown>) ?? null;
+    const storedMode =
+      typeof r.analysisJson?.mode === "string"
+        ? (r.analysisJson.mode as string)
+        : null;
     return {
       id: r.id,
       ticker: r.ticker,
       createdAt: new Date(r.createdAt),
       analysisJson: r.analysisJson,
       snapshot,
+      mode: storedMode,
     };
   } catch (err) {
     log.warn("history", "cache lookup failed", {
@@ -304,6 +386,9 @@ export async function getUserHistory(userId: string, limit = 50): Promise<Histor
      FROM "recommendation" r
      LEFT JOIN "recommendation_outcome" o ON o."recommendationId" = r.id
      WHERE r."userId" = $1
+       -- Exclude quick scans from formal history. Quick is triage; users
+       -- shouldn't see it in their track record alongside conviction calls.
+       AND ("analysisJson"->>'mode' IS NULL OR "analysisJson"->>'mode' <> 'quick')
      GROUP BY r.id
      ORDER BY r."createdAt" DESC
      LIMIT $2`,

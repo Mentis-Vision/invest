@@ -476,14 +476,22 @@ function PortfolioBody() {
                           <Drillable
                             target={{ kind: "ticker", ticker: h.ticker }}
                             ariaLabel={`Open ${h.ticker} warehouse detail`}
+                            as="span"
                             className="!block !p-0 !hover:no-underline"
                           >
-                            <div>{h.name}</div>
+                            {/* Spans only — putting a <div> inside a <button>
+                                (or even an inline-element <span> in HTML5)
+                                breaks the implicit content model and causes
+                                the browser to auto-close the wrapping element.
+                                That was the source of the "drill flashes
+                                open then page reloads" bug — the broken DOM
+                                surfaced as inconsistent click targets. */}
+                            <span className="block">{h.name}</span>
                             {h.sector && (
-                              <div className="mt-0.5 text-[10px] text-muted-foreground/70">
+                              <span className="block mt-0.5 text-[10px] text-muted-foreground/70">
                                 {h.sector}
                                 {h.industry ? ` · ${h.industry}` : ""}
-                              </div>
+                              </span>
                             )}
                           </Drillable>
                         </td>

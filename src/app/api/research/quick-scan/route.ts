@@ -11,6 +11,10 @@ import { checkRateLimit, RULES, getClientIp } from "@/lib/rate-limit";
 import { checkUsageCap, recordUsage, TIER_LIMITS } from "@/lib/usage";
 import { getStockSnapshot, formatWarehouseEnhancedDataBlock } from "@/lib/data/yahoo";
 import { getMacroSnapshot, formatMacroForAI } from "@/lib/data/fred";
+import {
+  getCachedRecommendation,
+  saveCacheableRecommendation,
+} from "@/lib/history";
 import { log, errorInfo } from "@/lib/log";
 
 /**
@@ -96,6 +100,40 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // Same-day cache short-circuit. The warehouse only refreshes
+    // overnight, so a Quick Scan run earlier today will produce an
+    // identical verdict — re-running is just spending tokens.
+    // 24h window + mode='quick' filter so the Deep Read cache
+    // doesn't accidentally satisfy a Quick Scan request.
+    const cached = await getCachedRecommendation(
+      session.user.id,
+      ticker,
+      1440,
+      "quick"
+    );
+    if (cached) {
+      const a = cached.analysisJson as {
+        snapshot?: Record<string, unknown>;
+        output?: Record<string, unknown>;
+      };
+      const ageMs = Date.now() - cached.createdAt.getTime();
+      return NextResponse.json({
+        ticker,
+        snapshot: a.snapshot,
+        mode: "quick",
+        output: a.output,
+        tokensUsed: 0,
+        costCents: 0,
+        cached: true,
+        cachedAt: cached.createdAt.toISOString(),
+        cachedAgeSec: Math.floor(ageMs / 1000),
+        usage: {
+          tier: usage.tier,
+          remainingCents: usage.remainingCents,
+        },
+      });
+    }
+
     // Assemble data block. Same warehouse-enhanced path the Full Panel
     // uses, so Quick Scan sees the same numbers — just asks one model to
     // eyeball it quickly without tool use.
@@ -150,6 +188,22 @@ Rules:
 
     const output = result.object as QuickScanOutput;
 
+    // Save for same-day cache. Fire-and-forget — even if the write
+    // fails we still serve the live response. The next visit on the
+    // same day will hit getCachedRecommendation above.
+    void saveCacheableRecommendation({
+      userId: session.user.id,
+      ticker,
+      mode: "quick",
+      recommendation: output.recommendation,
+      confidence: output.confidence,
+      consensus: "single",
+      summary: output.oneLiner.slice(0, 2000),
+      priceAtRec: snapshot.price ?? 0,
+      dataAsOf: new Date(snapshot.asOf),
+      payload: { snapshot, output },
+    });
+
     return NextResponse.json({
       ticker,
       snapshot,
@@ -157,6 +211,7 @@ Rules:
       output,
       tokensUsed,
       costCents: Math.ceil((tokensUsed / 1_000_000) * 200), // Haiku = 200¢/1M
+      cached: false,
       usage: {
         tier: usage.tier,
         remainingCents: usage.remainingCents - Math.ceil((tokensUsed / 1_000_000) * 200),

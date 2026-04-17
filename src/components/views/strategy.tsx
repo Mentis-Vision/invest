@@ -47,6 +47,9 @@ type Review = {
     };
     error?: string;
   }>;
+  cached?: boolean;
+  cachedAt?: string;
+  tokensUsed?: number;
 };
 
 const HEALTH_STYLE: Record<string, string> = {
@@ -95,6 +98,29 @@ export default function StrategyView() {
   const [loading, setLoading] = useState(false);
   const [review, setReview] = useState<Review | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // True while the initial GET is fetching the cached overnight review
+  // — distinct from `loading` (which gates the explicit POST re-run).
+  const [reviewBootstrapping, setReviewBootstrapping] = useState(true);
+
+  // First-load: try to fetch today's pre-computed overnight review via
+  // GET (cache hit, $0). The cron pre-runs every connected user's
+  // review so first login lands instantly with no AI spend.
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/portfolio-review")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!alive || !data || data.error) return;
+        setReview(data as Review);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (alive) setReviewBootstrapping(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // Pre-loaded context — all $0, no AI. Renders the moment the page mounts
   // so the user has something useful to look at before deciding whether to
@@ -228,9 +254,21 @@ export default function StrategyView() {
         </p>
       </div>
 
-      {!review && !error && (
+      {/* Status card explaining where the AI review comes from. Shape
+          depends on whether we're still bootstrapping the GET, whether
+          a cached review exists, or whether the user needs to kick a
+          first run themselves. */}
+      {reviewBootstrapping ? (
+        <Card className="border-[var(--border)] bg-[var(--secondary)]/30">
+          <CardContent className="flex items-center gap-3 py-4 text-sm text-[var(--muted-foreground)]">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Checking for last night&rsquo;s portfolio review…
+          </CardContent>
+        </Card>
+      ) : review ? null /* a review is loaded — the rendered review block already explains its provenance */ : !error ? (
         <>
-          {/* Run-AI-review CTA — top of page so it's always reachable */}
+          {/* No cached review yet — usually a brand-new connection where
+              the cron hasn't seen this user. Offer to run live.          */}
           <Card className="border-[var(--buy)]/30 bg-[var(--buy)]/5">
             <CardContent className="flex flex-col items-start justify-between gap-3 py-4 sm:flex-row sm:items-center">
               <div className="flex items-start gap-3">
@@ -239,12 +277,14 @@ export default function StrategyView() {
                 </div>
                 <div>
                   <div className="text-sm font-semibold text-[var(--foreground)]">
-                    Ready when you want a portfolio-level read
+                    First-time portfolio review
                   </div>
                   <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-                    Below is everything we already know about your portfolio
-                    at $0 cost. Click below to run the AI review when you
-                    want a synthesized verdict.
+                    The nightly cron pre-runs your AI review for free
+                    every morning. Since this is your first time (or a
+                    new connection), kick one off now — it&rsquo;ll cost
+                    a few cents from your monthly AI budget. Tomorrow
+                    onward you&rsquo;ll just see the overnight version.
                   </p>
                 </div>
               </div>
@@ -259,6 +299,11 @@ export default function StrategyView() {
           </Card>
 
           <WarehouseFreshness variant="card" />
+        </>
+      ) : null}
+
+      {!review && !error && !reviewBootstrapping && (
+        <>
 
           {!connected && !contextLoading && (
             <Card className="border-[var(--hold)]/30 bg-[var(--hold)]/5">
@@ -488,6 +533,71 @@ export default function StrategyView() {
 
       {review && (
         <>
+          {/* Provenance + freshness header. When the review came from
+              the overnight cron we want users to KNOW that — both as a
+              trust cue ("this isn't a flaky one-off") and as a nudge to
+              not waste tokens re-running the same data. */}
+          <Card
+            className={
+              review.cached
+                ? "border-[var(--buy)]/30 bg-[var(--buy)]/5"
+                : "border-[var(--decisive)]/30 bg-[var(--decisive)]/5"
+            }
+          >
+            <CardContent className="flex flex-col items-start justify-between gap-2 py-3 sm:flex-row sm:items-center">
+              <div className="flex items-start gap-2.5 text-xs">
+                <span
+                  className={`mt-1 inline-block h-2 w-2 rounded-full ${
+                    review.cached
+                      ? "bg-[var(--buy)]"
+                      : "bg-[var(--decisive)]"
+                  }`}
+                />
+                <div>
+                  {review.cached && review.cachedAt ? (
+                    <>
+                      <span className="font-medium text-[var(--foreground)]">
+                        Refreshed overnight
+                      </span>{" "}
+                      <span className="text-[var(--muted-foreground)]">
+                        — auto-generated at{" "}
+                        {new Date(review.cachedAt).toLocaleTimeString("en-US", {
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}{" "}
+                        today. Re-running spends tokens; the data
+                        won&rsquo;t meaningfully change before tomorrow.
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="font-medium text-[var(--foreground)]">
+                        Fresh AI run
+                      </span>{" "}
+                      <span className="text-[var(--muted-foreground)]">
+                        — used{" "}
+                        {review.tokensUsed
+                          ? `${Math.round(review.tokensUsed / 100) / 10}k tokens`
+                          : "AI tokens"}
+                        . Tomorrow&rsquo;s overnight run will be free.
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleGetReview}
+                disabled={loading}
+                className="text-xs"
+              >
+                {loading && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}
+                Re-run anyway
+              </Button>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
@@ -497,10 +607,6 @@ export default function StrategyView() {
                     {review.holdingsCount} positions · Supervisor: {review.supervisorModel}
                   </p>
                 </div>
-                <Button size="sm" variant="outline" onClick={handleGetReview} disabled={loading}>
-                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Re-run
-                </Button>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">

@@ -58,6 +58,9 @@ type QuickScanResponse = {
   snapshot: StockSnapshot;
   tokensUsed: number;
   costCents: number;
+  cached?: boolean;
+  cachedAt?: string | null;
+  cachedAgeSec?: number | null;
   usage?: { tier: string; remainingCents: number };
 };
 
@@ -70,6 +73,9 @@ type StandardResponse = {
   /** Bull/Bear adversarial debate run on the single analyst's output. */
   debate?: DebateResult | null;
   tokensUsed: number;
+  cached?: boolean;
+  cachedAt?: string | null;
+  cachedAgeSec?: number | null;
   usage?: { tier: string; remainingCents: number };
 };
 
@@ -221,6 +227,59 @@ function cachedAgeLabel(sec: number): string {
   if (min < 60) return `${min} min ago`;
   const hr = Math.floor(min / 60);
   return `${hr}h ago`;
+}
+
+/**
+ * Transparency footer for any AI research card. Tells the user where
+ * the result came from and what (if anything) it cost.
+ *
+ * Two states:
+ *   - cached: Loaded from earlier today's run — zero tokens, zero $.
+ *     Surfaced because users were burning AI dollars re-running the
+ *     same ticker on the same calendar day.
+ *   - live: Fresh AI run — show the rough token count + which model
+ *     family did the work. Demystifies "where does this come from?"
+ */
+function ResearchSourceTag({
+  mode,
+  cached,
+  cachedAgeSec,
+  tokensUsed,
+  modelLabel,
+}: {
+  mode: "quick" | "deep" | "panel";
+  cached?: boolean;
+  cachedAgeSec?: number | null;
+  tokensUsed?: number;
+  modelLabel?: string;
+}) {
+  if (cached) {
+    return (
+      <div className="flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)]">
+        <span className="inline-flex h-1.5 w-1.5 rounded-full bg-[var(--buy)]" />
+        Loaded from cache (run{" "}
+        {cachedAgeSec != null ? cachedAgeLabel(cachedAgeSec) : "earlier today"}).
+        Same warehouse data → same verdict, no AI tokens spent.
+      </div>
+    );
+  }
+  const label =
+    mode === "quick"
+      ? "Quick read · single fast model (~$0.004)"
+      : mode === "deep"
+        ? `Deep read · ${modelLabel ?? "one analyst"} + bull/bear debate (~$0.06)`
+        : "Full panel · 3 analysts + supervisor (~$0.21)";
+  const approxTokens =
+    typeof tokensUsed === "number" && tokensUsed > 0
+      ? ` · ${Math.round(tokensUsed / 100) / 10}k tokens`
+      : "";
+  return (
+    <div className="flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)]">
+      <span className="inline-flex h-1.5 w-1.5 rounded-full bg-[var(--decisive)]" />
+      Fresh AI run · {label}
+      {approxTokens}
+    </div>
+  );
 }
 
 function DirectionIcon({ d }: { d: "BULLISH" | "BEARISH" | "NEUTRAL" }) {
@@ -824,7 +883,13 @@ export default function ResearchView({
               </div>
             )}
 
-            <div className="flex items-center justify-end gap-2 border-t border-[var(--border)] pt-3">
+            <div className="flex flex-col-reverse items-stretch gap-3 border-t border-[var(--border)] pt-3 sm:flex-row sm:items-center sm:justify-between">
+              <ResearchSourceTag
+                mode="quick"
+                cached={quickResult.cached}
+                cachedAgeSec={quickResult.cachedAgeSec ?? null}
+                tokensUsed={quickResult.tokensUsed}
+              />
               <Button
                 size="sm"
                 onClick={() => {
@@ -921,9 +986,62 @@ export default function ResearchView({
                     </ul>
                   </div>
                 )}
+
+                {/* Verdict reconciliation: when Quick said one thing and
+                    Deep says another, explain WHY rather than leave the
+                    user wondering which one to trust. The deeper read +
+                    bull/bear debate is the more reliable signal because
+                    it actively tests the thesis from both sides. */}
+                {quickResult &&
+                  quickResult.ticker === standardResult.ticker &&
+                  standardResult.analysis.output.recommendation !==
+                    quickResult.output.recommendation && (
+                    <div className="rounded-md border border-[var(--decisive)]/30 bg-[var(--decisive)]/5 px-3 py-2.5 text-xs leading-relaxed">
+                      <div className="mb-1 font-mono uppercase tracking-wider text-[var(--decisive)]">
+                        Verdicts disagree
+                      </div>
+                      <p className="text-[var(--foreground)]/85">
+                        Quick read said{" "}
+                        <span className="font-mono">
+                          {quickResult.output.recommendation}
+                        </span>{" "}
+                        ·{" "}
+                        <span className="font-mono">
+                          {quickResult.output.confidence}
+                        </span>
+                        . Deep read says{" "}
+                        <span className="font-mono">
+                          {standardResult.analysis.output.recommendation}
+                        </span>{" "}
+                        ·{" "}
+                        <span className="font-mono">
+                          {standardResult.analysis.output.confidence}
+                        </span>
+                        . Trust the deep read — it tested the thesis from
+                        both sides via the bull/bear debate below, where
+                        Quick is a single one-pass triage. Same data,
+                        more rigor.
+                      </p>
+                    </div>
+                  )}
               </>
             )}
 
+            <div className="border-t border-[var(--border)] pt-3">
+              <ResearchSourceTag
+                mode="deep"
+                cached={standardResult.cached}
+                cachedAgeSec={standardResult.cachedAgeSec ?? null}
+                tokensUsed={standardResult.tokensUsed}
+                modelLabel={
+                  standardResult.lens === "claude"
+                    ? "Value lens"
+                    : standardResult.lens === "gpt"
+                      ? "Growth lens"
+                      : "Macro lens"
+                }
+              />
+            </div>
           </CardContent>
         </Card>
       )}

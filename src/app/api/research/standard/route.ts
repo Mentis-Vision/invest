@@ -8,6 +8,10 @@ import { getStockSnapshot, formatWarehouseEnhancedDataBlock } from "@/lib/data/y
 import { getRecentFilings, formatFilingsForAI } from "@/lib/data/sec";
 import { getMacroSnapshot, formatMacroForAI } from "@/lib/data/fred";
 import { getUserProfile, buildProfileRider } from "@/lib/user-profile";
+import {
+  getCachedRecommendation,
+  saveCacheableRecommendation,
+} from "@/lib/history";
 import { log, errorInfo } from "@/lib/log";
 
 /**
@@ -95,6 +99,41 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // Same-day cache short-circuit. Deep Reads cost ~$0.06 each — a
+    // tab-switch + return on the same ticker should NOT spend tokens
+    // when the warehouse hasn't refreshed.
+    const cached = await getCachedRecommendation(
+      session.user.id,
+      ticker,
+      1440,
+      "deep"
+    );
+    if (cached) {
+      const a = cached.analysisJson as {
+        snapshot?: Record<string, unknown>;
+        analysis?: Record<string, unknown>;
+        debate?: Record<string, unknown>;
+        lens?: string;
+      };
+      const ageMs = Date.now() - cached.createdAt.getTime();
+      return NextResponse.json({
+        ticker,
+        snapshot: a.snapshot,
+        mode: "deep",
+        lens: a.lens ?? "claude",
+        analysis: a.analysis,
+        debate: a.debate,
+        tokensUsed: 0,
+        cached: true,
+        cachedAt: cached.createdAt.toISOString(),
+        cachedAgeSec: Math.floor(ageMs / 1000),
+        usage: {
+          tier: usage.tier,
+          remainingCents: usage.remainingCents,
+        },
+      });
+    }
+
     // Same warehouse-enhanced DATA block the Full Panel uses. The analyst
     // sees exactly the same verified context, just with fewer cooks.
     const [snapshot, filings, macro, profile] = await Promise.all([
@@ -144,6 +183,31 @@ export async function POST(req: NextRequest) {
       void recordUsage(session.user.id, "haiku", debateTokens);
     }
 
+    // Save for same-day cache. Deep Reads cost ~$0.06; we don't want
+    // a tab-switch + return on the same ticker to spend tokens twice.
+    // ModelResult.output may be missing if the analyst failed schema —
+    // skip the cache write in that case (don't poison the cache with
+    // garbage).
+    if (result.output) {
+      void saveCacheableRecommendation({
+        userId: session.user.id,
+        ticker,
+        mode: "deep",
+        recommendation: result.output.recommendation,
+        confidence: result.output.confidence,
+        consensus: "single",
+        summary: result.output.thesis.slice(0, 2000),
+        priceAtRec: snapshot.price ?? 0,
+        dataAsOf: new Date(snapshot.asOf),
+        payload: {
+          snapshot,
+          analysis: result,
+          debate,
+          lens: lensChoice,
+        },
+      });
+    }
+
     return NextResponse.json({
       ticker,
       snapshot,
@@ -152,6 +216,7 @@ export async function POST(req: NextRequest) {
       analysis: result,
       debate,
       tokensUsed: analystTokens + debateTokens,
+      cached: false,
       usage: {
         tier: usage.tier,
         remainingCents: usage.remainingCents,
