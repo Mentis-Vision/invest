@@ -1,4 +1,13 @@
 import { default as YahooFinanceCtor } from "yahoo-finance2";
+import {
+  alphaVantageConfigured,
+  getCryptoDaily,
+  getCryptoSpot,
+} from "./alpha-vantage";
+import {
+  getCryptoSpotCoinGecko,
+  symbolToCoinGeckoId,
+} from "./coingecko";
 
 // yahoo-finance2 v3 requires instantiation. Cache one instance for the process.
 // Signed errors via notices are on by default — we silence the transient
@@ -6,6 +15,20 @@ import { default as YahooFinanceCtor } from "yahoo-finance2";
 const yahooFinance = new YahooFinanceCtor({
   suppressNotices: ["yahooSurvey", "ripHistorical"],
 });
+
+/**
+ * Recognise tickers that are cryptocurrencies. Yahoo's quote API resolves
+ * naked crypto symbols (BTC, LINK, ATOM, SPK) to equity namesakes —
+ * Bitgreen, Interlink, Atomera, Spark Energy. The CoinGecko symbol map
+ * is our source of truth for "this is a coin, route to crypto sources."
+ *
+ * The map is hand-curated — adding a new symbol means editing
+ * `src/lib/data/coingecko.ts`. That keeps the boundary explicit instead
+ * of relying on Yahoo's mistake.
+ */
+function isKnownCryptoSymbol(symbol: string): boolean {
+  return symbolToCoinGeckoId(symbol) !== null;
+}
 
 export type StockSnapshot = {
   symbol: string;
@@ -34,6 +57,14 @@ export type StockSnapshot = {
 };
 
 export async function getStockSnapshot(symbol: string): Promise<StockSnapshot> {
+  // Crypto fork: route AROUND Yahoo's wrong-namesake bug. We try AV
+  // first (richer data: OHLCV), then CoinGecko, and never fall through
+  // to Yahoo for a known crypto — better to throw "not found" than to
+  // return Bitgreen as Bitcoin.
+  if (isKnownCryptoSymbol(symbol)) {
+    return getCryptoSnapshot(symbol);
+  }
+
   const [quoteResult, summaryResult] = await Promise.all([
     yahooFinance.quote(symbol),
     yahooFinance.quoteSummary(symbol, {
@@ -73,6 +104,97 @@ export async function getStockSnapshot(symbol: string): Promise<StockSnapshot> {
     industry: summary.assetProfile?.industry ?? null,
     analystTarget: summary.financialData?.targetMeanPrice ?? null,
     recommendationKey: summary.financialData?.recommendationKey ?? null,
+    asOf: new Date().toISOString(),
+  };
+}
+
+/**
+ * Build a StockSnapshot for a crypto ticker without going near Yahoo.
+ *
+ * Pricing waterfall:
+ *   1. AV DIGITAL_CURRENCY_DAILY  (gives OHLCV — best signal)
+ *   2. AV CURRENCY_EXCHANGE_RATE  (lighter spot when daily is empty)
+ *   3. CoinGecko /simple/price    (covers AV-missing tokens like SPK)
+ *
+ * The shape is StockSnapshot so existing callers don't branch — but
+ * fields that don't apply to crypto (P/E, dividend yield, EPS, sector)
+ * are null. The drill panel + AI prompt already tolerate null.
+ *
+ * Throws when no source can price the ticker so callers see the same
+ * error contract as Yahoo's "Quote not found".
+ */
+async function getCryptoSnapshot(symbol: string): Promise<StockSnapshot> {
+  const ticker = symbol.toUpperCase();
+  let price: number | null = null;
+  let open: number | null = null;
+  let high52w: number | null = null;
+  let low52w: number | null = null;
+  let volume: number | null = null;
+  let marketCap: number | null = null;
+  let changePct = 0;
+
+  if (alphaVantageConfigured()) {
+    const daily = await getCryptoDaily(ticker, "USD");
+    if (daily) {
+      price = daily.close;
+      open = daily.open;
+      high52w = daily.high;
+      low52w = daily.low;
+      volume = daily.volume != null ? Math.round(daily.volume) : null;
+      if (daily.open && daily.open > 0) {
+        changePct = ((daily.close - daily.open) / daily.open) * 100;
+      }
+    }
+    if (price == null) {
+      const spot = await getCryptoSpot(ticker, "USD");
+      if (spot?.price) price = spot.price;
+    }
+  }
+
+  if (price == null) {
+    const cg = await getCryptoSpotCoinGecko(ticker);
+    if (cg) {
+      price = cg.price;
+      changePct = cg.change24hPct ?? 0;
+      marketCap = cg.marketCap;
+      volume = cg.volume24h != null ? Math.round(cg.volume24h) : null;
+      // Synthesize "open" from 24h change so day-change math downstream
+      // still works.
+      if (cg.change24hPct != null && cg.change24hPct !== -100) {
+        open = cg.price / (1 + cg.change24hPct / 100);
+      }
+    }
+  }
+
+  if (price == null || price <= 0) {
+    throw new Error(`Quote not found for symbol: ${ticker}`);
+  }
+
+  const change = open != null ? price - open : 0;
+
+  return {
+    symbol: ticker,
+    name: ticker,
+    price,
+    currency: "USD",
+    change,
+    changePct,
+    marketCap,
+    peRatio: null,
+    forwardPE: null,
+    eps: null,
+    dividendYield: null,
+    fiftyTwoWeekHigh: high52w,
+    fiftyTwoWeekLow: low52w,
+    fiftyDayAvg: null,
+    twoHundredDayAvg: null,
+    volume,
+    avgVolume: null,
+    beta: null,
+    sector: "Cryptocurrency",
+    industry: null,
+    analystTarget: null,
+    recommendationKey: null,
     asOf: new Date().toISOString(),
   };
 }
