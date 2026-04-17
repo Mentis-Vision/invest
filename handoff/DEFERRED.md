@@ -47,14 +47,25 @@ Open items / known gaps:
 - **When unblocked:** E2E test — link a Sandbox brokerage (use Vanguard sandbox), confirm holdings populate in `/app?view=portfolio`, confirm trade sync populates `trade` table, run `/api/portfolio-review` on the real holdings.
 
 ### Resend (P4.3 / P4.4 email wiring)
-- **Status:** `sendResetPassword` and `sendVerificationEmail` hooks wired into BetterAuth. Password reset and forgot-password pages built. `/lib/email.ts` ready.
+- **Status:** `sendResetPassword` and `sendVerificationEmail` hooks wired into BetterAuth. Password reset + forgot-password pages built. `/lib/email.ts` upgraded with deliverability headers (Reply-To, List-Unsubscribe + List-Unsubscribe-Post per RFC 8058, X-Entity-Ref-ID, plain-text fallback auto-derived from HTML when caller omits it, tags). `/unsubscribe` user-facing page + `/api/unsubscribe` POST handler ship so the List-Unsubscribe URL isn't a 404 — providers (Gmail/Outlook) heavily downrank senders without these.
 - **Decision:** Use Vercel Marketplace → Resend (free 3k/mo tier) rather than Gmail SMTP. Cleaner DKIM/SPF, no risk to Mentis Google Workspace deliverability, zero marginal cost.
-- **Blocked on:** Provisioning Resend via Vercel Marketplace:
+- **Action steps to unblock (in order):**
   1. Vercel dashboard → project `invest` → Integrations → Resend → Add
-  2. Verify `clearpath-invest.com` (or interim alias) as a sending domain
-  3. Add `RESEND_API_KEY` and `RESEND_FROM_EMAIL` (e.g. `ClearPath Invest <no-reply@clearpath-invest.com>`) to Vercel prod env
-  4. Set `REQUIRE_EMAIL_VERIFICATION=true` in production env
-- **Note:** Today `REQUIRE_EMAIL_VERIFICATION` is intentionally **off** — turning it on without Resend locks everyone out. The demo user has `emailVerified = true` in the DB so sign-in works once verification is re-enabled.
+  2. Resend dashboard → Domains → add `clearpathinvest.app` (or interim subdomain). Resend will give you 3 DNS records (SPF TXT, DKIM CNAME ×2, DMARC TXT). Add them at your DNS provider; verification typically takes <10 min.
+  3. Add to Vercel prod env (`printf | vercel env add`, never `echo`):
+     - `RESEND_API_KEY` — from Resend dashboard
+     - `RESEND_FROM_EMAIL` — e.g. `ClearPath Invest <no-reply@clearpathinvest.app>`
+     - `RESEND_REPLY_TO` (optional) — defaults to `support@clearpathinvest.app`
+  4. Smoke test the pipeline end-to-end — once you're an admin in `ADMIN_EMAILS`:
+     ```
+     curl -X POST https://clearpathinvest.app/api/admin/test-email \
+       -H "Cookie: $YOUR_SESSION_COOKIE" \
+       -H "Content-Type: application/json" -d '{}'
+     ```
+     Returns `{ ok, messageId }` on success and either lands in your inbox (good) or spam (DKIM/SPF probably not yet propagated).
+  5. Once smoke test lands in inbox, set `REQUIRE_EMAIL_VERIFICATION=true` in production env.
+- **Note:** Today `REQUIRE_EMAIL_VERIFICATION` is intentionally **off** — turning it on without Resend locks everyone out. The demo user has `emailVerified = true` in the DB so sign-in still works once verification is re-enabled.
+- **Why we already wrote the deliverability scaffolding:** Even with a perfectly verified DKIM/SPF/DMARC chain, Gmail/Outlook will route messages to spam if the standard transactional headers (List-Unsubscribe, Reply-To, plain-text alongside HTML) are missing. We surfaced complaints in the past about verification mail going to spam — those headers + the unsubscribe page are the primary fix. The remaining variable after deploy is just DNS verification.
 
 ### Sentry (P1.3 upgrade path)
 - **Chose:** Minimal structured JSON logging to Vercel's native runtime logs (`src/lib/log.ts`). Zero accounts, zero vendor lock-in, greppable.

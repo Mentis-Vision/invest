@@ -17,9 +17,38 @@ export type SendEmailInput = {
   subject: string;
   html: string;
   text?: string;
+  /** Resend tag(s) for analytics + provider reputation routing. */
+  tags?: Array<{ name: string; value: string }>;
 };
 
 const RESEND_API = "https://api.resend.com/emails";
+
+/**
+ * Reply-To address. When users hit reply on a transactional email they
+ * should reach a human, not the no-reply box. Falls back to support@
+ * on our domain. Override per-deployment via env if needed.
+ */
+function replyTo(): string {
+  return process.env.RESEND_REPLY_TO || "support@clearpathinvest.app";
+}
+
+/**
+ * The List-Unsubscribe headers below are why Gmail / Outlook stop
+ * routing transactional mail to spam. RFC 8058 requires both the
+ * `List-Unsubscribe` URL header AND `List-Unsubscribe-Post` indicating
+ * one-click unsubscribe support. Even though our mail is purely
+ * transactional and a user can't legally unsubscribe from a password
+ * reset, the major providers heavily downrank senders that lack these
+ * headers. Pointing the URL at a no-op page is fine — the reputation
+ * boost comes from header presence + correct format.
+ */
+function unsubscribeUrl(): string {
+  const base = process.env.NEXT_PUBLIC_APP_URL || "https://clearpathinvest.app";
+  // Point at the API route — RFC 8058 one-click providers POST here and
+  // expect 200 OK without rendering HTML. The route GET-redirects human
+  // visitors to the user-facing /unsubscribe page.
+  return `${base}/api/unsubscribe`;
+}
 
 export async function sendEmail(
   input: SendEmailInput
@@ -41,6 +70,11 @@ export async function sendEmail(
     return { ok: true, skipped: true };
   }
 
+  // Auto-derive plain text from HTML when caller didn't provide one.
+  // Multipart messages score better with spam filters than HTML-only.
+  const text =
+    input.text ?? htmlToText(input.html) ?? input.subject;
+
   try {
     const res = await fetch(RESEND_API, {
       method: "POST",
@@ -51,17 +85,27 @@ export async function sendEmail(
       body: JSON.stringify({
         from,
         to: [input.to],
+        reply_to: replyTo(),
         subject: input.subject,
         html: input.html,
-        text: input.text,
+        text,
+        // Custom MIME headers for deliverability. Resend passes these
+        // through unchanged.
+        headers: {
+          "List-Unsubscribe": `<${unsubscribeUrl()}?to=${encodeURIComponent(input.to)}>`,
+          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+          // X-Entity-Ref-ID gives Gmail a stable thread/grouping anchor.
+          "X-Entity-Ref-ID": `${Date.now()}.${Math.random().toString(36).slice(2, 10)}`,
+        },
+        tags: input.tags ?? [{ name: "category", value: "transactional" }],
       }),
     });
 
     if (!res.ok) {
-      const text = await res.text().catch(() => "");
+      const body = await res.text().catch(() => "");
       log.error("email", "resend api non-2xx", {
         status: res.status,
-        body: text.slice(0, 500),
+        body: body.slice(0, 500),
         to: input.to,
       });
       return { ok: false };
@@ -73,6 +117,24 @@ export async function sendEmail(
     log.error("email", "send failed", { to: input.to, ...errorInfo(err) });
     return { ok: false };
   }
+}
+
+/**
+ * Cheap HTML → text converter for the auto-fallback. Just strips tags
+ * and normalises whitespace; not pretty, but good enough that spam
+ * filters see real content rather than empty multipart.
+ */
+function htmlToText(html: string): string | null {
+  if (!html) return null;
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|li|h[1-6])>/gi, "\n\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
 }
 
 /**
