@@ -197,9 +197,9 @@ Right now it's a placeholder SVG line chart. Not awful but forgettable.
 - Replace `src/app/favicon.ico` with properly generated favicon set (favicon.ico + apple-touch-icon.png + icon-*.png).
 - Replace all `<svg>` usages of the line-chart placeholder across `MarketingNav`, `MarketingFooter`, `AuthLayout`, sign-in/sign-up pages.
 
-### 5.2 Custom domain
+### 5.2 Custom domain ✅ (shipped 2026-04-16)
 
-`clearpath-invest.vercel.app` is serviceable but `.com` would lift the brand. Check availability on `clearpathinvest.com`, `clearpath.fi`, `clearpath.money`.
+Custom domain `clearpathinvest.app` is live (also `www.clearpathinvest.app`). Old `clearpath-invest.vercel.app` alias is no longer bound to this project. `BETTER_AUTH_URL` env var updated; sitemap / robots / OG image / in-code fallbacks all updated. Reminder: GCP OAuth authorized-redirect-URI must point at `https://clearpathinvest.app/api/auth/callback/google` — verify in Google Cloud Console.
 
 ### 5.3 OG image for link previews
 

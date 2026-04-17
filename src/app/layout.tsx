@@ -22,7 +22,7 @@ const fraunces = Fraunces({
 
 const siteUrl =
   process.env.BETTER_AUTH_URL?.replace(/\/$/, "") ??
-  "https://clearpath-invest.vercel.app";
+  "https://clearpathinvest.app";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),

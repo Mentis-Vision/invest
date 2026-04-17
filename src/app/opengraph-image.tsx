@@ -96,7 +96,7 @@ export default async function OpenGraphImage() {
           }}
         >
           <div style={{ display: "flex" }}>SEC · FRED · Yahoo · 12+ sources</div>
-          <div style={{ display: "flex" }}>clearpath-invest.vercel.app</div>
+          <div style={{ display: "flex" }}>clearpathinvest.app</div>
         </div>
       </div>
     ),

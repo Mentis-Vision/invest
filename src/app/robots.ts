@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 
 const BASE_URL =
   process.env.BETTER_AUTH_URL?.replace(/\/$/, "") ??
-  "https://clearpath-invest.vercel.app";
+  "https://clearpathinvest.app";
 
 export default function robots(): MetadataRoute.Robots {
   return {
