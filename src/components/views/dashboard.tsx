@@ -19,6 +19,7 @@ import TickerCard, {
 
 // New editorial-terminal composition layer
 import PortfolioHero from "@/components/dashboard/portfolio-hero";
+import { WarehouseFreshness } from "@/components/warehouse-freshness";
 import KpiStrip from "@/components/dashboard/kpi-strip";
 import AllocationTable from "@/components/dashboard/allocation-table";
 import MacroStrip from "@/components/dashboard/macro-strip";
@@ -276,6 +277,10 @@ function DashboardBody({ userName }: { userName: string }) {
         accountCount={accountCount}
         institutions={institutions}
       />
+
+      <div className="flex items-center justify-between gap-3 -mt-3">
+        <WarehouseFreshness variant="compact" />
+      </div>
 
       <KpiStrip
         totalValue={totalValue}

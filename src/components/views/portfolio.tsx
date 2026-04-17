@@ -245,7 +245,16 @@ function PortfolioBody() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
-              <div>
+              <Drillable
+                target={{
+                  kind: "kpi",
+                  metric: "total_value",
+                  label: "Positions value",
+                  valueLabel: money(totalValue),
+                }}
+                ariaLabel="Open details on positions value"
+                className="!block !p-0 !text-left !hover:no-underline"
+              >
                 <div className="text-xs text-muted-foreground">Positions value</div>
                 <div className="mt-1 text-2xl font-semibold tracking-tight">
                   {money(totalValue)}
@@ -258,8 +267,26 @@ function PortfolioBody() {
                     </span>
                   </div>
                 )}
-              </div>
-              <div>
+              </Drillable>
+              <Drillable
+                target={
+                  brokerageBalance != null
+                    ? {
+                        kind: "kpi",
+                        metric: "brokerage_balance",
+                        label: "Brokerage balance",
+                        valueLabel: money(brokerageBalance),
+                      }
+                    : {
+                        kind: "kpi",
+                        metric: "positions",
+                        label: "Positions",
+                        valueLabel: `${holdings.length}`,
+                      }
+                }
+                ariaLabel="Open details on brokerage balance"
+                className="!block !p-0 !text-left !hover:no-underline"
+              >
                 <div className="text-xs text-muted-foreground">
                   {brokerageBalance != null
                     ? "Brokerage balance"
@@ -275,14 +302,37 @@ function PortfolioBody() {
                     includes cash &amp; settlements
                   </div>
                 )}
-              </div>
-              <div>
+              </Drillable>
+              <Drillable
+                target={{
+                  kind: "kpi",
+                  metric: "institution_count",
+                  label: "Linked institutions",
+                  valueLabel: `${Object.keys(institutions).length}`,
+                }}
+                ariaLabel="Open details on linked institutions"
+                className="!block !p-0 !text-left !hover:no-underline"
+              >
                 <div className="text-xs text-muted-foreground">Institutions</div>
                 <div className="mt-1 text-2xl font-semibold tracking-tight">
                   {Object.keys(institutions).length}
                 </div>
-              </div>
-              <div>
+              </Drillable>
+              <Drillable
+                target={{
+                  kind: "kpi",
+                  metric: "largest_position_pct",
+                  label: "Largest position",
+                  valueLabel:
+                    holdings.length > 0 && totalValue > 0
+                      ? `${Math.round(
+                          (Math.max(...holdings.map((h) => h.value)) / totalValue) * 100
+                        )}%`
+                      : "—",
+                }}
+                ariaLabel="Open details on largest position"
+                className="!block !p-0 !text-left !hover:no-underline"
+              >
                 <div className="text-xs text-muted-foreground">Largest position</div>
                 <div className="mt-1 text-2xl font-semibold tracking-tight">
                   {holdings.length > 0 && totalValue > 0
@@ -291,7 +341,7 @@ function PortfolioBody() {
                       )}%`
                     : "—"}
                 </div>
-              </div>
+              </Drillable>
             </div>
           </CardContent>
         </Card>
@@ -440,9 +490,23 @@ function PortfolioBody() {
                         <td className="px-3 py-3 text-right tabular-nums">
                           {h.shares.toLocaleString("en-US", { maximumFractionDigits: 4 })}
                         </td>
-                        <td className="px-3 py-3 text-right tabular-nums">{money(h.price)}</td>
+                        <td className="px-3 py-3 text-right tabular-nums">
+                          <Drillable
+                            target={{ kind: "ticker", ticker: h.ticker }}
+                            ariaLabel={`Open ${h.ticker} ticker drill from price`}
+                            className="!p-0 !inline-block"
+                          >
+                            {money(h.price)}
+                          </Drillable>
+                        </td>
                         <td className="px-3 py-3 text-right tabular-nums font-medium">
-                          {money(h.value)}
+                          <Drillable
+                            target={{ kind: "position", holding: h }}
+                            ariaLabel={`Open ${h.ticker} position detail`}
+                            className="!p-0 !inline-block"
+                          >
+                            {money(h.value)}
+                          </Drillable>
                         </td>
                         <td className="px-3 py-3 text-xs text-muted-foreground">
                           {h.institutionName ? (

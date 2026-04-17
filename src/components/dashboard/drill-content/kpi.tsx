@@ -15,7 +15,10 @@ type Metric =
   | "hit_rate"
   | "positions"
   | "alerts_active"
-  | "cash_share";
+  | "cash_share"
+  | "brokerage_balance"
+  | "institution_count"
+  | "largest_position_pct";
 
 const COPY: Record<
   Metric,
@@ -97,6 +100,41 @@ const COPY: Record<
     action:
       "Check your broker's cash-sweep settings to make sure cash shows up as " +
       "a holding.",
+  },
+  brokerage_balance: {
+    title: "Brokerage balance",
+    method:
+      "Total balance reported by your broker — includes invested positions, " +
+      "uninvested cash, settlement balances, and pending dividends. Differs " +
+      "from positions value when there's idle cash sitting on the side.",
+    depends:
+      "SnapTrade syncs balances every night. Cash drag (balance − positions) " +
+      "shows up underneath the value when material.",
+    action: "Compare to Positions value to see your cash drag.",
+  },
+  institution_count: {
+    title: "Linked institutions",
+    method:
+      "Distinct brokerages we sync from. Two accounts at the same broker " +
+      "(taxable + IRA) count as one institution; the position table shows " +
+      "them grouped under their account labels.",
+    depends:
+      "Each connection is read-only via SnapTrade. We never initiate trades " +
+      "or move money — link as many as you want for a unified view.",
+    action: "Open Portfolio to link another account.",
+  },
+  largest_position_pct: {
+    title: "Largest position",
+    method:
+      "Single biggest holding as a % of total portfolio value. Concentration " +
+      "matters for risk: a 40%+ single position means one bad earnings " +
+      "report can take the whole portfolio with it.",
+    depends:
+      "Computed at request time from your latest synced holdings. Updates " +
+      "with each SnapTrade sync.",
+    action:
+      "If concentration > 25%, the alerts feed surfaces it as a watch item. " +
+      "Above 40% it becomes a material concentration alert.",
   },
 };
 

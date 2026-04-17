@@ -55,13 +55,18 @@ export const auth = betterAuth({
   emailVerification: {
     sendOnSignUp: requireEmailVerification,
     autoSignInAfterVerification: true,
-    // After the user clicks the link in their inbox, BetterAuth verifies
-    // the token and 302-redirects to this URL. autoSignInAfterVerification:true
-    // means they land already authed — a direct trip to /app is correct.
-    // If verification fails (expired link etc.), BetterAuth appends an
-    // ?error= query param, which /app handles via its auth check + the
-    // proxy's redirect to /sign-in.
-    callbackURL: `${baseUrl}/app`,
+    // Land users on /verify so BOTH success and failure are handled in
+    // one branded UI:
+    //   - Success: /verify reads the now-active session, shows
+    //     "You're in", and bounces to /app.
+    //   - Failure: BetterAuth appends ?error=... to /verify, which
+    //     renders an explanation + "Resend verification email" form +
+    //     a sign-in fallback.
+    //
+    // Previously the callback was /app, which redirected anonymous
+    // (failed-verification) users to /sign-in with no context — they
+    // had no clue why they couldn't get in.
+    callbackURL: `${baseUrl}/verify`,
     async sendVerificationEmail({ user, url }) {
       await sendEmail({
         to: user.email,

@@ -31,7 +31,10 @@ export type DrillTarget =
         | "hit_rate"
         | "positions"
         | "alerts_active"
-        | "cash_share";
+        | "cash_share"
+        | "brokerage_balance"
+        | "institution_count"
+        | "largest_position_pct";
       label: string;
       valueLabel: string;
     }

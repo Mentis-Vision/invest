@@ -11,9 +11,9 @@ import {
   Bell,
   Download,
   KeyRound,
-  Mail,
   Trash2,
   ExternalLink,
+  Database,
 } from "lucide-react";
 import { getHoldings } from "@/lib/client/holdings-cache";
 
@@ -170,6 +170,55 @@ export default function IntegrationsView() {
       </Section>
 
       <Section
+        title="Data sources"
+        description="Always on, maintained by us — nothing here for you to configure. Listed so you know exactly what's powering your dashboard."
+      >
+        <div className="rounded-md border border-[var(--border)] bg-[var(--card)] p-4">
+          <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
+            <Database className="h-3.5 w-3.5" />
+            Market &amp; fundamental data
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {ALWAYS_ON_DATA_SOURCES.map((s) => (
+              <span
+                key={s.name}
+                className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--background)] px-2 py-0.5 text-[11px] text-[var(--foreground)]/80"
+                title={s.purpose}
+              >
+                <CheckCircle2 className="h-3 w-3 text-[var(--buy)]" />
+                {s.name}
+              </span>
+            ))}
+          </div>
+
+          <div className="mt-4 mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
+            <Database className="h-3.5 w-3.5" />
+            AI analyst panel
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {AI_PROVIDERS.map((s) => (
+              <span
+                key={s.name}
+                className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--background)] px-2 py-0.5 text-[11px] text-[var(--foreground)]/80"
+                title={s.purpose}
+              >
+                <CheckCircle2 className="h-3 w-3 text-[var(--buy)]" />
+                {s.name}
+              </span>
+            ))}
+          </div>
+
+          <p className="mt-4 text-[11px] leading-relaxed text-[var(--muted-foreground)]">
+            Cross-verification across multiple sources is what catches data
+            errors before they reach your verdicts. When two sources agree
+            on a price you&rsquo;ll see a Verified badge on the ticker drill;
+            when they disagree we surface the drift instead of silently
+            picking one.
+          </p>
+        </div>
+      </Section>
+
+      <Section
         title="Data & privacy"
         description="Export everything we have on you, or delete your account."
       >
@@ -226,6 +275,31 @@ export default function IntegrationsView() {
     </div>
   );
 }
+
+/**
+ * The full data-source roster, surfaced as a flat list so users see the
+ * breadth without each provider getting its own configurable card. None
+ * of these need user setup — keys live in our env, not theirs.
+ *
+ * Keep this in sync with the actual integrations under src/lib/data/*.
+ * The `purpose` text becomes the hover tooltip on each chip.
+ */
+const ALWAYS_ON_DATA_SOURCES: Array<{ name: string; purpose: string }> = [
+  { name: "Yahoo Finance", purpose: "Primary equity quotes, OHLCV history, fundamentals, analyst targets" },
+  { name: "Alpha Vantage", purpose: "Cross-source verification + crypto pricing (DIGITAL_CURRENCY_DAILY) + supplementary news sentiment" },
+  { name: "CoinGecko", purpose: "Tertiary crypto pricing for tokens AV doesn't list (SPK, HYPE, newer DeFi)" },
+  { name: "SEC EDGAR", purpose: "Direct filings: 10-K, 10-Q, 8-K, insider Form 4, ownership data" },
+  { name: "Finnhub", purpose: "Per-ticker news + bullish/bearish sentiment scoring + buzz ratio" },
+  { name: "FRED (St. Louis Fed)", purpose: "Macro indicators: rates, CPI, unemployment, M2, yield curve" },
+  { name: "SnapTrade", purpose: "Read-only brokerage linking — holdings + trade activity sync" },
+  { name: "Resend", purpose: "Transactional email delivery (verification + password reset)" },
+];
+
+const AI_PROVIDERS: Array<{ name: string; purpose: string }> = [
+  { name: "Anthropic Claude", purpose: "Value-lens analyst, supervisor synthesis, deep-read primary" },
+  { name: "OpenAI GPT", purpose: "Growth-lens analyst, claim verification, quick-scan triage" },
+  { name: "Google Gemini", purpose: "Macro-lens analyst, long-horizon context modeling" },
+];
 
 function Section({
   title,

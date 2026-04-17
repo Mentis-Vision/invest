@@ -26,6 +26,8 @@ import DisclaimerModal from "@/components/disclaimer-modal";
 import OutcomePing from "@/components/outcome-ping";
 import { getHoldings } from "@/lib/client/holdings-cache";
 import ResearchStarter from "@/components/research/research-starter";
+import { WarehouseFreshness } from "@/components/warehouse-freshness";
+import { MarketPulse } from "@/components/research/market-pulse";
 
 type ModelKey = "claude" | "gpt" | "gemini";
 type ToolCallTrace = {
@@ -697,6 +699,10 @@ export default function ResearchView({
         </CardContent>
       </Card>
 
+      {/* Market pulse: today's index closes + macro headline. Lands first
+          so the page has SOMETHING valuable before any user input. */}
+      <MarketPulse />
+
       {/* Single-button flow:
           - Click "Analyze" → instant Quick scan (no mode picker)
           - On the Quick result card → "Go deeper" runs the Deep read
@@ -737,6 +743,11 @@ export default function ResearchView({
                 : mode === "quick"
                   ? "Reading the signals…"
                   : "Going deeper — full thesis with adversarial debate…"}
+            </div>
+          )}
+          {!loading && (
+            <div className="mt-3">
+              <WarehouseFreshness variant="card" />
             </div>
           )}
         </CardContent>

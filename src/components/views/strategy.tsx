@@ -17,6 +17,7 @@ import {
   History as HistoryIcon,
 } from "lucide-react";
 import { getHoldings, type Holding } from "@/lib/client/holdings-cache";
+import { WarehouseFreshness } from "@/components/warehouse-freshness";
 
 type Review = {
   holdingsCount: number;
@@ -256,6 +257,8 @@ export default function StrategyView() {
               </Button>
             </CardContent>
           </Card>
+
+          <WarehouseFreshness variant="card" />
 
           {!connected && !contextLoading && (
             <Card className="border-[var(--hold)]/30 bg-[var(--hold)]/5">
