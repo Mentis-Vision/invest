@@ -72,7 +72,12 @@ export async function refreshCryptoMarket(
       let open: number | null = daily?.open ?? null;
       let high: number | null = daily?.high ?? null;
       let low: number | null = daily?.low ?? null;
-      let volume: number | null = daily?.volume ?? null;
+      // ticker_market_daily.volume is BIGINT — crypto trades fractional
+      // units, so AV's DIGITAL_CURRENCY_DAILY returns volume as a
+      // decimal. Round to integer; for very high volume coins this loses
+      // sub-unit precision which is fine at warehouse granularity.
+      let volume: number | null =
+        daily?.volume != null ? Math.round(daily.volume) : null;
 
       // Fall back to spot price if the daily call failed or returned no data.
       if (close == null) {
