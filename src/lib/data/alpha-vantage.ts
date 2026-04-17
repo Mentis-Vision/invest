@@ -34,6 +34,34 @@ export function alphaVantageConfigured(): boolean {
 }
 
 /**
+ * Pace requests so we stay under the free tier's 5 req/min cap.
+ *
+ * AV's premium tiers raise this to 75–1200 req/min, but we observe in
+ * production that even paid keys can land on free-tier limits until the
+ * billing toggle propagates. The conservative 13-second floor (≈4.6
+ * req/min) keeps us safe in both worlds and degrades gracefully if the
+ * key gets upgraded later — we'd just be running slower than necessary,
+ * not breaking. Override via env var when premium is confirmed.
+ *
+ * The single shared `lastFetchAt` is process-global. Across separate
+ * Vercel function invocations the throttle resets, which is fine — each
+ * cron tick is isolated and the AV cap is per-key not per-process.
+ */
+const MIN_REQUEST_GAP_MS = Number(
+  process.env.ALPHA_VANTAGE_MIN_GAP_MS ?? "13000"
+);
+let lastFetchAt = 0;
+
+async function throttle(): Promise<void> {
+  const now = Date.now();
+  const wait = lastFetchAt + MIN_REQUEST_GAP_MS - now;
+  if (wait > 0) {
+    await new Promise((r) => setTimeout(r, wait));
+  }
+  lastFetchAt = Date.now();
+}
+
+/**
  * Internal fetch helper. Handles AV's two failure modes:
  *   1. Hard error: HTTP non-2xx → throws caught upstream
  *   2. Soft error: 200 OK but the JSON body has 'Note' or 'Information'
@@ -51,6 +79,7 @@ async function fetchAV<T>(
     url.searchParams.set(name, value);
   }
   url.searchParams.set("apikey", k);
+  await throttle();
   try {
     const res = await fetch(url.toString(), {
       next: { revalidate: 300 }, // 5-min Vercel fetch cache

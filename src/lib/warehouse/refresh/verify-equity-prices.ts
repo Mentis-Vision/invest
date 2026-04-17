@@ -42,16 +42,26 @@ export type VerifyEquityPricesResult = {
 /** Anything beyond this delta (%) is logged as a data-quality concern. */
 const OUT_OF_RANGE_THRESHOLD_PCT = 5;
 
+/**
+ * Cap how many tickers we verify per cron run. AV's free tier paces at
+ * ~12 s/request via the wrapper throttle, so 12 tickers ≈ 144 s — well
+ * inside the 300 s cron budget after Yahoo + crypto + sentiment +
+ * fundamentals already ran. Tickers rotate by oldest-verify-first so
+ * coverage spreads across days.
+ */
+const VERIFY_BUDGET_PER_RUN = Number(
+  process.env.AV_VERIFY_BUDGET_PER_RUN ?? "12"
+);
+
 export async function verifyEquityPrices(
   equityTickers: string[]
 ): Promise<VerifyEquityPricesResult> {
-  const attempted = equityTickers.length;
-  if (attempted === 0) {
+  if (equityTickers.length === 0) {
     return { attempted: 0, verified: 0, missing: 0, outOfRange: 0, failed: [] };
   }
   if (!alphaVantageConfigured()) {
     return {
-      attempted,
+      attempted: 0,
       verified: 0,
       missing: 0,
       outOfRange: 0,
@@ -60,12 +70,42 @@ export async function verifyEquityPrices(
     };
   }
 
+  // Pick the N tickers most overdue for verification — the ones with
+  // the oldest verify_close timestamp (or never verified). Deterministic
+  // rotation across days keeps coverage even when the universe is large.
+  let queue = equityTickers.map((t) => t.toUpperCase());
+  if (queue.length > VERIFY_BUDGET_PER_RUN) {
+    try {
+      const { rows } = await pool.query(
+        `WITH latest AS (
+           SELECT DISTINCT ON (ticker) ticker, verify_close, as_of
+             FROM "ticker_market_daily"
+            WHERE ticker = ANY($1)
+            ORDER BY ticker, captured_at DESC
+         )
+         SELECT ticker FROM latest
+          ORDER BY (verify_close IS NULL) DESC, as_of ASC NULLS FIRST
+          LIMIT $2`,
+        [queue, VERIFY_BUDGET_PER_RUN]
+      );
+      const ordered = rows.map((r) => String(r.ticker));
+      // Append any tickers absent from the warehouse (never been written
+      // → no row to ORDER from) so they still get a shot at verification.
+      const seen = new Set(ordered);
+      for (const t of queue) if (!seen.has(t)) ordered.push(t);
+      queue = ordered.slice(0, VERIFY_BUDGET_PER_RUN);
+    } catch (err) {
+      log.warn("warehouse.verify.equity", "rotation query failed", errorInfo(err));
+      queue = queue.slice(0, VERIFY_BUDGET_PER_RUN);
+    }
+  }
+
   let verified = 0;
   let missing = 0;
   let outOfRange = 0;
   const failed: VerifyEquityPricesResult["failed"] = [];
 
-  for (const rawTicker of equityTickers) {
+  for (const rawTicker of queue) {
     const ticker = rawTicker.toUpperCase();
     try {
       const av = await getEquityQuote(ticker);
@@ -137,5 +177,16 @@ export async function verifyEquityPrices(
     }
   }
 
-  return { attempted, verified, missing, outOfRange, failed };
+  return {
+    attempted: queue.length,
+    verified,
+    missing,
+    outOfRange,
+    failed,
+    ...(equityTickers.length > queue.length
+      ? {
+          reason: `rotated_subset_${queue.length}_of_${equityTickers.length}`,
+        }
+      : {}),
+  };
 }

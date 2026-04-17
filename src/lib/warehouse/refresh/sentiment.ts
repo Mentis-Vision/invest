@@ -58,8 +58,9 @@ export async function refreshSentiment(
     };
   }
 
-  // Lower concurrency cap when AV is involved — its rate limits are tighter.
-  const concurrency = avOn ? 2 : 3;
+  // AV's rate limit on the free tier is tight. Drop concurrency so we
+  // serialize when AV is the only configured source.
+  const concurrency = !fhOn && avOn ? 1 : avOn ? 2 : 3;
 
   let cursor = 0;
   async function worker() {
@@ -67,10 +68,15 @@ export async function refreshSentiment(
       const idx = cursor++;
       const ticker = tickers[idx].toUpperCase();
       try {
-        const [fh, av] = await Promise.all([
-          fhOn ? fetchFinnhub(ticker) : Promise.resolve(null),
-          avOn ? getNewsSentiment(ticker, 5).catch(() => []) : Promise.resolve([]),
-        ]);
+        const fh = fhOn ? await fetchFinnhub(ticker) : null;
+        // Only fall through to AV news when Finnhub didn't give us a
+        // useful result — AV calls are throttled at ~12s each on free
+        // tier and we burn that budget elsewhere (verify, crypto).
+        const needAv =
+          avOn && (!fh || fh.newsItems.length === 0);
+        const av = needAv
+          ? await getNewsSentiment(ticker, 5).catch(() => [])
+          : [];
         const merged = mergeSentiment(ticker, fh, av);
         await writeRow(merged);
         written++;
