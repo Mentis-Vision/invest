@@ -85,6 +85,15 @@ export async function POST(req: NextRequest) {
     }
 
     const holdings = rows as HoldingRow[];
+
+    // One batched warehouse read covers every held ticker so the data
+    // block can annotate positions with P/E + beta from ticker_market_daily
+    // without N Yahoo calls.
+    const { getTickerMarketBatch } = await import("@/lib/warehouse");
+    const marketMap = await getTickerMarketBatch(
+      holdings.map((h) => h.ticker)
+    );
+
     const marketValue = (h: HoldingRow) => {
       const lv = h.lastValue !== null && h.lastValue !== undefined ? Number(h.lastValue) : 0;
       if (lv > 0) return lv;
@@ -143,7 +152,10 @@ export async function POST(req: NextRequest) {
         const sectorLabel = h.sector
           ? ` [${h.sector}${h.industry ? ` / ${h.industry}` : ""}]`
           : " [sector: unclassified]";
-        return `- ${h.ticker}: ${shares} shares @ $${current.toFixed(2)}${costLabel} ≈ $${value.toFixed(2)} (${pct.toFixed(1)}% of portfolio)${sectorLabel}${h.accountName ? ` {${h.accountName}}` : ""}`;
+        const m = marketMap.get(h.ticker.toUpperCase());
+        const mmPe = m?.peTrailing != null ? ` P/E ${m.peTrailing.toFixed(1)}` : "";
+        const mmBeta = m?.beta != null ? ` β ${m.beta.toFixed(2)}` : "";
+        return `- ${h.ticker}: ${shares} shares @ $${current.toFixed(2)}${costLabel} ≈ $${value.toFixed(2)} (${pct.toFixed(1)}% of portfolio)${sectorLabel}${mmPe}${mmBeta}${h.accountName ? ` {${h.accountName}}` : ""}`;
       }),
       ``,
       `NOTE: Prices are last-synced from the user's brokerage via SnapTrade; they may be intraday-stale. Sector/industry data is sourced from Yahoo Finance and may be missing for non-US or niche tickers.`,
