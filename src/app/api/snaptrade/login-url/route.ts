@@ -51,6 +51,14 @@ export async function POST(_req: NextRequest) {
       userId: snaptradeUserId,
       userSecret,
       customRedirect: redirect,
+      // CRITICAL: without immediateRedirect, SnapTrade renders its own
+      // post-success screen inside the popup. Their "Done" button there
+      // sometimes silently fails to trigger the customRedirect (browser
+      // popup-close restrictions + the navigation chain). Users reported
+      // "I click Done and nothing happens; only X-ing out brings me back."
+      // immediateRedirect=true makes SnapTrade redirect to customRedirect
+      // the moment the connection completes — no extra click required.
+      immediateRedirect: true,
       connectionType: "read",
       // Allow the user to connect to any supported broker.
       // Specific broker slugs can be added later.
