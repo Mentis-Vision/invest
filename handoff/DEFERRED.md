@@ -1,8 +1,38 @@
 # ClearPath Invest — Deferred Decisions & Open Items
 
-**Last updated:** 2026-04-16
+**Last updated:** 2026-04-17
 
 Running list of everything that was tabled during the P1–P5 implementation push. Each item notes why it was deferred, what triggers unblocking it, and the rough effort needed to close.
+
+---
+
+## Alpha Vantage — open items (2026-04-17)
+
+The AV integration shipped (`feat(warehouse): integrate Alpha Vantage end-to-end`), confirmed in production:
+- BTC, LINK, ATOM now resolve to real crypto prices ($75 077, $9.52, $1.82) instead of Yahoo's equity-namesake bug ($34 Bitgreen, $3 Interlink, etc.).
+- `verify_source / verify_close / verify_delta_pct` columns populate the cross-source badge on the ticker drill panel.
+- Multi-source sentiment merges Finnhub + AV NEWS_SENTIMENT, deduped by URL.
+
+Open items / known gaps:
+
+### AV key is on the FREE tier (5 req/min, 25 req/day)
+- **Symptom in production:** Smoke testing burned ~25 calls in one afternoon → `Information` field returned for subsequent BTC/LINK calls. We unblocked by manually scrubbing the stale Yahoo rows for BTC and LINK.
+- **Mitigation in place:** Process-global throttle in `src/lib/data/alpha-vantage.ts` paces every fetch at ≥13 s (≈4.6 req/min). `verifyEquityPrices` rotates oldest-first and caps at 12 tickers per cron run. Sentiment only falls through to AV when Finnhub returned 0 items.
+- **To unblock premium throughput:** Sang upgrades the AV plan, then we lower `ALPHA_VANTAGE_MIN_GAP_MS` (env var) to ~2000 (75 req/min plan) or ~1000 (1200 req/min plan), and bump `AV_VERIFY_BUDGET_PER_RUN` accordingly. No code change needed.
+
+### SPK (and other obscure tokens not in AV's coin universe)
+- **Status:** AV returns `Error Message: Invalid API call` for SPK on both DIGITAL_CURRENCY_DAILY and CURRENCY_EXCHANGE_RATE. There's no AV path for it.
+- **Current behavior:** `refreshCryptoMarket` skips SPK (skipped count goes up); the `ticker_market_daily` row stays empty, the drill panel shows "No warehouse data yet" for SPK.
+- **Next step:** Add a tertiary fallback for crypto tickers AV doesn't have — likely CoinGecko's free `/simple/price` endpoint. ~30 min including a small wrapper module under `src/lib/data/coingecko.ts`.
+
+### Crypto warehouse miss falls back to Yahoo (still resolves BTC → Bitgreen)
+- **Status:** When the warehouse has no row for a known crypto ticker, downstream readers (research route, drill panel) call `getStockSnapshot` → `yahoo.quote()`, which is the original bug.
+- **Mitigation today:** As long as the cron runs successfully each night, every crypto ticker has a fresh AV row before user requests hit. The window of vulnerability is the day a new crypto ticker is added before the next cron firing.
+- **Proper fix (~1h):** Asset-class-aware fallback. In `getStockSnapshot`, if the ticker is classified `crypto`, route directly through AV's `getCryptoSpot` instead of Yahoo. Eliminates the regression window entirely.
+
+### Premium endpoints still gated
+- **Earnings call transcripts (`EARNINGS_CALL_TRANSCRIPT`)** and **historical options (`HISTORICAL_OPTIONS`)** are wired in `alpha-vantage.ts` (functions exist, soft-fail on null) but no consumer reads them yet. Both are premium-tier-only on AV.
+- **Trigger to wire UI:** confirm the upgraded AV plan includes them, then add a "Latest call highlights" section to the dossier and an "Options flow" panel to the drill.
 
 ---
 
