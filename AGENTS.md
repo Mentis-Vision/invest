@@ -18,6 +18,18 @@ This version has breaking changes — APIs, conventions, and file structure may 
 6. **Brokerage integration is SnapTrade, not Plaid.** (Plaid was scaffolded and removed — do not re-add it.) SnapTrade uses per-user `(userId, userSecret)`. `userSecret` is encrypted with AES-256-GCM via `SNAPTRADE_ENCRYPTION_KEY`.
 7. **Demo user:** `demo@clearpath.com` / `DemoPass2026!`. Do not delete.
 
+## Warehouse rules (ticker-keyed data layer)
+
+8. **Never add a `userId` column to any warehouse table** (`ticker_market_daily`, `ticker_fundamentals`, `ticker_events`, `ticker_sentiment_daily`, `system_aggregate_daily`). Schema enforces privacy; any PR that adds one fails review. The privacy audit query in `docs/superpowers/plans/2026-04-16-ticker-data-warehouse-plan.md` (Phase 1 Task 1.1 Step 4) is the gate.
+
+9. **`getTickerUniverse()` is the ONLY code path that reads `holding.ticker` for warehouse purposes.** Lives in `src/lib/warehouse/universe.ts` and returns `string[]` — never an object, never a userId. Callable only from the cron orchestrator `refreshWarehouse()`. If a PR introduces a second caller in an app route, it's a privacy violation.
+
+10. **App request handlers never write to warehouse tables.** Warehouse writes happen only in `/api/cron/evaluate-outcomes` (step 8) and `/api/cron/warehouse-retention`. App request handlers use typed readers from `src/lib/warehouse/*` (market, fundamentals, events, sentiment, aggregate).
+
+11. **Research DATA block must tag provenance.** `formatWarehouseEnhancedDataBlock` in `src/lib/data/yahoo.ts` prefixes warehouse-sourced sections `[WAREHOUSE]` and live-Yahoo sections `[LIVE]`. The zero-hallucination prompt rule already requires datum citation — the tag makes the source auditable both inside the prompt and in downstream `analysisJson`.
+
+12. **Warehouse is additive, not replacement.** Yahoo live `quote()` calls still happen for current price + day change (freshness). Warehouse covers slowly-changing fields: valuation multiples, technicals, fundamentals, analyst consensus. Readers return `null` on miss; all consumers must tolerate that.
+
 ## Proxy gating
 
 `src/proxy.ts` gates `/app/*` and AI API routes (`/api/research`, `/api/strategy`, `/api/portfolio-review`, `/api/snaptrade/*`, `/api/cron/*` is excluded because it uses its own Bearer auth). `matcher` excludes `_next/static`.

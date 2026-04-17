@@ -176,3 +176,19 @@ Running list of everything that was tabled during the P1–P5 implementation pus
 - DB: Neon (via `@neondatabase/serverless`). No Drizzle migrations flow yet — all migrations are hand-applied via Neon MCP.
 - Auth: BetterAuth. Social providers: Google only (for now). Email verification gated behind env flag.
 - Legal posture: informational tool, not an RIA. First-run disclaimer acknowledgment persisted. Every verdict surface shows "not investment advice" banner. Track-record surfaces show "past performance" disclaimer.
+
+---
+
+## Warehouse follow-ups (after 2026-04-16 migration)
+
+Shipped in the ticker-data-warehouse migration: 5 privacy-first tables (`ticker_market_daily`, `ticker_fundamentals`, `ticker_events`, `ticker_sentiment_daily`, `system_aggregate_daily`), cron orchestrator (`refreshWarehouse`), typed readers (`src/lib/warehouse/*`), research DATA block provenance tags, three-tier dashboard density, weekly retention cron.
+
+- **CoinGecko integration for crypto market data.** `ticker_market_daily` has a `source` column sized for `'coingecko'`. Currently crypto tickers (BTC, LINK, ATOM, SPK) match equity namesakes on Yahoo — Bitgreen/Interlink Electronics/Atomera/Spark Energy — not the actual crypto assets. Either normalize to `BTC-USD`-style before passing to Yahoo OR add a CoinGecko refresh path. CoinGecko free tier: 10-30 req/min, no key required. Effort: 3-4h.
+- **FINRA short-interest refresh.** The `short_interest_pct` column exists but is never populated. Add a bimonthly cron step. Effort: 2h.
+- **Market-daily roll-ups.** Weekly/monthly aggregation for rows older than 2 years / 5 years. Deferred until `ticker_market_daily` crosses ~1M rows or 2 years, whichever first. Current retention cron reports `marketRollupStatus: "deferred_until_scale"` so monitoring sees this.
+- **4-hour sentiment refresh during market hours.** Currently nightly only. Add when we see demand for faster news-reaction alerts. Effort: 1h cron + 1h prompt adjustments.
+- **13F institutional ownership snapshots.** Quarterly SEC filings. Interesting signal for whale positioning at low volume. New table or rows in `ticker_events` with `event_type = 'filing_13f'`. Effort: 4h.
+- **Monthly rollup for `system_aggregate_daily`.** Delete-after-2y is in place; monthly rollups for older data would preserve trend views at lower volume. Effort: 1h SQL + test.
+- **Column-level ACL on `holding.ticker`.** Spec §11 acceptance criterion 8. Separate Postgres role for cron writes with `SELECT (ticker)` privilege on `holding` and no other read access. Operational Neon setup rather than code; implement when engineering team grows beyond current trusted-operator model. Effort: 1h ops.
+- **Partial preference updates clobber other fields.** `sanitizeUpdate` in `src/lib/user-profile.ts` rebuilds the whole `preferences` object from the input; a POST with only `{preferences:{density:"standard"}}` will wipe any previously-saved `excludedSectors` / `notes` / `esgPreference`. Pre-existing issue surfaced by the density work. Fix: merge input over existing stored preferences inside `sanitizeUpdate` before writing. Effort: 30 min.
+- **Extend ticker universe to include recent `recommendation.ticker`.** Current `getTickerUniverse()` reads only `holding.ticker`. For users researching tickers they don't yet hold (including demo accounts), those tickers never get warehouse coverage. Add `UNION DISTINCT` with `SELECT ticker FROM recommendation WHERE "createdAt" > NOW() - INTERVAL '90 days'`. Privacy-safe (still returns `string[]`, no userId leaks). Effort: 15 min.
