@@ -14,12 +14,22 @@ function isStaticAsset(pathname: string): boolean {
 
 /**
  * Only /app/* and app-only API routes require auth.
- * Everything else (marketing pages, /sign-in, /sign-up, /api/auth, /api/waitlist) is public.
+ * Everything else (marketing pages, /sign-in, /sign-up, /api/auth, /api/waitlist,
+ * /api/cron/*, /snaptrade/callback) is public.
  */
 function requiresAuth(pathname: string): boolean {
   if (pathname.startsWith("/app")) return true;
   if (pathname.startsWith("/api/research")) return true;
   if (pathname.startsWith("/api/strategy")) return true;
+  if (pathname.startsWith("/api/portfolio-review")) return true;
+  // SnapTrade + alerts + user-profile + warehouse/ticker routes do their
+  // own auth.api.getSession check, but proxy-gating means 401 races reroute
+  // cleanly to /sign-in instead of leaving a signed-out user stuck on
+  // blank app views.
+  if (pathname.startsWith("/api/snaptrade")) return true;
+  if (pathname.startsWith("/api/alerts")) return true;
+  if (pathname.startsWith("/api/user/")) return true;
+  if (pathname.startsWith("/api/warehouse/")) return true;
   return false;
 }
 

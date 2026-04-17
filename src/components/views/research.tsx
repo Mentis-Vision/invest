@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -243,8 +243,12 @@ function ModelCard({ result }: { result: ModelResult }) {
   );
 }
 
-export default function ResearchView() {
-  const [query, setQuery] = useState("");
+export default function ResearchView({
+  initialTicker,
+}: {
+  initialTicker?: string | null;
+}) {
+  const [query, setQuery] = useState(initialTicker ?? "");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ResearchResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -283,6 +287,21 @@ export default function ResearchView() {
       cancelled = true;
     };
   }, []);
+
+  // Auto-run when arriving via ?ticker=... (alert-feed deep links, drill
+  // panel "Run full research" buttons). Waits until the disclaimer check
+  // has resolved so we don't race the modal.
+  const autoRanRef = useRef(false);
+  useEffect(() => {
+    if (autoRanRef.current) return;
+    if (!initialTicker) return;
+    if (!disclaimerChecked) return;
+    if (disclaimerOpen) return; // let them accept first; they'll re-submit manually
+    autoRanRef.current = true;
+    void runAnalysis(initialTicker, false);
+    // runAnalysis is referentially stable in this module scope
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialTicker, disclaimerChecked, disclaimerOpen]);
 
   // Pre-warm public-data fetches for the user's top 10 holdings on mount.
   // When they subsequently research one of those tickers, the data block

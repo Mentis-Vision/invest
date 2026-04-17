@@ -34,9 +34,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // The real strategy analysis lives at /api/portfolio-review (runs the
+  // 3-model panel over the user's full portfolio). This endpoint exists
+  // only as a stable name for legacy callers; it redirects intent by
+  // returning a structured hint rather than any advice of its own.
   return NextResponse.json({
-    advice:
-      "Portfolio strategy analysis is available once you connect a brokerage. Use the Portfolio tab to link your account via Plaid.",
-    cta: "connect_brokerage",
+    redirectTo: "/api/portfolio-review",
+    message:
+      "Use /api/portfolio-review for portfolio-level analysis. Connect a brokerage via the Portfolio tab if you haven't yet.",
+    cta: "use_portfolio_review",
   });
 }

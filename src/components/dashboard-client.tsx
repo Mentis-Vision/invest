@@ -47,11 +47,17 @@ function DashboardClientInner({
     window.history.replaceState({}, "", url.toString());
   }, [currentView]);
 
+  // ?ticker=AAPL arrives from alert-feed "Research →" deep links and the
+  // drill-panel "Run full research" buttons. Forward it to ResearchView
+  // so the analysis kicks off automatically on arrival instead of greeting
+  // the user with a blank search box.
+  const initialTicker = searchParams.get("ticker")?.trim().toUpperCase() ?? null;
+
   return (
     <AppShell user={user} currentView={currentView} onViewChange={setCurrentView}>
       {currentView === "dashboard" && <DashboardView userName={user.name} />}
       {currentView === "portfolio" && <PortfolioView />}
-      {currentView === "research" && <ResearchView />}
+      {currentView === "research" && <ResearchView initialTicker={initialTicker} />}
       {currentView === "strategy" && <StrategyView />}
       {currentView === "integrations" && <IntegrationsView />}
     </AppShell>
