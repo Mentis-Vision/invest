@@ -14,6 +14,9 @@ import MacroContext from "@/components/dashboard/macro-context";
 import LargestPosition from "@/components/dashboard/largest-position";
 import PortfolioSparkline from "@/components/dashboard/portfolio-sparkline";
 import AlertFeed from "@/components/dashboard/alert-feed";
+import TickerCard, {
+  type TickerCardDensity,
+} from "@/components/dashboard/ticker-card";
 
 type PortfolioPoint = {
   date: string;
@@ -48,6 +51,14 @@ function money(n: number): string {
   }).format(n);
 }
 
+type WarehouseBundle = {
+  market: Parameters<typeof TickerCard>[0]["market"];
+  sentiment: Parameters<typeof TickerCard>[0]["sentiment"];
+  fundamentals: Parameters<typeof TickerCard>[0]["fundamentals"];
+};
+
+const MAX_HOLDING_CARDS = 8;
+
 export default function DashboardView() {
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [totalValue, setTotalValue] = useState(0);
@@ -55,6 +66,10 @@ export default function DashboardView() {
   const [track, setTrack] = useState<TrackRecord | null>(null);
   const [macro, setMacro] = useState<Macro | null>(null);
   const [loading, setLoading] = useState(true);
+  const [density, setDensity] = useState<TickerCardDensity>("basic");
+  const [warehouseByTicker, setWarehouseByTicker] = useState<
+    Record<string, WarehouseBundle>
+  >({});
 
   useEffect(() => {
     let alive = true;
@@ -62,24 +77,78 @@ export default function DashboardView() {
       getHoldings().catch(() => null),
       fetch("/api/track-record").then((r) => r.json()).catch(() => null),
       fetch("/api/macro").then((r) => r.json()).catch(() => null),
-    ]).then(([pRaw, tRaw, mRaw]: [unknown, unknown, unknown]) => {
+      fetch("/api/user/profile").then((r) => r.json()).catch(() => null),
+    ]).then(([pRaw, tRaw, mRaw, profRaw]: [unknown, unknown, unknown, unknown]) => {
       if (!alive) return;
       const p = pRaw as {
         connected?: boolean;
         holdings?: Holding[];
         totalValue?: number;
       } | null;
+      const prof = profRaw as
+        | { profile?: { preferences?: { density?: TickerCardDensity } } }
+        | null;
       setConnected(!!p?.connected);
       setHoldings(p?.holdings ?? []);
       setTotalValue(p?.totalValue ?? 0);
       setTrack(tRaw as TrackRecord | null);
       setMacro((mRaw as { snapshot?: Macro } | null)?.snapshot ?? []);
+      const preferred = prof?.profile?.preferences?.density;
+      if (
+        preferred === "basic" ||
+        preferred === "standard" ||
+        preferred === "advanced"
+      ) {
+        setDensity(preferred);
+      }
       setLoading(false);
     });
     return () => {
       alive = false;
     };
   }, []);
+
+  // Fetch warehouse-backed per-ticker data for the top N positions so the
+  // TickerCard grid has something to render. One call per unique ticker;
+  // /api/warehouse/ticker/[ticker] is rate-limited at 120/hr.
+  useEffect(() => {
+    if (holdings.length === 0) return;
+    let alive = true;
+    const topTickers = [...new Set(holdings.map((h) => h.ticker))].slice(
+      0,
+      MAX_HOLDING_CARDS
+    );
+    Promise.all(
+      topTickers.map((t) =>
+        fetch(`/api/warehouse/ticker/${encodeURIComponent(t)}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null)
+      )
+    ).then((rows) => {
+      if (!alive) return;
+      const next: Record<string, WarehouseBundle> = {};
+      topTickers.forEach((t, i) => {
+        const row = rows[i] as
+          | {
+              market: WarehouseBundle["market"];
+              sentiment: WarehouseBundle["sentiment"];
+              fundamentals: WarehouseBundle["fundamentals"];
+            }
+          | null;
+        if (row) {
+          next[t.toUpperCase()] = {
+            market: row.market,
+            sentiment: row.sentiment,
+            fundamentals: row.fundamentals,
+          };
+        }
+      });
+      setWarehouseByTicker(next);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [holdings]);
 
   const hitRate =
     track && track.outcomes.evaluated > 0
@@ -203,6 +272,43 @@ export default function DashboardView() {
         </div>
         <HitRateGauge outcomes={track?.outcomes ?? null} loading={loading} />
       </div>
+
+      {/* Tiered holdings grid — top N positions with warehouse-backed data */}
+      {holdings.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-baseline justify-between">
+            <h3 className="text-sm font-semibold tracking-tight">
+              Your holdings
+            </h3>
+            <span className="text-[11px] text-muted-foreground">
+              Density:{" "}
+              <Link
+                href="/app/settings"
+                className="underline underline-offset-2 hover:text-foreground"
+              >
+                {density}
+              </Link>
+              {" · "}
+              {Math.min(holdings.length, MAX_HOLDING_CARDS)} of {holdings.length}
+            </span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {holdings.slice(0, MAX_HOLDING_CARDS).map((h) => {
+              const bundle = warehouseByTicker[h.ticker.toUpperCase()];
+              return (
+                <TickerCard
+                  key={h.ticker}
+                  ticker={h.ticker}
+                  market={bundle?.market ?? null}
+                  sentiment={bundle?.sentiment ?? null}
+                  fundamentals={bundle?.fundamentals ?? null}
+                  density={density}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Upcoming evaluations */}
       <UpcomingEvaluations />
