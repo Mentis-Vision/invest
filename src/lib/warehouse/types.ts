@@ -16,6 +16,7 @@ export type WarehouseSource =
   | "sec"
   | "fred"
   | "finnhub"
+  | "alpha_vantage"
   | "computed"
   | "multi";
 
@@ -68,6 +69,13 @@ export type TickerMarketRow = {
   analystCount: number | null;
   analystRating: string | null;
   shortInterestPct: number | null;
+  // Cross-source verification (Alpha Vantage GLOBAL_QUOTE).
+  // verifySource is the secondary source name; verifyClose is its closing
+  // price; verifyDeltaPct is signed (av - yahoo)/yahoo * 100. All null
+  // if AV wasn't configured or couldn't price the ticker.
+  verifySource: string | null;
+  verifyClose: number | null;
+  verifyDeltaPct: number | null;
 };
 
 export type TickerFundamentalsRow = {

@@ -111,5 +111,8 @@ function mapRow(r: Record<string, unknown>): TickerMarketRow {
     analystCount: r.analyst_count === null ? null : Number(r.analyst_count),
     analystRating: str(r.analyst_rating),
     shortInterestPct: num(r.short_interest_pct),
+    verifySource: str(r.verify_source),
+    verifyClose: num(r.verify_close),
+    verifyDeltaPct: num(r.verify_delta_pct),
   };
 }

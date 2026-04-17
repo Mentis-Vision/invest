@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, ShieldCheck, ShieldAlert } from "lucide-react";
 import {
   DrillHeader,
   DrillBody,
@@ -67,6 +67,9 @@ type WarehouseBundle = {
     analystRating: string | null;
     marketCap: number | null;
     shortInterestPct: number | null;
+    verifySource: string | null;
+    verifyClose: number | null;
+    verifyDeltaPct: number | null;
   } | null;
   fundamentals: {
     periodType: "quarterly" | "annual";
@@ -145,6 +148,16 @@ export function DrillTicker({ ticker }: { ticker: string }) {
   const changeTone =
     m?.changePct == null ? "neutral" : m.changePct > 0 ? "up" : "down";
 
+  // Cross-source verification status. "agreed" = AV ≈ Yahoo within 1%,
+  // "drift" = AV present but disagrees, "single" = no AV (Yahoo only).
+  const verifyStatus: "agreed" | "drift" | "single" = !m?.verifySource
+    ? "single"
+    : m.verifyDeltaPct == null
+      ? "single"
+      : Math.abs(m.verifyDeltaPct) <= 1
+        ? "agreed"
+        : "drift";
+
   return (
     <>
       <DrillHeader
@@ -156,8 +169,8 @@ export function DrillTicker({ ticker }: { ticker: string }) {
               <Loader2 className="h-3 w-3 animate-spin" /> loading warehouse…
             </span>
           ) : m ? (
-            <span>
-              {moneyFull(m.close)}{" "}
+            <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span>{moneyFull(m.close)}</span>
               <span
                 className={
                   changeTone === "up"
@@ -168,10 +181,28 @@ export function DrillTicker({ ticker }: { ticker: string }) {
                 }
               >
                 {pctRawSigned(m.changePct)}
-              </span>{" "}
+              </span>
               <span className="text-[10px] uppercase tracking-widest opacity-70">
                 as of {m.capturedAt}
               </span>
+              {verifyStatus === "agreed" && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full border border-[var(--buy)]/30 bg-[var(--buy)]/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-[var(--buy)]"
+                  title={`Yahoo and Alpha Vantage agree within ${Math.abs(m.verifyDeltaPct ?? 0).toFixed(2)}%`}
+                >
+                  <ShieldCheck className="h-3 w-3" />
+                  Verified · 2 sources
+                </span>
+              )}
+              {verifyStatus === "drift" && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full border border-[var(--decisive)]/30 bg-[var(--decisive)]/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-[var(--decisive)]"
+                  title={`Yahoo vs Alpha Vantage disagree by ${(m.verifyDeltaPct ?? 0).toFixed(2)}% — review price source`}
+                >
+                  <ShieldAlert className="h-3 w-3" />
+                  Source drift · {(m.verifyDeltaPct ?? 0).toFixed(1)}%
+                </span>
+              )}
             </span>
           ) : (
             "No warehouse data yet — cron hasn't seen this ticker. Check back tomorrow."
@@ -240,6 +271,35 @@ export function DrillTicker({ ticker }: { ticker: string }) {
               fetches. The detailed tables below show the source signals.
             </p>
           </section>
+        )}
+
+        {!loading && m?.verifySource && m.verifyClose != null && (
+          <DrillSection
+            label="Price sources"
+            description="cross-checked at last refresh"
+          >
+            <StatRow label="Yahoo Finance" value={moneyFull(m.close)} />
+            <StatRow
+              label="Alpha Vantage"
+              value={moneyFull(m.verifyClose)}
+              hint={
+                m.verifyDeltaPct == null
+                  ? undefined
+                  : `${m.verifyDeltaPct > 0 ? "+" : ""}${m.verifyDeltaPct.toFixed(2)}% vs Yahoo`
+              }
+              tone={
+                m.verifyDeltaPct == null
+                  ? "neutral"
+                  : Math.abs(m.verifyDeltaPct) <= 1
+                    ? "up"
+                    : "warn"
+              }
+            />
+            <p className="mt-2 text-[10px] italic text-[var(--muted-foreground)]">
+              Two independent quote feeds. Tight agreement (≤ 1%) earns the
+              Verified badge above; larger drift surfaces here for review.
+            </p>
+          </DrillSection>
         )}
 
         {!loading && m && (

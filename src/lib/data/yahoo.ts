@@ -176,6 +176,19 @@ export async function formatWarehouseEnhancedDataBlock(
   lines.push("[LIVE] PRICE (Yahoo, request time):");
   lines.push(`- Current Price: ${cur(snapshot.price)}`);
   lines.push(`- Day Change: ${cur(snapshot.change)} (${pctRaw(snapshot.changePct)})`);
+
+  // Cross-source verification — surfaces price agreement between Yahoo
+  // and Alpha Vantage. Lets the model factor data-quality into its
+  // confidence and flag mismatches when they're meaningful.
+  if (market?.verifySource && market.verifyClose != null) {
+    const dp =
+      market.verifyDeltaPct != null
+        ? `${market.verifyDeltaPct > 0 ? "+" : ""}${market.verifyDeltaPct.toFixed(2)}%`
+        : "N/A";
+    lines.push(
+      `- Verified across 2 sources (Yahoo + Alpha Vantage): AV close ${cur(market.verifyClose)}, delta ${dp}`
+    );
+  }
   lines.push("");
 
   lines.push(
