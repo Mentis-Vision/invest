@@ -21,13 +21,32 @@ export default function KpiStrip({
   dayChangePct,
   hitRatePct,
   activeAlerts,
+  loading,
 }: {
   totalValue: number;
   holdings: Holding[];
   dayChangePct: number | null;
   hitRatePct: number | null;
   activeAlerts: number | null;
+  loading?: boolean;
 }) {
+  if (loading) {
+    return (
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {[...Array(5)].map((_, i) => (
+          <div
+            key={i}
+            className="h-[88px] rounded-xl border border-[var(--border)] bg-[var(--card)] p-4"
+          >
+            <div className="h-2 w-14 animate-pulse rounded bg-[var(--secondary)]" />
+            <div className="mt-2.5 h-7 w-20 animate-pulse rounded bg-[var(--secondary)]" />
+            <div className="mt-2 h-2 w-24 animate-pulse rounded bg-[var(--secondary)]/60" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   const positionCount = holdings.length;
 
   const { cashValue, cashShare } = useMemo(() => {

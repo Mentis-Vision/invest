@@ -46,6 +46,11 @@ export default function UpcomingEvaluations() {
       .catch(() => setItems([]));
   }, []);
 
+  // Empty state: mirror AlertFeed's pattern and render nothing rather than
+  // a permanent empty card. Prevents visual real-estate being taken up by
+  // a meaningless "No evaluations scheduled." message.
+  if (items !== null && items.length === 0) return null;
+
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -60,10 +65,6 @@ export default function UpcomingEvaluations() {
       <CardContent>
         {items === null ? (
           <div className="h-20 animate-pulse rounded-md bg-muted/40" />
-        ) : items.length === 0 ? (
-          <p className="py-4 text-sm text-muted-foreground">
-            No evaluations scheduled.
-          </p>
         ) : (
           <ul className="space-y-2">
             {items.map((it) => {

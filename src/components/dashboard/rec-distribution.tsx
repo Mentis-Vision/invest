@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 /**
@@ -63,7 +64,15 @@ export default function RecDistribution({
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">Our call distribution</CardTitle>
+        <div className="flex items-baseline justify-between">
+          <CardTitle className="text-base">Our call distribution</CardTitle>
+          <Link
+            href="/app/history"
+            className="text-[11px] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            Full history →
+          </Link>
+        </div>
         <p className="text-[11px] text-muted-foreground">
           Last 30 days. We bias to HOLD when evidence is ambiguous.
         </p>

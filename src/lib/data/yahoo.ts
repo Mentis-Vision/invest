@@ -125,6 +125,7 @@ ANALYST CONSENSUS:
 import {
   getTickerMarket,
   getTickerFundamentals,
+  getTickerSentiment,
 } from "../warehouse";
 
 /**
@@ -143,9 +144,10 @@ export async function formatWarehouseEnhancedDataBlock(
   snapshot: StockSnapshot
 ): Promise<string> {
   const ticker = snapshot.symbol.toUpperCase();
-  const [market, fundamentals] = await Promise.all([
+  const [market, fundamentals, sentiment] = await Promise.all([
     getTickerMarket(ticker),
     getTickerFundamentals(ticker),
+    getTickerSentiment(ticker),
   ]);
 
   const fmt = (n: number | null | undefined, opts?: Intl.NumberFormatOptions) =>
@@ -231,6 +233,9 @@ export async function formatWarehouseEnhancedDataBlock(
     lines.push(
       `- Relative Strength vs SPY (30d): ${pctRaw(market.relStrengthSpy30d)}`
     );
+    if (market.shortInterestPct != null) {
+      lines.push(`- Short Interest: ${pct(market.shortInterestPct)}`);
+    }
   }
   lines.push("");
 
@@ -269,6 +274,34 @@ export async function formatWarehouseEnhancedDataBlock(
     lines.push(`- ROE: ${pct(fundamentals.roe)}`);
     lines.push(`- Debt / Equity: ${fmt(fundamentals.debtToEquity, { maximumFractionDigits: 2 })}`);
     lines.push(`- Free Cash Flow: ${big(fundamentals.freeCashFlow)}`);
+  }
+
+  if (sentiment && sentiment.newsCount > 0) {
+    lines.push("");
+    lines.push(
+      `[WAREHOUSE] SENTIMENT (${sentiment.newsCount} recent headlines):`
+    );
+    if (sentiment.bullishPct != null) {
+      lines.push(`- Bullish: ${pct(sentiment.bullishPct)}`);
+    }
+    if (sentiment.bearishPct != null) {
+      lines.push(`- Bearish: ${pct(sentiment.bearishPct)}`);
+    }
+    if (sentiment.buzzRatio != null) {
+      lines.push(
+        `- Buzz Ratio: ${fmt(sentiment.buzzRatio, { maximumFractionDigits: 2 })} (vs weekly avg)`
+      );
+    }
+    if (sentiment.companyNewsScore != null) {
+      lines.push(
+        `- Company News Score: ${fmt(sentiment.companyNewsScore, { maximumFractionDigits: 2 })} (-1 bearish ... +1 bullish)`
+      );
+    }
+    if (sentiment.sectorAvgScore != null) {
+      lines.push(
+        `- Sector Avg Score: ${fmt(sentiment.sectorAvgScore, { maximumFractionDigits: 2 })}`
+      );
+    }
   }
 
   return lines.join("\n");

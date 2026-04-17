@@ -64,6 +64,23 @@ type TickerTrackRecord = {
   flats30d: number;
 };
 
+type InsiderTransaction = {
+  accession: string;
+  filedOn: string;
+  filerName: string | null;
+  filerTitle: string | null;
+  isDirector: boolean;
+  isOfficer: boolean;
+  isTenPercentOwner: boolean;
+  transactionDate: string | null;
+  transactionCode: string | null;
+  acquiredDisposed: "A" | "D" | null;
+  shares: number | null;
+  pricePerShare: number | null;
+  approxDollarValue: number | null;
+  sharesOwnedAfter: number | null;
+};
+
 type InsiderAggregates = {
   ticker: string;
   windowDays: number;
@@ -76,6 +93,7 @@ type InsiderAggregates = {
   netShares: number;
   netDollarValue: number;
   lastActivityAt: string | null;
+  recent?: InsiderTransaction[];
 };
 
 type WallStreetConsensus = {
@@ -497,7 +515,9 @@ export default function ResearchView({
       <OutcomePing />
 
       <div>
-        <h2 className="text-2xl font-semibold tracking-tight">Research</h2>
+        <h2 className="font-serif text-3xl tracking-tight text-[var(--foreground)]">
+          Research
+        </h2>
         <p className="text-sm text-muted-foreground">
           Three independent AI models analyze the same verified data. Supervisor cross-checks.
           Every claim traceable to a source.
@@ -543,7 +563,9 @@ export default function ResearchView({
           {loading && (
             <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
               <Loader2 className="h-3 w-3 animate-spin" />
-              Fetching data · Running 3 models · Supervisor review... (takes ~30s)
+              {result?.cached
+                ? "Loading cached analysis…"
+                : "Fetching data · Running 3 models · Supervisor review... (takes ~30s)"}
             </div>
           )}
         </CardContent>
@@ -679,9 +701,95 @@ export default function ResearchView({
               </div>
             )}
           </CardContent>
+          {insider.recent && insider.recent.length > 0 && (
+            <CardContent className="border-t border-border/60 pt-3 pb-3">
+              <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
+                Recent Form 4 transactions
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-[11px]">
+                  <thead className="text-left text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <tr className="border-b border-border/60">
+                      <th className="py-1.5 pr-3 font-medium">Date</th>
+                      <th className="py-1.5 pr-3 font-medium">Filer</th>
+                      <th className="py-1.5 pr-3 font-medium">Code</th>
+                      <th className="py-1.5 pr-3 text-right font-medium">Shares</th>
+                      <th className="py-1.5 pr-3 text-right font-medium">@ Price</th>
+                      <th className="py-1.5 text-right font-medium">~Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {insider.recent.slice(0, 6).map((t, i) => {
+                      const code = t.transactionCode ?? "—";
+                      const isBuy = code === "P";
+                      const isSell = code === "S";
+                      const codeColor = isBuy
+                        ? "text-[var(--buy)]"
+                        : isSell
+                          ? "text-[var(--sell)]"
+                          : "text-muted-foreground";
+                      const role = t.isOfficer
+                        ? "Officer"
+                        : t.isDirector
+                          ? "Director"
+                          : t.isTenPercentOwner
+                            ? "10% Owner"
+                            : null;
+                      return (
+                        <tr
+                          key={`${t.accession}-${i}`}
+                          className="border-b border-border/40 last:border-0"
+                        >
+                          <td className="py-1.5 pr-3 font-mono tabular-nums text-muted-foreground">
+                            {t.transactionDate ?? t.filedOn.slice(0, 10)}
+                          </td>
+                          <td className="py-1.5 pr-3">
+                            <span className="font-medium">
+                              {t.filerName ?? "Unknown"}
+                            </span>
+                            {(t.filerTitle || role) && (
+                              <span className="ml-1 text-[10px] text-muted-foreground">
+                                ({t.filerTitle ?? role})
+                              </span>
+                            )}
+                          </td>
+                          <td
+                            className={`py-1.5 pr-3 font-mono font-medium ${codeColor}`}
+                          >
+                            {code}
+                            {isBuy && " buy"}
+                            {isSell && " sell"}
+                          </td>
+                          <td className="py-1.5 pr-3 text-right font-mono tabular-nums">
+                            {t.shares != null
+                              ? t.shares.toLocaleString("en-US")
+                              : "—"}
+                          </td>
+                          <td className="py-1.5 pr-3 text-right font-mono tabular-nums text-muted-foreground">
+                            {t.pricePerShare != null
+                              ? `$${t.pricePerShare.toFixed(2)}`
+                              : "—"}
+                          </td>
+                          <td className="py-1.5 text-right font-mono tabular-nums">
+                            {t.approxDollarValue != null
+                              ? `$${Math.round(
+                                  t.approxDollarValue
+                                ).toLocaleString("en-US")}`
+                              : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          )}
           <CardContent className="border-t border-border/60 pt-2 pb-3 text-[10px] text-muted-foreground">
-            Source: SEC Form 4 filings. Open-market buys are a higher-conviction
-            signal than sells (which may reflect planned diversification or tax).
+            Source: SEC Form 4 filings. P = open-market purchase, S = open-market
+            sale, M = option exercise/conversion, A = grant, F = payment-of-tax
+            in-kind. Open-market buys (P) are typically higher-signal than sells
+            (which may reflect diversification or tax planning).
           </CardContent>
         </Card>
       )}

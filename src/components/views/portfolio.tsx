@@ -51,6 +51,7 @@ function PortfolioBody() {
   const [syncing, setSyncing] = useState(false);
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [totalValue, setTotalValue] = useState(0);
+  const [brokerageBalance, setBrokerageBalance] = useState<number | null>(null);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notConfiguredMessage, setNotConfiguredMessage] = useState<string | null>(null);
@@ -66,6 +67,7 @@ function PortfolioBody() {
       }
       setHoldings(data.holdings ?? []);
       setTotalValue(data.totalValue ?? 0);
+      setBrokerageBalance(data.brokerageBalance ?? null);
       setConnected(!!data.connected);
     } catch {
       setError("Could not load holdings.");
@@ -190,7 +192,9 @@ function PortfolioBody() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight">My Portfolio</h2>
+          <h2 className="font-serif text-3xl tracking-tight text-[var(--foreground)]">
+            My Portfolio
+          </h2>
           <p className="text-sm text-muted-foreground">
             A detailed look at your current holdings — synced from your brokerage.
           </p>
@@ -224,9 +228,11 @@ function PortfolioBody() {
       )}
 
       {notConfiguredMessage && !connected && (
-        <Card>
-          <CardContent className="py-4 text-sm text-muted-foreground">
-            <span className="font-medium text-foreground">Coming soon.</span>{" "}
+        <Card className="border-[var(--hold)]/30 bg-[var(--hold)]/5">
+          <CardContent className="py-4 text-sm text-[var(--muted-foreground)]">
+            <span className="font-medium text-[var(--foreground)]">
+              Brokerage linking not available.
+            </span>{" "}
             {notConfiguredMessage}
           </CardContent>
         </Card>
@@ -240,16 +246,35 @@ function PortfolioBody() {
           <CardContent>
             <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
               <div>
-                <div className="text-xs text-muted-foreground">Total value</div>
+                <div className="text-xs text-muted-foreground">Positions value</div>
                 <div className="mt-1 text-2xl font-semibold tracking-tight">
                   {money(totalValue)}
                 </div>
+                {brokerageBalance != null && brokerageBalance > totalValue && (
+                  <div className="mt-0.5 text-[10px] text-muted-foreground">
+                    Cash drag:{" "}
+                    <span className="font-mono text-foreground/80">
+                      {money(brokerageBalance - totalValue)}
+                    </span>
+                  </div>
+                )}
               </div>
               <div>
-                <div className="text-xs text-muted-foreground">Positions</div>
-                <div className="mt-1 text-2xl font-semibold tracking-tight">
-                  {holdings.length}
+                <div className="text-xs text-muted-foreground">
+                  {brokerageBalance != null
+                    ? "Brokerage balance"
+                    : "Positions"}
                 </div>
+                <div className="mt-1 text-2xl font-semibold tracking-tight">
+                  {brokerageBalance != null
+                    ? money(brokerageBalance)
+                    : holdings.length}
+                </div>
+                {brokerageBalance != null && (
+                  <div className="mt-0.5 text-[10px] text-muted-foreground">
+                    includes cash &amp; settlements
+                  </div>
+                )}
               </div>
               <div>
                 <div className="text-xs text-muted-foreground">Institutions</div>

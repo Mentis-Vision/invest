@@ -232,10 +232,24 @@ export async function GET(_req: NextRequest) {
       ),
     ];
 
+    // Sum broker-reported balances across accounts — this is the
+    // authoritative "total in your brokerage including cash/settlements"
+    // number, whereas `totalValue` above is just positions × price.
+    // The delta is cash drag; both are useful to surface.
+    const brokerageBalance = accounts.reduce((sum, a) => {
+      const amt = Number(a.balance?.total?.amount ?? 0);
+      return sum + (Number.isFinite(amt) ? amt : 0);
+    }, 0);
+    const balanceCurrency =
+      accounts.find((a) => a.balance?.total?.currency)?.balance?.total
+        ?.currency ?? "USD";
+
     return NextResponse.json({
       connected: true,
       holdings: aggregated,
       totalValue,
+      brokerageBalance: brokerageBalance > 0 ? brokerageBalance : null,
+      balanceCurrency,
       institutions,
       accountCount: accounts.length,
     });

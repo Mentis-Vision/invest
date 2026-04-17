@@ -48,7 +48,15 @@ export default function HitRateGauge({
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">Hit rate</CardTitle>
+        <div className="flex items-baseline justify-between">
+          <CardTitle className="text-base">Hit rate</CardTitle>
+          <Link
+            href="/app/history"
+            className="text-[11px] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            See all →
+          </Link>
+        </div>
         <p className="text-[11px] text-muted-foreground">
           Wins out of evaluated outcomes.
         </p>

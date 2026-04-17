@@ -116,21 +116,31 @@ export default function PortfolioHero({
 
             <div className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1">
               {connected ? (
-                <Drillable
-                  target={{
-                    kind: "kpi",
-                    metric: "total_value",
-                    label: "Total portfolio value",
-                    valueLabel: moneyFull(totalValue),
-                  }}
-                  as="span"
-                  ariaLabel="Open details on total portfolio value"
-                  className="!hover:no-underline"
-                >
-                  <span className="font-serif font-light tracking-tight leading-[0.95] text-[clamp(44px,6vw,82px)] text-[var(--foreground)]">
-                    {loading ? "—" : moneyFull(totalValue)}
-                  </span>
-                </Drillable>
+                loading ? (
+                  // A dash at 82px reads as an error state, not loading.
+                  // Skeleton block preserves the visual weight without
+                  // the misleading "missing value" glyph.
+                  <span
+                    aria-label="Loading portfolio value"
+                    className="inline-block h-[clamp(44px,6vw,82px)] w-[min(280px,60vw)] animate-pulse rounded-lg bg-[var(--secondary)]/70"
+                  />
+                ) : (
+                  <Drillable
+                    target={{
+                      kind: "kpi",
+                      metric: "total_value",
+                      label: "Total portfolio value",
+                      valueLabel: moneyFull(totalValue),
+                    }}
+                    as="span"
+                    ariaLabel="Open details on total portfolio value"
+                    className="!hover:no-underline"
+                  >
+                    <span className="font-serif font-light tracking-tight leading-[0.95] text-[clamp(44px,6vw,82px)] text-[var(--foreground)]">
+                      {moneyFull(totalValue)}
+                    </span>
+                  </Drillable>
+                )
               ) : (
                 <span className="font-serif font-light tracking-tight leading-[0.95] text-[clamp(44px,6vw,82px)] text-[var(--muted-foreground)]">
                   Not connected

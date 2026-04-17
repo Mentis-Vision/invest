@@ -66,20 +66,33 @@ type WarehouseBundle = {
     analystCount: number | null;
     analystRating: string | null;
     marketCap: number | null;
+    shortInterestPct: number | null;
   } | null;
   fundamentals: {
     periodType: "quarterly" | "annual";
     periodEnding: string;
     revenue: number | null;
+    grossProfit: number | null;
+    operatingIncome: number | null;
     netIncome: number | null;
+    ebitda: number | null;
+    epsBasic: number | null;
+    epsDiluted: number | null;
     grossMargin: number | null;
     operatingMargin: number | null;
     netMargin: number | null;
     roe: number | null;
+    roa: number | null;
+    currentRatio: number | null;
     debtToEquity: number | null;
     freeCashFlow: number | null;
+    operatingCashFlow: number | null;
+    capex: number | null;
+    totalAssets: number | null;
+    totalLiabilities: number | null;
     totalCash: number | null;
     totalDebt: number | null;
+    sharesOutstanding: number | null;
   } | null;
   upcomingEvents: Array<{
     eventType: string;
@@ -96,6 +109,8 @@ type WarehouseBundle = {
     bullishPct: number | null;
     bearishPct: number | null;
     buzzRatio: number | null;
+    companyNewsScore: number | null;
+    sectorAvgScore: number | null;
     topHeadlines:
       | Array<{ title: string; url: string | null; publishedAt: string | null }>
       | null;
@@ -285,6 +300,24 @@ export function DrillTicker({ ticker }: { ticker: string }) {
                     : "down"
               }
             />
+            {m.shortInterestPct != null && (
+              <StatRow
+                label="Short interest"
+                value={pct(m.shortInterestPct)}
+                tone={
+                  m.shortInterestPct > 0.2
+                    ? "warn"
+                    : m.shortInterestPct > 0.1
+                      ? "neutral"
+                      : "neutral"
+                }
+                hint={
+                  m.shortInterestPct > 0.2
+                    ? "elevated"
+                    : undefined
+                }
+              />
+            )}
           </DrillSection>
         )}
 
@@ -312,15 +345,45 @@ export function DrillTicker({ ticker }: { ticker: string }) {
             description={`period ending ${f.periodEnding}`}
           >
             <StatRow label="Revenue" value={money(f.revenue)} />
+            <StatRow label="Gross profit" value={money(f.grossProfit)} />
+            <StatRow label="Operating income" value={money(f.operatingIncome)} />
             <StatRow label="Net income" value={money(f.netIncome)} />
+            <StatRow label="EBITDA" value={money(f.ebitda)} />
+            <StatRow
+              label="EPS (basic / diluted)"
+              value={`${num(f.epsBasic)} / ${num(f.epsDiluted)}`}
+            />
             <StatRow label="Gross margin" value={pct(f.grossMargin)} />
             <StatRow label="Operating margin" value={pct(f.operatingMargin)} />
             <StatRow label="Net margin" value={pct(f.netMargin)} />
             <StatRow label="ROE" value={pct(f.roe)} />
+            <StatRow label="ROA" value={pct(f.roa)} />
+            <StatRow
+              label="Current ratio"
+              value={num(f.currentRatio)}
+              hint={
+                f.currentRatio != null && f.currentRatio < 1
+                  ? "tight"
+                  : undefined
+              }
+              tone={
+                f.currentRatio != null && f.currentRatio < 1
+                  ? "warn"
+                  : "neutral"
+              }
+            />
             <StatRow label="Debt / Equity" value={num(f.debtToEquity)} />
+            <StatRow label="Operating cash flow" value={money(f.operatingCashFlow)} />
             <StatRow label="Free cash flow" value={money(f.freeCashFlow)} />
+            <StatRow label="Capex" value={money(f.capex)} />
+            <StatRow label="Total assets" value={money(f.totalAssets)} />
+            <StatRow label="Total liabilities" value={money(f.totalLiabilities)} />
             <StatRow label="Total cash" value={money(f.totalCash)} />
             <StatRow label="Total debt" value={money(f.totalDebt)} />
+            <StatRow
+              label="Shares outstanding"
+              value={money(f.sharesOutstanding, 0).replace("$", "")}
+            />
           </DrillSection>
         )}
 
@@ -414,6 +477,27 @@ export function DrillTicker({ ticker }: { ticker: string }) {
                   value={num(data.sentiment.buzzRatio)}
                   hint="vs weekly avg"
                 />
+                {data.sentiment.companyNewsScore != null && (
+                  <StatRow
+                    label="News score"
+                    value={num(data.sentiment.companyNewsScore, 2)}
+                    tone={
+                      data.sentiment.companyNewsScore > 0.1
+                        ? "up"
+                        : data.sentiment.companyNewsScore < -0.1
+                          ? "down"
+                          : "neutral"
+                    }
+                    hint="range -1 … +1"
+                  />
+                )}
+                {data.sentiment.sectorAvgScore != null && (
+                  <StatRow
+                    label="Sector avg score"
+                    value={num(data.sentiment.sectorAvgScore, 2)}
+                    hint="peer baseline"
+                  />
+                )}
               </>
             )}
             {data.sentiment.topHeadlines &&

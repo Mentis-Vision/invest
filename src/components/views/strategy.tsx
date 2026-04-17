@@ -76,7 +76,9 @@ export default function StrategyView() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-semibold tracking-tight">AI Strategy</h2>
+        <h2 className="font-serif text-3xl tracking-tight text-[var(--foreground)]">
+          AI Strategy
+        </h2>
         <p className="text-sm text-muted-foreground">
           A portfolio-level review across value, growth, and macro lenses —
           synthesized into one verdict.
@@ -208,7 +210,7 @@ export default function StrategyView() {
             </Card>
           )}
 
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
             {review.analyses.map((a) => (
               <Card key={a.model}>
                 <CardHeader className="pb-2">

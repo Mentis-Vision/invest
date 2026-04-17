@@ -14,6 +14,8 @@ export default function SignUpPage() {
   const [loading, setLoading] = useState(false);
 
   const [verificationSent, setVerificationSent] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resentAt, setResentAt] = useState<number | null>(null);
 
   async function handleSignUp(e: React.FormEvent) {
     e.preventDefault();
@@ -93,13 +95,44 @@ export default function SignUpPage() {
             We sent a verification link to <strong>{email}</strong>. Click it
             to activate your account.
           </p>
-          <p className="mt-4 text-xs text-muted-foreground">
-            Didn&rsquo;t get it? Check spam, or{" "}
-            <Link href="/sign-in" className="underline hover:text-foreground">
-              try signing in
-            </Link>{" "}
-            — we may already have verified you.
-          </p>
+          <div className="mt-4 flex flex-col gap-2">
+            <button
+              type="button"
+              disabled={resending || resentAt !== null}
+              onClick={async () => {
+                setResending(true);
+                try {
+                  await authClient.sendVerificationEmail({
+                    email,
+                    callbackURL: "/app",
+                  });
+                  setResentAt(Date.now());
+                  // Re-enable after 60s so a second retry is still possible
+                  setTimeout(() => setResentAt(null), 60_000);
+                } catch {
+                  /* swallow — button re-enables on the timer */
+                } finally {
+                  setResending(false);
+                }
+              }}
+              className="inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-accent/50 disabled:opacity-50"
+            >
+              {resending ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : resentAt !== null ? (
+                <>Sent &mdash; try again in 60s</>
+              ) : (
+                <>Resend verification email</>
+              )}
+            </button>
+            <p className="text-[11px] text-muted-foreground">
+              Or check spam, or{" "}
+              <Link href="/sign-in" className="underline hover:text-foreground">
+                try signing in
+              </Link>
+              &nbsp;&mdash; we may already have verified you.
+            </p>
+          </div>
         </div>
       ) : (
         <>

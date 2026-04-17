@@ -33,7 +33,15 @@ export type Holding = {
 export type HoldingsSnapshot = {
   connected: boolean;
   holdings: Holding[];
+  /** Sum of market value (shares × price) across all positions. */
   totalValue: number;
+  /**
+   * Broker-reported total balance across all linked accounts — includes
+   * cash, money-market, settlement balances, etc. Null if the broker
+   * didn't report it. The delta between this and totalValue is cash drag.
+   */
+  brokerageBalance?: number | null;
+  balanceCurrency?: string;
   institutions?: string[];
   accountCount?: number;
   message?: string;

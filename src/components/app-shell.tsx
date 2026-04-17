@@ -168,8 +168,11 @@ export default function AppShell({
         <div className="space-y-1 p-3">
           {/* User chip — tap opens the dropdown for more account actions. */}
           <DropdownMenu>
-            <DropdownMenuTrigger>
-              <button className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-accent/50">
+            <DropdownMenuTrigger aria-label="Account menu">
+              <button
+                aria-label="Account menu"
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-accent/50"
+              >
                 <Avatar className="h-7 w-7">
                   <AvatarFallback className="text-xs">{initials}</AvatarFallback>
                 </Avatar>
@@ -204,8 +207,13 @@ export default function AppShell({
       <div className="flex flex-1 flex-col overflow-hidden">
         <header className="flex h-14 items-center gap-3 border-b px-4 md:hidden">
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-            <SheetTrigger>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
+            <SheetTrigger aria-label="Open navigation menu">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                aria-label="Open navigation menu"
+              >
                 <Menu className="h-4 w-4" />
               </Button>
             </SheetTrigger>

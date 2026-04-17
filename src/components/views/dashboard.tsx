@@ -171,6 +171,30 @@ function DashboardBody({ userName }: { userName: string }) {
     };
   }, []);
 
+  // Re-fetch the user profile's density preference whenever the tab
+  // regains focus. Handles the common flow: user opens Settings in a
+  // new tab, changes density, comes back to the dashboard — without
+  // this effect the old density stays until a full page reload.
+  useEffect(() => {
+    function onFocus() {
+      fetch("/api/user/profile")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((prof) => {
+          const pref = prof?.profile?.preferences?.density;
+          if (
+            pref === "basic" ||
+            pref === "standard" ||
+            pref === "advanced"
+          ) {
+            setDensity(pref);
+          }
+        })
+        .catch(() => {});
+    }
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
+
   // Warehouse detail for the top N holdings — drives TickerCards + the
   // aggregate day-change computation below.
   useEffect(() => {
@@ -259,10 +283,33 @@ function DashboardBody({ userName }: { userName: string }) {
         dayChangePct={dayChangePct}
         hitRatePct={hitRatePct}
         activeAlerts={activeAlerts}
+        loading={loading}
       />
 
       {/* Overnight-changes alert feed — only renders when there are alerts. */}
       <AlertFeed />
+
+      {/* Connected but zero holdings — guide them to link or retry sync. */}
+      {!loading && connected && holdings.length === 0 && (
+        <Card className="border-[var(--hold)]/30 bg-[var(--hold)]/5">
+          <CardContent className="py-5 text-center">
+            <p className="font-serif text-base text-[var(--foreground)]">
+              Connected, but no positions are showing yet.
+            </p>
+            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+              If you just linked your brokerage, positions usually sync
+              within a minute. Otherwise, go to{" "}
+              <Link
+                href="/app?view=portfolio"
+                className="underline underline-offset-4 hover:text-[var(--foreground)]"
+              >
+                Portfolio → Refresh
+              </Link>
+              {" "}or link another account.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Allocation: donut + breakdown table. Both feed the same drill panel. */}
       {holdings.length > 0 && (
