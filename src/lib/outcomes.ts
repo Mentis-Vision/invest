@@ -1,6 +1,7 @@
 import { pool } from "./db";
 import { log, errorInfo } from "./log";
 import { default as YahooFinanceCtor } from "yahoo-finance2";
+import { getTickerMarket } from "./warehouse";
 
 const yahooFinance = new YahooFinanceCtor({
   suppressNotices: ["yahooSurvey", "ripHistorical"],
@@ -118,7 +119,31 @@ export async function evaluatePendingOutcomes(limit = 200): Promise<{
  * Returns today's price for `ticker`, using the price_snapshot cache if
  * already fetched today. Writes back to cache on miss.
  */
+/**
+ * Returns today's price for `ticker`:
+ * 1. Warehouse `ticker_market_daily.close` (populated nightly) — fastest, $0.
+ * 2. `price_snapshot` cache (captured_at = today) — per-session cache.
+ * 3. Yahoo live quote — last resort, always fresh.
+ *
+ * Writes back to price_snapshot on miss so repeated outcome evaluations
+ * on the same day don't re-hit external sources.
+ */
 export async function getOrFetchPrice(ticker: string): Promise<number | null> {
+  // 1. Warehouse — same-day coverage when the nightly cron populated this ticker
+  try {
+    const warehouse = await getTickerMarket(ticker);
+    if (warehouse?.close != null && warehouse.close > 0) {
+      return warehouse.close;
+    }
+  } catch (err) {
+    // Never let a warehouse issue block outcome eval — log + continue
+    log.warn("outcomes", "warehouse read failed, falling back", {
+      ticker,
+      ...errorInfo(err),
+    });
+  }
+
+  // 2. Existing price_snapshot cache + Yahoo fallback (unchanged logic below)
   try {
     const { rows } = await pool.query(
       `SELECT price FROM "price_snapshot"
