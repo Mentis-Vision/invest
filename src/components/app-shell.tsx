@@ -87,7 +87,11 @@ export default function AppShell({
 
   async function handleSignOut() {
     await authClient.signOut();
-    router.push("/sign-in");
+    // Full page reload — ensures the Set-Cookie: <cleared> response actually
+    // lands BEFORE any SSR-authed route tries to re-read the cookie. This is
+    // the same pattern as sign-in/page.tsx where router.push() races the
+    // cookie commit and can flash authed state.
+    window.location.href = "/sign-in";
   }
 
   function handleViewNav(view: View) {
@@ -161,7 +165,8 @@ export default function AppShell({
           <ThemeToggle />
         </div>
         <Separator />
-        <div className="p-3">
+        <div className="space-y-1 p-3">
+          {/* User chip — tap opens the dropdown for more account actions. */}
           <DropdownMenu>
             <DropdownMenuTrigger>
               <button className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-accent/50">
@@ -181,6 +186,17 @@ export default function AppShell({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {/* Explicit sign-out — always visible. The dropdown above was too
+              hidden; users reported 'there's no logout' because they didn't
+              know to click the avatar. Keep both paths so discoverability
+              doesn't depend on avatar-hover intuition. */}
+          <button
+            onClick={handleSignOut}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-xs text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            Sign out
+          </button>
         </div>
       </aside>
 

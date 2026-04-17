@@ -81,6 +81,33 @@ export default function PortfolioView() {
     };
   }, []);
 
+  // Listen for the snaptrade:connection_complete postMessage from our
+  // /snaptrade/callback landing page. Lets us refresh holdings the instant
+  // the user clicks "Done" in the SnapTrade popup instead of waiting for
+  // the 1-second popup-closed poll. Origin-checked to avoid spoofed messages.
+  useEffect(() => {
+    function onMessage(evt: MessageEvent) {
+      if (evt.origin !== window.location.origin) return;
+      const data = evt.data as { type?: string } | null;
+      if (data?.type !== "snaptrade:connection_complete") return;
+      if (popupRef.current && !popupRef.current.closed) {
+        try {
+          popupRef.current.close();
+        } catch {
+          /* opener-only close may be blocked; user can close manually */
+        }
+      }
+      if (pollingRef.current) {
+        window.clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+      loadHoldings(true);
+      fetch("/api/snaptrade/sync", { method: "POST" }).catch(() => {});
+    }
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [loadHoldings]);
+
   const startLinking = useCallback(async () => {
     setError(null);
     setLoadingToken(true);
