@@ -42,6 +42,18 @@ export const INVESTMENT_GOALS: InvestmentGoal[] = [
   "speculation",
 ];
 
+/**
+ * Three-tier dashboard density. "basic" is the default for new users —
+ * calm, a few key numbers. "advanced" shows RSI/MACD/Bollinger/full
+ * fundamentals for users who want the whole picture.
+ */
+export type DashboardDensity = "basic" | "standard" | "advanced";
+export const DASHBOARD_DENSITIES: DashboardDensity[] = [
+  "basic",
+  "standard",
+  "advanced",
+];
+
 export type UserProfile = {
   userId: string;
   riskTolerance: RiskTolerance | null;
@@ -51,6 +63,7 @@ export type UserProfile = {
     excludedSectors?: string[];
     esgPreference?: boolean;
     notes?: string;
+    density?: DashboardDensity;
   };
   disclaimerAcceptedAt: string | null;
   updatedAt: string | null;
@@ -145,6 +158,12 @@ function sanitizeUpdate(input: ProfileUpdate): ProfileUpdate {
         typeof p.esgPreference === "boolean" ? p.esgPreference : undefined,
       notes:
         typeof p.notes === "string" ? p.notes.slice(0, 500) : undefined,
+      density:
+        p.density === "basic" ||
+        p.density === "standard" ||
+        p.density === "advanced"
+          ? p.density
+          : undefined,
     };
   }
   return out;
