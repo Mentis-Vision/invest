@@ -184,7 +184,11 @@ async function upsertEvent(input: {
         input.source,
       ]
     );
-    return res.rowCount ?? 0;
+    // Use rows.length rather than rowCount: Neon's serverless driver can
+    // under-report rowCount on `ON CONFLICT DO NOTHING RETURNING id`. The
+    // returned rows array is always accurate — one element per freshly
+    // inserted row, zero when DO NOTHING fires.
+    return res.rows?.length ?? 0;
   } catch (err) {
     log.warn("warehouse.events", "upsert failed", {
       ticker: input.ticker,
