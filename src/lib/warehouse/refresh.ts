@@ -4,6 +4,7 @@ import { refreshFundamentals } from "./refresh/fundamentals";
 import { refreshEvents } from "./refresh/events";
 import { refreshSentiment } from "./refresh/sentiment";
 import { refreshAggregates } from "./refresh/aggregate";
+import { refreshDossiers } from "./refresh/dossier";
 
 export type WarehouseRefreshResult = {
   universeSize: number;
@@ -12,6 +13,7 @@ export type WarehouseRefreshResult = {
   events: Awaited<ReturnType<typeof refreshEvents>>;
   sentiment: Awaited<ReturnType<typeof refreshSentiment>>;
   aggregates: Awaited<ReturnType<typeof refreshAggregates>>;
+  dossiers: Awaited<ReturnType<typeof refreshDossiers>>;
 };
 
 /**
@@ -30,6 +32,11 @@ export async function refreshWarehouse(): Promise<WarehouseRefreshResult> {
   const sentiment = await refreshSentiment(universe);
   const aggregates = await refreshAggregates();
 
+  // Dossiers run LAST: they read the four warehouse tables we just filled
+  // and compose a heuristic (no-AI) brief per ticker. Pure-code, no
+  // external calls — effectively free.
+  const dossiers = await refreshDossiers(universe);
+
   return {
     universeSize: universe.length,
     market,
@@ -37,5 +44,6 @@ export async function refreshWarehouse(): Promise<WarehouseRefreshResult> {
     events,
     sentiment,
     aggregates,
+    dossiers,
   };
 }

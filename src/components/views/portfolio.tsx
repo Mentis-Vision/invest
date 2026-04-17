@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,21 +8,16 @@ import { Plus, Link as LinkIcon, RefreshCw, Loader2 } from "lucide-react";
 import {
   getHoldings,
   invalidateAndRefresh,
+  type Holding as CacheHolding,
 } from "@/lib/client/holdings-cache";
+import {
+  DrillProvider,
+  Drillable,
+} from "@/components/dashboard/drill-context";
+import DrillPanel from "@/components/dashboard/drill-panel";
 
-type Holding = {
-  ticker: string;
-  name: string;
-  shares: number;
-  price: number;
-  value: number;
-  costBasis: number | null;
-  institutionName: string | null;
-  accountName: string | null;
-  sector: string | null;
-  industry: string | null;
-  assetClass?: string;
-};
+// Use the shared Holding shape so drill-panel targets type-check.
+type Holding = CacheHolding;
 
 type HoldingsResponse = {
   holdings: Holding[];
@@ -42,6 +37,15 @@ function money(n: number): string {
 }
 
 export default function PortfolioView() {
+  return (
+    <DrillProvider>
+      <PortfolioBody />
+      <DrillPanel />
+    </DrillProvider>
+  );
+}
+
+function PortfolioBody() {
   const [loadingToken, setLoadingToken] = useState(false);
   const [loadingHoldings, setLoadingHoldings] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -277,33 +281,49 @@ export default function PortfolioView() {
             <div className="space-y-2">
               {sectorRows.map(([sector, value]) => {
                 const pct = (value / totalValue) * 100;
+                const bucketHoldings = holdings.filter(
+                  (h) =>
+                    (h.sector ?? "Unclassified") === sector
+                );
                 return (
-                  <div key={sector} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <span
-                        className={
-                          sector === "Unclassified"
-                            ? "text-muted-foreground"
-                            : "text-foreground"
-                        }
-                      >
-                        {sector}
-                      </span>
-                      <span className="font-mono text-muted-foreground">
-                        {money(value)} · {pct.toFixed(1)}%
-                      </span>
+                  <Drillable
+                    key={sector}
+                    target={{
+                      kind: "allocation",
+                      bucket: sector,
+                      holdings: bucketHoldings,
+                      totalValue,
+                    }}
+                    ariaLabel={`Open ${sector} sector detail`}
+                    className="!block w-full !hover:no-underline"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span
+                          className={
+                            sector === "Unclassified"
+                              ? "text-muted-foreground"
+                              : "text-foreground"
+                          }
+                        >
+                          {sector}
+                        </span>
+                        <span className="font-mono text-muted-foreground">
+                          {money(value)} · {pct.toFixed(1)}%
+                        </span>
+                      </div>
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                        <div
+                          className={`h-full ${
+                            sector === "Unclassified"
+                              ? "bg-muted-foreground/40"
+                              : "bg-[var(--buy)]/60"
+                          }`}
+                          style={{ width: `${Math.min(pct, 100)}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                      <div
-                        className={`h-full ${
-                          sector === "Unclassified"
-                            ? "bg-muted-foreground/40"
-                            : "bg-[var(--buy)]/60"
-                        }`}
-                        style={{ width: `${Math.min(pct, 100)}%` }}
-                      />
-                    </div>
-                  </div>
+                  </Drillable>
                 );
               })}
             </div>
@@ -364,16 +384,33 @@ export default function PortfolioView() {
                     .slice()
                     .sort((a, b) => b.value - a.value)
                     .map((h, i) => (
-                      <tr key={`${h.ticker}-${h.accountName}-${i}`} className="border-b last:border-0">
-                        <td className="px-3 py-3 font-mono font-medium">{h.ticker}</td>
+                      <tr
+                        key={`${h.ticker}-${h.accountName}-${i}`}
+                        className="border-b last:border-0"
+                      >
+                        <td className="px-3 py-3 font-mono font-medium">
+                          <Drillable
+                            target={{ kind: "position", holding: h }}
+                            ariaLabel={`Open ${h.ticker} position detail`}
+                            className="!p-0"
+                          >
+                            {h.ticker}
+                          </Drillable>
+                        </td>
                         <td className="px-3 py-3 text-muted-foreground">
-                          <div>{h.name}</div>
-                          {h.sector && (
-                            <div className="mt-0.5 text-[10px] text-muted-foreground/70">
-                              {h.sector}
-                              {h.industry ? ` · ${h.industry}` : ""}
-                            </div>
-                          )}
+                          <Drillable
+                            target={{ kind: "ticker", ticker: h.ticker }}
+                            ariaLabel={`Open ${h.ticker} warehouse detail`}
+                            className="!block !p-0 !hover:no-underline"
+                          >
+                            <div>{h.name}</div>
+                            {h.sector && (
+                              <div className="mt-0.5 text-[10px] text-muted-foreground/70">
+                                {h.sector}
+                                {h.industry ? ` · ${h.industry}` : ""}
+                              </div>
+                            )}
+                          </Drillable>
                         </td>
                         <td className="px-3 py-3 text-right tabular-nums">
                           {h.shares.toLocaleString("en-US", { maximumFractionDigits: 4 })}

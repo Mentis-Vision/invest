@@ -9,7 +9,25 @@ import {
   StatRow,
   DrillFooterLink,
 } from "./panel-shell";
-import { money, moneyFull, pct, pctRawSigned, num } from "../format";
+import { money, moneyFull, pct, pctRawSigned, num, freshness } from "../format";
+
+type Dossier = {
+  capturedAt: string;
+  asOf: string;
+  headline: string;
+  tone: "steady" | "watch" | "inspect" | "concern";
+  signals: Array<{
+    tone: "up" | "down" | "neutral" | "watch";
+    text: string;
+  }>;
+  narrative: string;
+  sourceSummary: {
+    hasMarket: boolean;
+    hasFundamentals: boolean;
+    eventCount: number;
+    sentimentCoverage: "finnhub" | "none";
+  };
+};
 
 /**
  * Drill detail for a single ticker. Fetches the warehouse bundle
@@ -20,6 +38,7 @@ import { money, moneyFull, pct, pctRawSigned, num } from "../format";
 
 type WarehouseBundle = {
   ticker: string;
+  dossier: Dossier | null;
   market: {
     close: number | null;
     changePct: number | null;
@@ -159,6 +178,55 @@ export function DrillTicker({ ticker }: { ticker: string }) {
         }
       />
       <DrillBody>
+        {!loading && data?.dossier && (
+          <section className="rounded-lg border border-[var(--border)] bg-[var(--secondary)]/50 p-4">
+            <div className="mb-2 flex items-baseline justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span
+                  className={`inline-flex h-2 w-2 rounded-full ${toneDot(data.dossier.tone)}`}
+                  aria-hidden
+                />
+                <span className="text-[10px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
+                  Overnight brief
+                </span>
+              </div>
+              <span className="text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
+                Fresh · {freshness(data.dossier.asOf)}
+              </span>
+            </div>
+            <p className="font-serif text-lg leading-snug text-[var(--foreground)]">
+              {data.dossier.headline}
+            </p>
+            {data.dossier.signals.length > 0 && (
+              <ul className="mt-3 space-y-1.5">
+                {data.dossier.signals.map((s, i) => (
+                  <li
+                    key={i}
+                    className="flex items-start gap-2 text-sm leading-relaxed"
+                  >
+                    <span
+                      className={`mt-1.5 inline-flex h-1.5 w-1.5 shrink-0 rounded-full ${signalDot(s.tone)}`}
+                      aria-hidden
+                    />
+                    <span className="text-[var(--foreground)]/90">
+                      {s.text}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {data.dossier.narrative && (
+              <div className="mt-3 whitespace-pre-line text-xs leading-relaxed text-[var(--muted-foreground)] border-t border-[var(--border)] pt-3">
+                {data.dossier.narrative}
+              </div>
+            )}
+            <p className="mt-3 text-[10px] italic text-[var(--muted-foreground)]">
+              Generated overnight from warehouse data — no AI, no external
+              fetches. The detailed tables below show the source signals.
+            </p>
+          </section>
+        )}
+
         {!loading && m && (
           <DrillSection
             label="Valuation"
@@ -382,6 +450,32 @@ export function DrillTicker({ ticker }: { ticker: string }) {
       </DrillBody>
     </>
   );
+}
+
+function toneDot(t: "steady" | "watch" | "inspect" | "concern"): string {
+  switch (t) {
+    case "steady":
+      return "bg-[var(--buy)]";
+    case "concern":
+      return "bg-[var(--sell)]";
+    case "inspect":
+      return "bg-[var(--decisive)]";
+    default:
+      return "bg-[var(--hold)]";
+  }
+}
+
+function signalDot(t: "up" | "down" | "neutral" | "watch"): string {
+  switch (t) {
+    case "up":
+      return "bg-[var(--buy)]";
+    case "down":
+      return "bg-[var(--sell)]";
+    case "watch":
+      return "bg-[var(--decisive)]";
+    default:
+      return "bg-[var(--muted-foreground)]/50";
+  }
 }
 
 function humanEventType(t: string): string {

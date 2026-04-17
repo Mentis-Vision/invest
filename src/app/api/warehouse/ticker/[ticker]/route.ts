@@ -7,6 +7,7 @@ import {
   getUpcomingEvents,
   getRecentEvents,
   getTickerSentiment,
+  getTickerDossier,
 } from "@/lib/warehouse";
 import { checkRateLimit, RULES } from "@/lib/rate-limit";
 import { log, errorInfo } from "@/lib/log";
@@ -49,15 +50,18 @@ export async function GET(
   }
 
   try {
-    const [market, fundamentals, upcoming, recent, sentiment] = await Promise.all([
-      getTickerMarket(ticker),
-      getTickerFundamentals(ticker),
-      getUpcomingEvents(ticker, { windowDays: 60 }),
-      getRecentEvents(ticker, { windowDays: 90 }),
-      getTickerSentiment(ticker),
-    ]);
+    const [market, fundamentals, upcoming, recent, sentiment, dossier] =
+      await Promise.all([
+        getTickerMarket(ticker),
+        getTickerFundamentals(ticker),
+        getUpcomingEvents(ticker, { windowDays: 60 }),
+        getRecentEvents(ticker, { windowDays: 90 }),
+        getTickerSentiment(ticker),
+        getTickerDossier(ticker),
+      ]);
     return NextResponse.json({
       ticker,
+      dossier,
       market,
       fundamentals,
       upcomingEvents: upcoming,

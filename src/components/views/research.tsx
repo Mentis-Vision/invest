@@ -25,6 +25,7 @@ import type { StockSnapshot } from "@/lib/data/yahoo";
 import DisclaimerModal from "@/components/disclaimer-modal";
 import OutcomePing from "@/components/outcome-ping";
 import { getHoldings } from "@/lib/client/holdings-cache";
+import ResearchStarter from "@/components/research/research-starter";
 
 type ModelKey = "claude" | "gpt" | "gemini";
 type ToolCallTrace = {
@@ -536,6 +537,19 @@ export default function ResearchView() {
             <div className="text-sm text-red-300/90">{error}</div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Editorial empty-state: rich context so the page is never blank.
+          Holdings chips · earnings this week · recent filings · recent queries
+          · trending. Chip click kicks runAnalysis directly. */}
+      {!loading && !result && (
+        <ResearchStarter
+          onPick={(ticker) => {
+            const t = ticker.trim().toUpperCase();
+            setQuery(t);
+            runAnalysis(t, false);
+          }}
+        />
       )}
 
       {trackRecord && trackRecord.total > 0 && (
