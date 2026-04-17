@@ -27,11 +27,10 @@ const tiers: Tier[] = [
     price: "Free",
     priceSub: "during private beta",
     features: [
-      "200 Quick Scans per month",
-      "20 Standard research runs",
-      "5 Full Panel deep dives",
-      "All 12 data sources",
-      "Overnight portfolio briefs ($0 cost)",
+      "A few hundred quick reads per month",
+      "A handful of deep reads + panel consensus each month",
+      "Overnight portfolio brief on every holding",
+      "All data sources",
       "Email support",
     ],
     ctaLabel: "Request access",
@@ -44,9 +43,9 @@ const tiers: Tier[] = [
     priceSub: "per month",
     accent: "primary",
     features: [
-      "3,000 Quick Scans per month",
-      "200 Standard research runs",
-      "50 Full Panel deep dives",
+      "Thousands of quick reads per month",
+      "Hundreds of deep reads",
+      "Dozens of panel consensus reports",
       "Overnight brief on every holding",
       "Portfolio sync + alerts",
       "Priority support",
@@ -61,12 +60,11 @@ const tiers: Tier[] = [
     priceSub: "per month",
     accent: "secondary",
     features: [
-      "10,000 Quick Scans per month",
-      "800 Standard research runs",
-      "200 Full Panel deep dives",
       "Everything in Individual",
+      "4× the research headroom",
       "Weekly portfolio review (auto-generated)",
       "Event-triggered alerts on holdings",
+      "Priority routing on panel consensus",
     ],
     ctaLabel: "Join Active waitlist",
     ctaKind: "active",
@@ -78,7 +76,7 @@ const tiers: Tier[] = [
     priceSub: "per month",
     features: [
       "Up to 50 client portfolios",
-      "Uncapped research across all products",
+      "Effectively uncapped research",
       "White-label research briefs",
       "Compliance-friendly audit log",
       "API access",
@@ -119,19 +117,19 @@ export default function Pricing() {
           <div className="grid gap-6 md:grid-cols-3">
             {[
               {
-                label: "Quick Scan",
-                price: "~$0.004 / scan",
-                desc: "One model, one pass. 1-line verdict + 3 signals + primary risk. For when you want to scan 30 tickers this afternoon.",
+                label: "Quick read",
+                tagline: "Triage candidates",
+                desc: "A fast, honest read: headline verdict, three signals driving it, the single biggest risk. Built for scanning many tickers in an afternoon.",
               },
               {
-                label: "Standard",
-                price: "~$0.06 / run",
-                desc: "One top-tier analyst, full thesis, tool use. When a Quick Scan looked interesting and you want a real read before committing.",
+                label: "Deep read",
+                tagline: "Commit to a thesis",
+                desc: "One lens applied with full rigor and tool use. Gives you a real thesis — with sources — before you put capital to work.",
               },
               {
-                label: "Full Panel",
-                price: "~$0.21 / run",
-                desc: "Three independent models with distinct lenses + supervisor cross-check. For the few finalists you're about to buy or sell.",
+                label: "Panel",
+                tagline: "Decide with conviction",
+                desc: "Three lenses cross-examine each other — Value, Growth, Macro. Disagreement is surfaced, not hidden. For decisions you'll act on.",
               },
             ].map((p) => (
               <div
@@ -139,7 +137,7 @@ export default function Pricing() {
                 className="rounded-xl border border-border bg-card p-6"
               >
                 <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
-                  {p.price}
+                  {p.tagline}
                 </div>
                 <h3 className="mt-1 font-heading text-[22px] tracking-tight">
                   {p.label}
@@ -221,9 +219,8 @@ export default function Pricing() {
           </div>
 
           <p className="mt-10 text-center text-[13px] text-muted-foreground">
-            Dollar-cap sizing: Each tier has a fixed monthly AI budget — you
-            can spend it all on Quick Scans, all on Full Panels, or any mix.
-            Your rate at signup is locked for 12 months.
+            Your rate at signup is locked for 12 months. You can switch tiers
+            up or down any time — we prorate.
           </p>
         </div>
       </section>
@@ -237,16 +234,16 @@ export default function Pricing() {
           <div className="space-y-8">
             {[
               {
-                q: "Why three research products?",
-                a: "Different questions deserve different depth. Scanning 50 candidates needs a fast triage read; committing capital to a finalist deserves a panel consensus. Charging the same per-analysis cost for every one of those would force you to spend $0.21 to answer a $0.004 question — that's why you get three products with three price points. Same verified data underneath all three.",
+                q: "Why three depths of research?",
+                a: "Different questions deserve different depth. Scanning 50 candidates needs a fast triage read; committing capital to a finalist deserves a full-panel consensus. Asking both with the same tool would either be wasteful or shallow. You get three depths; we route the right one for the context automatically, but you can always override.",
               },
               {
                 q: "Is this investment advice?",
                 a: "No. ClearPath is an informational research tool. We don't give personalized financial advice, and nothing we produce should be interpreted as such. For advice specific to your situation, consult a licensed advisor.",
               },
               {
-                q: "How is this different from ChatGPT?",
-                a: "ChatGPT produces a single answer from stale training data with no source citations. ClearPath pulls live data from 12+ authoritative sources, runs it through up to three independent reasoning engines, cross-checks every claim against the verified data, and shows you any disagreements. Every cited number is traceable to its source.",
+                q: "How is this different from a general chatbot?",
+                a: "Chatbots produce a single answer from stale training data with no source citations. ClearPath pulls live data from 12+ authoritative sources, applies three independent investment lenses (value, growth, macro) to the same verified facts, surfaces disagreement between them when it exists, and cites every claim back to its primary source. You see the evidence, not just the conclusion.",
               },
               {
                 q: "Can I use ClearPath with my existing brokerage?",

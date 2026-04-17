@@ -290,15 +290,15 @@ export default function RecommendationClient({
                 <div className="mb-1.5 font-medium">{d.topic}</div>
                 <div className="grid gap-1 text-muted-foreground">
                   <div>
-                    <span className="font-mono text-[var(--decisive)]">Claude (Value):</span>{" "}
+                    <span className="font-mono text-[var(--decisive)]">Value:</span>{" "}
                     {d.claudeView}
                   </div>
                   <div>
-                    <span className="font-mono text-[var(--buy)]">GPT (Growth):</span>{" "}
+                    <span className="font-mono text-[var(--buy)]">Growth:</span>{" "}
                     {d.gptView}
                   </div>
                   <div>
-                    <span className="font-mono text-[var(--hold)]">Gemini (Macro):</span>{" "}
+                    <span className="font-mono text-[var(--hold)]">Macro:</span>{" "}
                     {d.geminiView}
                   </div>
                 </div>
@@ -337,7 +337,7 @@ export default function RecommendationClient({
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <span className="font-mono text-xs">
-                      {a.model.toUpperCase()} · {LENS[a.model] ?? ""}
+                      {LENS[a.model] ?? a.model.toUpperCase()} lens
                     </span>
                     {a.status === "ok" && a.output ? (
                       <Badge

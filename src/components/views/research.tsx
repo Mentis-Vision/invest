@@ -167,9 +167,12 @@ const MODEL_META: Record<
   ModelKey,
   { label: string; lens: string; color: string }
 > = {
-  claude: { label: "Claude", lens: "Value", color: "text-[var(--decisive)]" },
-  gpt: { label: "GPT", lens: "Growth", color: "text-[var(--buy)]" },
-  gemini: { label: "Gemini", lens: "Macro", color: "text-[var(--hold)]" },
+  // User-facing labels map to investment-lens framing, NOT the underlying
+  // model brand. We keep the keys (claude/gpt/gemini) because the API uses
+  // them internally, but the UI surfaces the lens name.
+  claude: { label: "Value", lens: "Graham-Dodd discipline", color: "text-[var(--decisive)]" },
+  gpt: { label: "Growth", lens: "TAM + compounding", color: "text-[var(--buy)]" },
+  gemini: { label: "Macro", lens: "Regime + contrarian", color: "text-[var(--hold)]" },
 };
 
 function recColor(rec: string) {
@@ -295,11 +298,21 @@ export default function ResearchView({
   const [query, setQuery] = useState(initialTicker ?? "");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ResearchResponse | null>(null);
+  // Default depth is "quick" — cheap, fast, never leaves the user waiting.
+  // Smart-routing in handleSearch may upgrade to "full" based on context
+  // (e.g. user already holds the ticker and has prior research on it).
+  // Users can manually override via the "Adjust depth" toggle below.
   const [mode, setMode] = useState<"quick" | "standard" | "full">("quick");
+  const [showDepthPicker, setShowDepthPicker] = useState(false);
   const [quickResult, setQuickResult] = useState<QuickScanResponse | null>(null);
   const [standardResult, setStandardResult] = useState<StandardResponse | null>(
     null
   );
+  // Context for smart-routing. Filled once on mount from holdings + recent
+  // research history. Empty arrays are fine; routing falls back to "quick"
+  // (safe default) if the data isn't loaded yet.
+  const [userHoldings, setUserHoldings] = useState<string[]>([]);
+  const [recentlyResearched, setRecentlyResearched] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [disclaimerOpen, setDisclaimerOpen] = useState(false);
   const [disclaimerChecked, setDisclaimerChecked] = useState(false);
@@ -357,13 +370,28 @@ export default function ResearchView({
   // assembly is ~instant instead of ~3–6s of upstream HTTP.
   // Safe by construction: server-side endpoint is auth-gated, rate-limited,
   // and never calls any AI models.
+  // Also captures userHoldings + recentlyResearched for smart-routing —
+  // on submit we decide quick vs deep based on whether the user already
+  // holds the ticker and whether they've researched it before.
   useEffect(() => {
     let cancelled = false;
     const t = setTimeout(async () => {
       try {
-        const snap = await getHoldings();
-        if (cancelled || !snap.connected || !snap.holdings.length) return;
-        const topTickers = snap.holdings
+        const [snap, starterRes] = await Promise.all([
+          getHoldings().catch(() => null),
+          fetch("/api/research/starter")
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null),
+        ]);
+        if (cancelled) return;
+        const heldTickers = (snap?.holdings ?? []).map((h) =>
+          h.ticker.toUpperCase()
+        );
+        setUserHoldings(heldTickers);
+        const recent = (starterRes?.recent ?? []) as Array<{ ticker: string }>;
+        setRecentlyResearched(recent.map((r) => r.ticker.toUpperCase()));
+
+        const topTickers = (snap?.holdings ?? [])
           .slice()
           .sort((a, b) => b.value - a.value)
           .slice(0, 10)
@@ -377,7 +405,7 @@ export default function ResearchView({
       } catch {
         /* silent — pre-warm is a best-effort perf optimization */
       }
-    }, 300); // small delay so the tab transition renders first
+    }, 300);
     return () => {
       cancelled = true;
       clearTimeout(t);
@@ -386,7 +414,47 @@ export default function ResearchView({
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
-    await runAnalysis(query.trim().toUpperCase(), false);
+    const t = query.trim().toUpperCase();
+    if (!t) return;
+    // Smart-routing: if the user already holds this ticker AND the user
+    // has explicit prior research on it, upgrade to Panel depth by
+    // default — they're more likely to be making a decision rather than
+    // exploring. For unknown/unheld tickers Quick is the right default
+    // (exploration). Users can still override via "Adjust depth".
+    let autoMode = mode;
+    if (!showDepthPicker) {
+      const holds = userHoldings.some(
+        (h) => h.toUpperCase() === t
+      );
+      const hasPriorResearch = recentlyResearched.includes(t);
+      if (holds && hasPriorResearch) {
+        autoMode = "full";
+      } else if (holds) {
+        autoMode = "standard";
+      } else {
+        autoMode = "quick";
+      }
+      if (autoMode !== mode) setMode(autoMode);
+    }
+    await runAnalysisWithMode(t, false, autoMode);
+  }
+
+  async function runAnalysisWithMode(
+    ticker: string,
+    force: boolean,
+    explicitMode: "quick" | "standard" | "full"
+  ) {
+    if (explicitMode === "quick") return runQuickScan(ticker);
+    if (explicitMode === "standard") return runStandard(ticker);
+    return runAnalysis(ticker, force);
+  }
+
+  function modeCopy(m: "quick" | "standard" | "full"): string {
+    if (m === "quick")
+      return "Quick read — headline verdict in a few seconds.";
+    if (m === "standard")
+      return "Deep read — one lens, full thesis with sources.";
+    return "Panel — three lenses cross-examine, for decisions you'll act on.";
   }
 
   async function runAnalysis(ticker: string, force: boolean) {
@@ -615,8 +683,9 @@ export default function ResearchView({
           Research
         </h2>
         <p className="text-sm text-muted-foreground">
-          Three independent AI models analyze the same verified data. Supervisor cross-checks.
-          Every claim traceable to a source.
+          Three independent investment lenses — Value, Growth, Macro — apply
+          their discipline to the same verified data. Disagreement between
+          them is surfaced, not hidden. Every claim traceable to its source.
         </p>
       </div>
 
@@ -632,62 +701,69 @@ export default function ResearchView({
         </CardContent>
       </Card>
 
-      {/* Mode switcher — three research products at three cost points.
-          Quick Scan default: fast triage read, ~$0.004 / run. Standard:
-          single top-tier lens with tool use, ~$0.06. Full Panel: three
-          models + supervisor, ~$0.21. All three count against the same
-          monthly AI budget; the tier cap is a dollar ceiling, not a
-          per-product quota. */}
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        {(
-          [
-            {
-              value: "quick" as const,
-              label: "Quick Scan",
-              cost: "~$0.004",
-              desc: "1-line verdict + 3 signals. Ideal for triaging 30-50 candidates.",
-            },
-            {
-              value: "standard" as const,
-              label: "Standard",
-              cost: "~$0.06",
-              desc: "Full thesis from one top-tier lens with tool use. Deep read, single opinion.",
-            },
-            {
-              value: "full" as const,
-              label: "Full Panel",
-              cost: "~$0.21",
-              desc: "Three models + supervisor cross-verify. Use for high-conviction decisions.",
-            },
-          ] as const
-        ).map((opt) => {
-          const active = mode === opt.value;
-          return (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => setMode(opt.value)}
-              disabled={loading}
-              className={`rounded-lg border p-3 text-left transition-all ${
-                active
-                  ? "border-[var(--buy)]/50 bg-[var(--buy)]/5"
-                  : "border-[var(--border)] bg-[var(--card)] hover:border-[var(--foreground)]/30"
-              } disabled:opacity-60`}
-            >
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="text-sm font-medium text-[var(--foreground)]">
-                  {opt.label}
-                </span>
-                <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
-                  {opt.cost}
-                </span>
-              </div>
-              <p className="mt-1 text-[11px] leading-snug text-[var(--muted-foreground)]">
-                {opt.desc}
-              </p>
-            </button>
-          );
-        })}
+      {/* Depth switcher — hidden by default behind "Adjust depth".
+          Auto-routing picks the right mode based on context so users
+          don't have to think about it (and in practice would always
+          pick the most expensive option if asked). Override is still
+          available for users who want it, but it's a secondary affordance. */}
+      <div>
+        <div className="flex items-baseline justify-between">
+          <p className="text-[11px] text-[var(--muted-foreground)]">
+            {modeCopy(mode)}
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowDepthPicker((s) => !s)}
+            className="text-[11px] text-[var(--muted-foreground)] underline underline-offset-4 hover:text-[var(--foreground)]"
+          >
+            {showDepthPicker ? "Hide depth options" : "Adjust depth"}
+          </button>
+        </div>
+        {showDepthPicker && (
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {(
+              [
+                {
+                  value: "quick" as const,
+                  label: "Quick read",
+                  desc: "Fast triage — a headline verdict and the three signals driving it.",
+                },
+                {
+                  value: "standard" as const,
+                  label: "Deep read",
+                  desc: "One lens applied with full rigor. A real thesis with sources.",
+                },
+                {
+                  value: "full" as const,
+                  label: "Panel",
+                  desc: "Three lenses cross-examine each other. For decisions you'll act on.",
+                },
+              ] as const
+            ).map((opt) => {
+              const active = mode === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setMode(opt.value)}
+                  disabled={loading}
+                  className={`rounded-lg border p-3 text-left transition-all ${
+                    active
+                      ? "border-[var(--buy)]/50 bg-[var(--buy)]/5"
+                      : "border-[var(--border)] bg-[var(--card)] hover:border-[var(--foreground)]/30"
+                  } disabled:opacity-60`}
+                >
+                  <div className="text-sm font-medium text-[var(--foreground)]">
+                    {opt.label}
+                  </div>
+                  <p className="mt-1 text-[11px] leading-snug text-[var(--muted-foreground)]">
+                    {opt.desc}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <Card>
@@ -707,18 +783,10 @@ export default function ResearchView({
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {mode === "quick"
-                    ? "Scanning"
-                    : mode === "standard"
-                      ? "Analyzing"
-                      : "Running panel"}
+                  Analyzing
                 </>
-              ) : mode === "quick" ? (
-                "Quick scan"
-              ) : mode === "standard" ? (
-                "Standard research"
               ) : (
-                "Run full panel"
+                "Analyze"
               )}
             </Button>
           </form>
@@ -728,10 +796,10 @@ export default function ResearchView({
               {result?.cached
                 ? "Loading cached analysis…"
                 : mode === "quick"
-                  ? "Quick scan · single model · ~2 seconds"
+                  ? "Reading the signals…"
                   : mode === "standard"
-                    ? "Single-lens deep read · ~15-30 seconds"
-                    : "Fetching data · Running 3 models · Supervisor review... (takes ~30s)"}
+                    ? "Applying the value lens…"
+                    : "Cross-examining across three lenses…"}
             </div>
           )}
         </CardContent>
@@ -756,7 +824,7 @@ export default function ResearchView({
               <CardTitle className="font-serif text-2xl tracking-tight">
                 {quickResult.ticker}
                 <span className="ml-3 text-[11px] font-sans uppercase tracking-widest text-[var(--muted-foreground)]">
-                  Quick scan
+                  Quick read
                 </span>
               </CardTitle>
               <Badge
@@ -808,35 +876,29 @@ export default function ResearchView({
               </div>
             )}
 
-            <div className="flex items-center justify-between border-t border-[var(--border)] pt-3">
-              <div className="font-mono text-[10px] text-[var(--muted-foreground)]">
-                {quickResult.tokensUsed.toLocaleString("en-US")} tokens · $
-                {(quickResult.costCents / 100).toFixed(3)}
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setMode("standard");
-                    void runStandard(quickResult.ticker);
-                  }}
-                  disabled={loading}
-                >
-                  Upgrade to Standard
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    setMode("full");
-                    setQuickResult(null);
-                    void runAnalysis(quickResult.ticker, false);
-                  }}
-                  disabled={loading}
-                >
-                  Run full panel
-                </Button>
-              </div>
+            <div className="flex items-center justify-end gap-2 border-t border-[var(--border)] pt-3">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setMode("standard");
+                  void runStandard(quickResult.ticker);
+                }}
+                disabled={loading}
+              >
+                Go deeper
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setMode("full");
+                  setQuickResult(null);
+                  void runAnalysis(quickResult.ticker, false);
+                }}
+                disabled={loading}
+              >
+                Run panel
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -851,7 +913,13 @@ export default function ResearchView({
               <CardTitle className="font-serif text-2xl tracking-tight">
                 {standardResult.ticker}
                 <span className="ml-3 text-[11px] font-sans uppercase tracking-widest text-[var(--muted-foreground)]">
-                  Standard · {standardResult.lens} lens
+                  Deep read ·{" "}
+                  {standardResult.lens === "claude"
+                    ? "Value"
+                    : standardResult.lens === "gpt"
+                      ? "Growth"
+                      : "Macro"}{" "}
+                  lens
                 </span>
               </CardTitle>
               {standardResult.analysis.status === "ok" &&
@@ -926,10 +994,7 @@ export default function ResearchView({
               </>
             )}
 
-            <div className="flex items-center justify-between border-t border-[var(--border)] pt-3">
-              <div className="font-mono text-[10px] text-[var(--muted-foreground)]">
-                {standardResult.tokensUsed.toLocaleString("en-US")} tokens
-              </div>
+            <div className="flex items-center justify-end border-t border-[var(--border)] pt-3">
               <Button
                 size="sm"
                 onClick={() => {
@@ -939,7 +1004,7 @@ export default function ResearchView({
                 }}
                 disabled={loading}
               >
-                Run full panel
+                Run panel
               </Button>
             </div>
           </CardContent>
@@ -1437,13 +1502,16 @@ export default function ResearchView({
                         <div className="mb-1.5 font-medium">{d.topic}</div>
                         <div className="grid gap-1.5 text-muted-foreground">
                           <div>
-                            <span className="font-mono text-orange-400">Claude:</span> {d.claudeView}
+                            <span className="font-mono text-[var(--decisive)]">Value:</span>{" "}
+                            {d.claudeView}
                           </div>
                           <div>
-                            <span className="font-mono text-emerald-400">GPT:</span> {d.gptView}
+                            <span className="font-mono text-[var(--buy)]">Growth:</span>{" "}
+                            {d.gptView}
                           </div>
                           <div>
-                            <span className="font-mono text-blue-400">Gemini:</span> {d.geminiView}
+                            <span className="font-mono text-[var(--hold)]">Macro:</span>{" "}
+                            {d.geminiView}
                           </div>
                         </div>
                       </div>
