@@ -126,8 +126,25 @@ export async function scanPriceMoves(): Promise<{
 
   const uniqueTickers = [...new Set(holdings.map((h) => h.ticker))];
 
+  // Warehouse-first: pull latest close from ticker_market_daily.
+  // Fall back to Yahoo live for tickers the warehouse doesn't cover yet
+  // (e.g. ticker that was held for the first time since the last nightly run).
+  const { getTickerMarketBatch } = await import("./warehouse");
+  const warehouseMap = await getTickerMarketBatch(uniqueTickers);
+
   const prices = new Map<string, number>();
+  const missingTickers: string[] = [];
   for (const ticker of uniqueTickers) {
+    const row = warehouseMap.get(ticker.toUpperCase());
+    if (row?.close != null && row.close > 0) {
+      prices.set(ticker, row.close);
+    } else {
+      missingTickers.push(ticker);
+    }
+  }
+
+  // Fallback: Yahoo live for warehouse misses only.
+  for (const ticker of missingTickers) {
     try {
       const q = (await yahoo.quote(ticker)) as Record<string, unknown>;
       const p =
