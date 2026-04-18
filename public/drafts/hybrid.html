@@ -3,1313 +3,1158 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ClearPath · Hybrid draft (C + B + customization)</title>
+    <title>ClearPath · Hybrid v2</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,500&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
     <style>
-      /* ═══ Tokens (Concierge palette) ═══════════════════ */
+      /* ═══ Tokens — light blue utilitarian ═══════════════ */
       :root {
-        --cream: #faf4e8;
-        --cream-deep: #f2ead9;
-        --paper: #fff;
-        --navy: #152238;
-        --navy-soft: #2c3a54;
-        --navy-subtle: #475167;
-        --gold: #c4a574;
-        --gold-deep: #9e8355;
-        --gold-tint: rgba(196, 165, 116, 0.1);
-        --muted: #6b6d75;
-        --subtle: #a1a1aa;
-        --rule: #d9ceb6;
-        --rule-soft: #e5ddc9;
-        --buy: #4a7a5c;
-        --sell: #a5452a;
-        --hold: #8a7856;
+        --bg: #f4f7fb;
+        --bg-soft: #edf1f7;
+        --surface: #ffffff;
+        --ink: #0f172a;
+        --ink-soft: #334155;
+        --muted: #64748b;
+        --subtle: #94a3b8;
+        --rule: #e4e9f1;
+        --rule-soft: #eef2f7;
+        --accent: #2563eb;
+        --accent-soft: #dbeafe;
+        --buy: #059669;
+        --buy-soft: #d1fae5;
+        --sell: #dc2626;
+        --sell-soft: #fee2e2;
+        --hold: #ca8a04;
+        --hold-soft: #fef3c7;
       }
 
-      /* ═══ Base ═════════════════════════════════════════ */
       * {
         box-sizing: border-box;
         margin: 0;
       }
       html {
-        font-size: 15px;
+        font-size: 14px;
       }
       body {
-        background: var(--cream);
-        color: var(--navy);
-        font-family: "Inter", -apple-system, sans-serif;
-        line-height: 1.55;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: "Inter", -apple-system, system-ui, sans-serif;
+        line-height: 1.5;
         -webkit-font-smoothing: antialiased;
         padding-bottom: 6rem;
+        letter-spacing: -0.005em;
       }
       a {
         color: inherit;
       }
-      .serif {
-        font-family: "Spectral", Georgia, serif;
-      }
       .mono {
         font-family: "JetBrains Mono", monospace;
         font-variant-numeric: tabular-nums;
-      }
-      .eyebrow {
-        font-size: 10px;
-        letter-spacing: 0.22em;
-        text-transform: uppercase;
-        color: var(--muted);
+        letter-spacing: 0;
       }
 
-      /* ═══ Top bar (from Concierge) ═════════════════════ */
+      /* ═══ Ticker tape ═══════════════════════════════════ */
+      .ticker-wrap {
+        background: var(--ink);
+        color: #e2e8f0;
+        overflow: hidden;
+      }
+      .ticker-track {
+        display: flex;
+        gap: 40px;
+        padding: 9px 0;
+        white-space: nowrap;
+        animation: tickerScroll 90s linear infinite;
+        font-size: 12px;
+        font-weight: 500;
+        will-change: transform;
+      }
+      .ticker-wrap:hover .ticker-track {
+        animation-play-state: paused;
+      }
+      @keyframes tickerScroll {
+        from { transform: translateX(0); }
+        to { transform: translateX(-50%); }
+      }
+      .tkr-item {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 8px;
+        flex-shrink: 0;
+      }
+      .tkr-item .s {
+        font-family: "JetBrains Mono", monospace;
+        font-weight: 600;
+        color: #f1f5f9;
+      }
+      .tkr-item .p {
+        font-family: "JetBrains Mono", monospace;
+        color: #cbd5e1;
+      }
+      .tkr-item .d {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 11px;
+      }
+      .tkr-item .d.up { color: #34d399; }
+      .tkr-item .d.dn { color: #f87171; }
+      .tkr-sep { color: #475569; }
+
+      /* ═══ Top nav ═══════════════════════════════════════ */
       header.top {
-        padding: 22px 28px 18px;
+        background: var(--surface);
+        border-bottom: 1px solid var(--rule);
+        padding: 14px 28px;
         display: grid;
-        grid-template-columns: 1fr auto 1fr;
+        grid-template-columns: auto 1fr auto;
         align-items: center;
         gap: 20px;
       }
       .brand {
-        font-family: "Spectral", serif;
-        font-weight: 400;
-        font-size: 20px;
-        letter-spacing: -0.02em;
-      }
-      .brand em {
-        font-style: italic;
-        color: var(--gold-deep);
-      }
-      .nav-pills {
         display: flex;
-        gap: 3px;
-        padding: 4px;
-        background: rgba(21, 34, 56, 0.04);
-        border-radius: 999px;
-        border: 1px solid var(--rule);
-      }
-      .nav-pills a {
-        padding: 7px 18px;
-        font-size: 13px;
-        text-decoration: none;
-        color: var(--navy-soft);
-        border-radius: 999px;
-        transition: all 0.15s;
-        letter-spacing: -0.005em;
-      }
-      .nav-pills a:hover {
-        color: var(--navy);
-      }
-      .nav-pills a.active {
-        background: var(--navy);
-        color: var(--cream);
-        font-weight: 500;
-      }
-      .user-chip {
-        justify-self: end;
-        display: inline-flex;
         align-items: center;
         gap: 10px;
-        padding: 5px 12px 5px 5px;
+        font-weight: 600;
+        font-size: 15px;
+        letter-spacing: -0.015em;
+      }
+      .brand-mark {
+        width: 24px;
+        height: 24px;
+        border-radius: 6px;
+        background: var(--accent);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .brand-mark::before {
+        content: "";
+        width: 10px;
+        height: 10px;
+        border-radius: 2px;
+        background: white;
+        transform: rotate(45deg);
+      }
+      nav.tabs {
+        display: flex;
+        gap: 2px;
+        justify-self: center;
+      }
+      nav.tabs a {
+        padding: 8px 16px;
+        font-size: 13px;
+        font-weight: 500;
+        text-decoration: none;
+        color: var(--muted);
+        border-radius: 6px;
+        transition: all 0.15s;
+      }
+      nav.tabs a:hover {
+        color: var(--ink);
+        background: var(--bg-soft);
+      }
+      nav.tabs a.active {
+        color: var(--ink);
+        background: var(--bg-soft);
+      }
+      .top-right {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .icon-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
         border: 1px solid var(--rule);
-        border-radius: 999px;
-        background: var(--paper);
+        background: var(--surface);
+        color: var(--muted);
         cursor: pointer;
         transition: all 0.15s;
       }
-      .user-chip:hover {
-        border-color: var(--navy-subtle);
+      .icon-btn:hover {
+        border-color: var(--subtle);
+        color: var(--ink);
       }
-      .user-chip .av {
-        width: 28px;
-        height: 28px;
+      .icon-btn.active {
+        background: var(--accent);
+        color: white;
+        border-color: var(--accent);
+      }
+      .avatar-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 12px 4px 4px;
+        border: 1px solid var(--rule);
+        border-radius: 999px;
+        background: var(--surface);
+        cursor: pointer;
+      }
+      .avatar-chip:hover {
+        border-color: var(--subtle);
+      }
+      .avatar-chip .av {
+        width: 26px;
+        height: 26px;
         border-radius: 50%;
-        background: var(--navy);
-        color: var(--cream);
+        background: var(--ink);
+        color: white;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-family: "Spectral", serif;
-        font-size: 12px;
-        font-weight: 500;
-      }
-      .user-chip .name {
-        font-size: 12px;
-        color: var(--navy-soft);
-      }
-      .user-chip .chev {
-        color: var(--muted);
-        font-size: 10px;
-      }
-
-      /* ═══ Page frame ═══════════════════════════════════ */
-      main {
-        max-width: 1120px;
-        margin: 0 auto;
-        padding: 0 24px;
-      }
-
-      /* ═══ Letter (from Concierge) — centered narrow ═══ */
-      .letter {
-        max-width: 720px;
-        margin: 0 auto;
-        padding: 40px 0 28px;
-      }
-      .dateline {
-        text-align: center;
-        font-size: 10px;
-        letter-spacing: 0.28em;
-        text-transform: uppercase;
-        color: var(--muted);
-        margin-bottom: 28px;
-      }
-      .dateline::before,
-      .dateline::after {
-        content: "•";
-        margin: 0 14px;
-        color: var(--gold);
-      }
-      h1.greeting {
-        font-family: "Spectral", serif;
-        font-weight: 300;
-        font-size: clamp(28px, 4vw, 42px);
-        line-height: 1.15;
-        letter-spacing: -0.015em;
-        text-wrap: balance;
-      }
-      h1.greeting em {
-        font-style: italic;
-        color: var(--gold-deep);
-      }
-      p.lead {
-        margin-top: 22px;
-        font-size: 16px;
-        line-height: 1.65;
-        color: var(--navy-soft);
-      }
-      p.lead strong {
-        color: var(--navy);
+        font-size: 11px;
         font-weight: 600;
       }
-      .fig {
-        font-family: "JetBrains Mono", monospace;
-        font-variant-numeric: tabular-nums;
-        font-weight: 500;
-        color: var(--navy);
+      .avatar-chip .nm {
+        font-size: 12px;
+        color: var(--ink-soft);
       }
 
-      /* ═══ Section wrapper ═════════════════════════════ */
-      section.block {
-        margin-top: 40px;
+      /* ═══ Greeting ══════════════════════════════════════ */
+      .greeting {
+        max-width: 1320px;
+        margin: 0 auto;
+        padding: 28px 28px 4px;
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 20px;
+        flex-wrap: wrap;
+      }
+      .greeting h1 {
+        font-size: 22px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+      .greeting h1 .delta { color: var(--buy); font-weight: 500; }
+      .greeting h1 .delta.dn { color: var(--sell); }
+      .greeting .sub {
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      /* ═══ Dashboard frame ══════════════════════════════ */
+      main.dash {
+        max-width: 1320px;
+        margin: 0 auto;
+        padding: 20px 28px 0;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        gap: 16px;
+      }
+      .col-3 { grid-column: span 3; }
+      .col-4 { grid-column: span 4; }
+      .col-6 { grid-column: span 6; }
+      .col-8 { grid-column: span 8; }
+      .col-12 { grid-column: span 12; }
+
+      @media (max-width: 1100px) {
+        .col-3, .col-4 { grid-column: span 6; }
+      }
+      @media (max-width: 720px) {
+        .col-3, .col-4, .col-6, .col-8 { grid-column: span 12; }
+      }
+
+      /* ═══ Block primitive ═══════════════════════════════ */
+      .block {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+        padding: 16px 18px;
         position: relative;
+        min-height: 0;
       }
       .block-head {
         display: flex;
         align-items: baseline;
         justify-content: space-between;
+        margin-bottom: 12px;
         padding-bottom: 10px;
-        border-bottom: 1px solid var(--rule);
-        margin-bottom: 14px;
+        border-bottom: 1px solid var(--rule-soft);
+        gap: 10px;
       }
       .block-head h2 {
-        font-family: "Spectral", serif;
-        font-weight: 400;
-        font-size: 22px;
-        letter-spacing: -0.015em;
-        line-height: 1.2;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: -0.005em;
       }
       .block-head .hint {
         font-size: 11px;
         color: var(--muted);
-        letter-spacing: 0.06em;
       }
-      .block-controls {
+
+      /* Edit-mode overlay */
+      .block-edit {
         position: absolute;
-        right: 0;
-        top: 0;
+        top: 8px;
+        right: 8px;
         display: none;
         gap: 4px;
-        font-size: 10px;
-      }
-      body.editing section.block {
-        background: rgba(196, 165, 116, 0.04);
-        border-radius: 10px;
-        padding: 16px;
-        margin-left: -16px;
-        margin-right: -16px;
-        outline: 1px dashed var(--gold);
-      }
-      body.editing .block-controls {
-        display: inline-flex;
-        top: -10px;
-        right: 16px;
-      }
-      .block-controls button {
-        background: var(--paper);
+        align-items: center;
+        background: var(--surface);
+        padding: 3px;
         border: 1px solid var(--rule);
-        padding: 3px 8px;
-        border-radius: 4px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
+        z-index: 2;
+      }
+      body.editing .block-edit {
+        display: inline-flex;
+      }
+      body.editing .block {
+        outline: 1.5px dashed var(--accent);
+        outline-offset: -2px;
+        cursor: move;
+      }
+      body.editing .block:hover {
+        outline-color: var(--ink);
+      }
+      .block-edit .grip {
+        width: 22px;
+        height: 22px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--subtle);
+        cursor: grab;
+      }
+      .block-edit .sz-group { display: inline-flex; gap: 1px; }
+      .block-edit .sz {
+        padding: 3px 7px;
         font-size: 10px;
+        font-weight: 600;
         color: var(--muted);
+        background: transparent;
+        border: 0;
+        border-radius: 4px;
+        cursor: pointer;
+        font-family: inherit;
+        letter-spacing: 0.03em;
+      }
+      .block-edit .sz:hover {
+        background: var(--bg-soft);
+        color: var(--ink);
+      }
+      .block-edit .sz.on {
+        background: var(--accent);
+        color: white;
+      }
+      .block-edit .x {
+        width: 22px;
+        height: 22px;
+        border: 0;
+        background: transparent;
+        border-radius: 4px;
+        color: var(--muted);
+        cursor: pointer;
+      }
+      .block-edit .x:hover {
+        background: var(--sell-soft);
+        color: var(--sell);
+      }
+
+      /* ═══ "Customize" / add-panel ══════════════════════ */
+      .add-panel {
+        display: none;
+        margin-top: 16px;
+        padding: 16px 18px;
+        background: var(--surface);
+        border: 1.5px dashed var(--accent);
+        border-radius: 10px;
+      }
+      body.editing .add-panel { display: block; }
+      .add-panel h3 {
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--accent);
+        margin-bottom: 10px;
+      }
+      .add-panel .list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .add-panel button {
+        padding: 6px 12px;
+        background: var(--bg-soft);
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        font-size: 12px;
+        color: var(--ink-soft);
         cursor: pointer;
         font-family: inherit;
       }
-      .block-controls button:hover {
-        color: var(--navy);
+      .add-panel button:hover {
+        border-color: var(--accent);
+        color: var(--accent);
       }
 
-      /* ═══ Priority rows (Concierge's "three things") ═══ */
-      .priority {
-        display: flex;
-        flex-direction: column;
-      }
-      .priority .row {
-        padding: 16px 0;
-        border-bottom: 1px solid var(--rule-soft);
+      /* ═══ Block content styles ═══════════════════════════ */
+      .stat-row {
         display: grid;
-        grid-template-columns: auto 1fr auto;
-        gap: 16px;
-        align-items: baseline;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 14px;
       }
-      .priority .row:last-child {
-        border-bottom: 0;
-      }
-      .priority .row .rank {
-        font-family: "Spectral", serif;
-        font-weight: 400;
-        font-size: 28px;
-        color: var(--gold-deep);
-        font-style: italic;
-        line-height: 1;
-      }
-      .priority .row .body {
-        font-size: 14px;
-        line-height: 1.55;
-      }
-      .priority .row .body .head {
-        font-family: "Spectral", serif;
-        font-weight: 500;
-        font-size: 16px;
-        color: var(--navy);
-        letter-spacing: -0.01em;
-        margin-bottom: 3px;
-      }
-      .priority .row .body p {
-        color: var(--navy-soft);
-      }
-      .priority .row .label {
-        text-align: right;
-        font-size: 9px;
-        letter-spacing: 0.2em;
+      .stat .k {
+        font-size: 10px;
+        letter-spacing: 0.1em;
         text-transform: uppercase;
-        color: var(--gold-deep);
+        color: var(--muted);
+      }
+      .stat .v {
+        font-family: "JetBrains Mono", monospace;
         font-weight: 600;
+        font-size: 20px;
+        letter-spacing: -0.02em;
+        margin-top: 2px;
       }
+      .stat .d {
+        font-size: 11px;
+        margin-top: 2px;
+        color: var(--muted);
+      }
+      .stat .d.up { color: var(--buy); }
+      .stat .d.dn { color: var(--sell); }
 
-      /* ═══ Holdings table (Terminal density) ═══════════ */
-      table.dense {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 13px;
-      }
-      .dense thead th {
+      table.t { width: 100%; border-collapse: collapse; font-size: 12px; }
+      .t th {
         text-align: left;
         font-weight: 500;
         font-size: 10px;
-        letter-spacing: 0.14em;
+        letter-spacing: 0.1em;
         text-transform: uppercase;
         color: var(--muted);
-        padding: 8px 12px 8px 0;
+        padding: 6px 8px 6px 0;
         border-bottom: 1px solid var(--rule);
       }
-      .dense thead th.num,
-      .dense tbody td.num {
+      .t th.num, .t td.num {
         text-align: right;
         font-family: "JetBrains Mono", monospace;
       }
-      .dense tbody td {
-        padding: 10px 12px 10px 0;
+      .t td {
+        padding: 8px 8px 8px 0;
         border-bottom: 1px solid var(--rule-soft);
       }
-      .dense tbody tr:hover {
-        background: rgba(21, 34, 56, 0.02);
-      }
-      .dense td.sym {
-        font-weight: 600;
-        font-family: "JetBrains Mono", monospace;
-        font-variant-numeric: tabular-nums;
-      }
-      .dense td.name {
-        color: var(--muted);
-      }
-      .pos {
-        color: var(--buy);
-      }
-      .neg {
-        color: var(--sell);
-      }
+      .t tr:last-child td { border-bottom: 0; }
+      .t td.sym { font-family: "JetBrains Mono", monospace; font-weight: 600; }
+      .t td.name { color: var(--muted); }
+      .pos { color: var(--buy); }
+      .neg { color: var(--sell); }
       .bar {
         height: 4px;
-        background: var(--cream-deep);
+        background: var(--bg-soft);
         border-radius: 2px;
         overflow: hidden;
         position: relative;
-        width: 70px;
+        width: 56px;
       }
       .bar .fill {
         position: absolute;
         inset: 0;
         width: var(--w, 50%);
-        background: var(--navy);
+        background: var(--accent);
       }
 
-      /* ═══ Two-column layout for rail blocks ═══════════ */
-      .two-col {
-        display: grid;
-        grid-template-columns: 1.6fr 1fr;
-        gap: 32px;
-      }
-      @media (max-width: 860px) {
-        .two-col {
-          grid-template-columns: 1fr;
-        }
-      }
-
-      /* ═══ Chart block (from Journal) ══════════════════ */
-      .chart-card {
-        padding: 24px 0 8px;
-      }
-      .chart-wrap {
-        position: relative;
-      }
-      .chart-svg {
-        width: 100%;
-        height: 180px;
-        display: block;
-      }
-      .chart-meta {
-        display: flex;
-        justify-content: space-between;
-        margin-top: 8px;
-        font-size: 11px;
-        color: var(--muted);
-      }
-
-      /* ═══ Rail modules (Terminal style) ═══════════════ */
-      .module .item {
-        display: flex;
-        justify-content: space-between;
-        align-items: baseline;
-        padding: 10px 0;
-        border-bottom: 1px solid var(--rule-soft);
-        font-size: 13px;
-      }
-      .module .item:last-child {
-        border-bottom: 0;
-      }
-      .module .item .l {
-        color: var(--navy-soft);
-      }
-      .module .item .t {
+      .list-item { padding: 10px 0; border-bottom: 1px solid var(--rule-soft); }
+      .list-item:last-child { border-bottom: 0; }
+      .list-item .src {
         font-size: 10px;
-        letter-spacing: 0.1em;
+        letter-spacing: 0.08em;
         text-transform: uppercase;
         color: var(--muted);
       }
+      .list-item .hed {
+        font-size: 13px;
+        margin-top: 3px;
+        line-height: 1.4;
+      }
+      .list-item .hed a { text-decoration: none; }
+      .list-item .hed a:hover { color: var(--accent); }
+
       .pill {
         display: inline-block;
         padding: 2px 7px;
-        font-size: 10px;
         font-family: "JetBrains Mono", monospace;
-        letter-spacing: 0.04em;
+        font-size: 10px;
+        font-weight: 500;
         border-radius: 3px;
       }
-      .pill.buy {
-        color: var(--buy);
-        background: rgba(74, 122, 92, 0.1);
-      }
-      .pill.hold {
-        color: var(--hold);
-        background: rgba(138, 120, 86, 0.12);
-      }
-      .pill.sell {
-        color: var(--sell);
-        background: rgba(165, 69, 42, 0.1);
-      }
+      .pill.buy { color: var(--buy); background: var(--buy-soft); }
+      .pill.hold { color: var(--hold); background: var(--hold-soft); }
+      .pill.sell { color: var(--sell); background: var(--sell-soft); }
 
-      /* ═══ News block ═══════════════════════════════════ */
-      .news-item {
-        padding: 12px 0;
-        border-bottom: 1px solid var(--rule-soft);
-      }
-      .news-item:last-child {
-        border-bottom: 0;
-      }
-      .news-src {
-        font-size: 10px;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        color: var(--muted);
-      }
-      .news-hed {
-        font-family: "Spectral", serif;
-        font-weight: 400;
-        font-size: 15px;
-        line-height: 1.35;
-        margin-top: 4px;
-      }
-      .news-hed a {
-        text-decoration: none;
-      }
-      .news-hed a:hover {
-        color: var(--gold-deep);
-      }
-
-      /* ═══ Calendar (from Journal) ═════════════════════ */
-      .cal {
-        list-style: none;
-      }
-      .cal li {
-        padding: 12px 0;
-        border-bottom: 1px solid var(--rule-soft);
-        display: grid;
-        grid-template-columns: auto 1fr auto;
-        gap: 14px;
-        align-items: baseline;
-      }
-      .cal li:last-child {
-        border-bottom: 0;
-      }
-      .cal .date {
-        font-family: "Spectral", serif;
-        font-size: 18px;
-        color: var(--gold-deep);
-        line-height: 1;
-        letter-spacing: -0.01em;
-      }
-      .cal .date .day {
-        display: block;
-        font-size: 10px;
-        letter-spacing: 0.2em;
-        text-transform: uppercase;
-        color: var(--muted);
-        margin-top: 2px;
-        font-family: "Inter", sans-serif;
-      }
-      .cal .ev {
-        font-size: 14px;
-      }
-      .cal .ev strong {
-        font-family: "JetBrains Mono", monospace;
-        font-weight: 600;
-      }
-      .cal .ev .desc {
-        color: var(--muted);
-        font-size: 12px;
-        margin-top: 2px;
-      }
-      .cal .when {
-        text-align: right;
+      .chart-svg { width: 100%; height: 140px; display: block; }
+      .chart-meta {
+        display: flex;
+        justify-content: space-between;
         font-size: 11px;
         color: var(--muted);
+        margin-top: 4px;
       }
 
-      /* ═══ Macro strip ══════════════════════════════════ */
-      .macro-strip {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 1px;
-        background: var(--rule);
-        border: 1px solid var(--rule);
-        border-radius: 8px;
-        overflow: hidden;
+      .row-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        padding: 9px 0;
+        border-bottom: 1px solid var(--rule-soft);
+        font-size: 12px;
       }
-      .macro-strip .cell {
-        padding: 14px 18px;
-        background: var(--paper);
-      }
-      .macro-strip .k {
+      .row-item:last-child { border-bottom: 0; }
+      .row-item .l { color: var(--ink-soft); }
+      .row-item .r {
         font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .cal-item {
+        display: grid;
+        grid-template-columns: 44px 1fr auto;
+        gap: 10px;
+        padding: 9px 0;
+        border-bottom: 1px solid var(--rule-soft);
+        align-items: baseline;
+      }
+      .cal-item:last-child { border-bottom: 0; }
+      .cal-item .date {
+        font-family: "JetBrains Mono", monospace;
+        font-weight: 600;
+        font-size: 16px;
+        letter-spacing: -0.02em;
+      }
+      .cal-item .date .day {
+        display: block;
+        font-size: 9px;
         letter-spacing: 0.16em;
         text-transform: uppercase;
         color: var(--muted);
-      }
-      .macro-strip .v {
-        font-family: "JetBrains Mono", monospace;
         font-weight: 500;
-        font-size: 18px;
-        letter-spacing: -0.015em;
-        margin-top: 4px;
       }
-      .macro-strip .d {
+      .cal-item .ev { font-size: 12px; }
+      .cal-item .ev strong { font-family: "JetBrains Mono", monospace; font-weight: 600; }
+      .cal-item .ev .t { color: var(--muted); font-size: 11px; display: block; }
+      .cal-item .w { font-size: 10px; color: var(--muted); text-align: right; }
+
+      .sector-bar {
+        display: grid;
+        grid-template-columns: 100px 1fr 40px;
+        gap: 10px;
+        align-items: center;
+        padding: 6px 0;
+        font-size: 12px;
+      }
+      .sector-bar .lbl { color: var(--ink-soft); }
+      .sector-bar .p {
+        text-align: right;
+        font-family: "JetBrains Mono", monospace;
+        color: var(--muted);
+      }
+
+      .macro-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .macro-item {
+        padding: 8px 10px;
+        background: var(--bg-soft);
+        border-radius: 6px;
+      }
+      .macro-item .k {
         font-size: 10px;
         color: var(--muted);
-        margin-top: 2px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
       }
-      @media (max-width: 640px) {
-        .macro-strip {
-          grid-template-columns: repeat(2, 1fr);
-        }
+      .macro-item .v {
+        font-family: "JetBrains Mono", monospace;
+        font-weight: 600;
+        font-size: 15px;
+        margin-top: 3px;
       }
+      .macro-item .d { font-size: 10px; color: var(--muted); }
 
-      /* ═══ Customize affordance ═════════════════════════ */
-      .toolbar {
-        margin-top: 36px;
+      .mover {
         display: flex;
         justify-content: space-between;
-        align-items: center;
-        padding-bottom: 18px;
-        border-bottom: 1px solid var(--rule);
+        padding: 7px 0;
+        border-bottom: 1px solid var(--rule-soft);
+        align-items: baseline;
       }
-      .toolbar-left {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-      }
-      .chip {
-        font-size: 11px;
-        padding: 6px 12px;
-        border: 1px solid var(--rule);
-        border-radius: 999px;
-        background: var(--paper);
-        color: var(--navy-soft);
-        cursor: pointer;
-        transition: all 0.15s;
-        font-family: inherit;
-      }
-      .chip:hover {
-        border-color: var(--navy-subtle);
-      }
-      .chip.on {
-        background: var(--navy);
-        color: var(--cream);
-        border-color: var(--navy);
-      }
-      .customize-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 12px;
-        padding: 7px 14px;
-        border: 1px solid var(--gold);
-        border-radius: 999px;
-        background: var(--paper);
-        color: var(--gold-deep);
-        cursor: pointer;
-        font-family: inherit;
-        transition: all 0.15s;
-      }
-      .customize-btn:hover {
-        background: var(--gold-tint);
-      }
-      .customize-btn.editing {
-        background: var(--gold-deep);
-        color: var(--cream);
-        border-color: var(--gold-deep);
-      }
+      .mover:last-child { border-bottom: 0; }
+      .mover .t { font-family: "JetBrains Mono", monospace; font-weight: 600; }
+      .mover .v { font-family: "JetBrains Mono", monospace; font-size: 12px; }
 
-      /* Add section affordance in editing mode */
-      .add-section-wrap {
-        display: none;
-        margin: 40px auto 0;
-        padding: 24px;
-        border: 1px dashed var(--gold);
-        border-radius: 10px;
-        text-align: center;
-      }
-      body.editing .add-section-wrap {
-        display: block;
-      }
-      .add-section-wrap h4 {
-        font-family: "Spectral", serif;
-        font-size: 14px;
-        font-weight: 500;
-        margin-bottom: 12px;
-      }
-      .add-section-wrap .list {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        justify-content: center;
-      }
-      .add-section-wrap button {
-        font-size: 11px;
-        padding: 6px 12px;
-        border: 1px solid var(--rule);
-        border-radius: 999px;
-        background: var(--paper);
-        color: var(--navy-soft);
-        cursor: pointer;
-        font-family: inherit;
-      }
-
-      /* Hide-off sections in editing mode */
-      body.editing section.block[data-active="false"] {
-        opacity: 0.4;
-      }
-      section.block[data-active="false"] {
-        display: none;
-      }
-      body.editing section.block[data-active="false"] {
-        display: block;
-      }
-
-      /* Footer */
       footer {
-        margin-top: 80px;
-        padding: 24px;
+        max-width: 1320px;
+        margin: 72px auto 0;
+        padding: 20px 28px;
         text-align: center;
         font-size: 11px;
-        letter-spacing: 0.18em;
-        text-transform: uppercase;
         color: var(--muted);
-        border-top: 1px solid var(--rule);
       }
+      footer a { color: var(--accent); text-decoration: none; }
 
-      @media (max-width: 720px) {
-        header.top {
-          grid-template-columns: 1fr;
-          gap: 14px;
-          text-align: center;
-        }
-        .nav-pills {
-          justify-self: center;
-          overflow-x: auto;
-          max-width: 100%;
-        }
-        .user-chip {
-          justify-self: center;
-        }
+      @keyframes slideIn {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: none; }
       }
+      .block.added { animation: slideIn 0.2s ease-out; }
     </style>
   </head>
   <body>
-    <!-- ═══ Top nav (Concierge) ═══ -->
+    <!-- Ticker tape -->
+    <div class="ticker-wrap">
+      <div class="ticker-track" id="tickerTrack"></div>
+    </div>
+
+    <!-- Top nav -->
     <header class="top">
-      <div class="brand">ClearPath <em>Private</em></div>
-      <nav class="nav-pills">
-        <a href="#" class="active">Today</a>
+      <div class="brand">
+        <span class="brand-mark"></span>
+        ClearPath
+      </div>
+      <nav class="tabs">
+        <a href="#" class="active">Dashboard</a>
         <a href="#">Portfolio</a>
         <a href="#">Research</a>
         <a href="#">Strategy</a>
         <a href="#">History</a>
       </nav>
-      <button class="user-chip">
-        <span class="av">SL</span>
-        <span class="name">Sang Lippert</span>
-        <span class="chev">▾</span>
-      </button>
-    </header>
-
-    <main>
-      <!-- ═══ Morning letter (Concierge) ═══ -->
-      <div class="letter">
-        <div class="dateline">Friday Morning · April 17, 2026</div>
-        <h1 class="greeting">
-          Good morning, Sang. Your portfolio is up
-          <em>2.31%</em> on the day.
-        </h1>
-        <p class="lead">
-          You&rsquo;re sitting at <strong>$284,617</strong> across three
-          institutions, driven mainly by Nvidia&rsquo;s continued datacenter
-          strength. Nothing structural has changed — the overnight read still
-          leans to
-          <strong>trim technology ahead of earnings next week</strong>.
-          Three things below are worth your attention today.
-        </p>
-      </div>
-
-      <!-- ═══ Customize toolbar ═══ -->
-      <div class="toolbar">
-        <div class="toolbar-left">
-          <span class="eyebrow" style="align-self: center; margin-right: 8px"
-            >On this page</span
+      <div class="top-right">
+        <button
+          class="icon-btn"
+          id="editToggle"
+          title="Customize dashboard"
+          aria-label="Customize"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
           >
-          <button class="chip on" data-target="priority">Priorities</button>
-          <button class="chip on" data-target="chart">Performance</button>
-          <button class="chip on" data-target="holdings">Holdings</button>
-          <button class="chip on" data-target="news">In the news</button>
-          <button class="chip on" data-target="calendar">Calendar</button>
-          <button class="chip on" data-target="alerts">Alerts</button>
-          <button class="chip" data-target="sector">Sector mix</button>
-          <button class="chip" data-target="macro">Macro</button>
-          <button class="chip" data-target="research">Recent research</button>
-          <button class="chip" data-target="reading">Worth reading</button>
-        </div>
-        <button class="customize-btn" id="editToggle">
-          <span class="icon">⚙</span> Customize
+            <circle cx="8" cy="8" r="1.4" />
+            <path
+              d="M8 2v2M8 12v2M3.5 3.5l1.4 1.4M11.1 11.1l1.4 1.4M2 8h2M12 8h2M3.5 12.5l1.4-1.4M11.1 4.9l1.4-1.4"
+            />
+          </svg>
+        </button>
+        <button class="avatar-chip">
+          <span class="av">SL</span>
+          <span class="nm">Sang</span>
         </button>
       </div>
+    </header>
 
-      <!-- ═══ 1. Priorities (from Concierge 'three things') ═══ -->
-      <section class="block" id="priority" data-active="true">
-        <div class="block-head">
-          <h2>Three things for today.</h2>
-          <span class="hint">In order of priority</span>
-        </div>
-        <div class="block-controls">
-          <button>Move up</button><button>Move down</button
-          ><button>Hide</button>
-        </div>
-        <div class="priority">
-          <div class="row">
-            <div class="rank">i</div>
-            <div class="body">
-              <div class="head">Nvidia is now 34% of your portfolio.</div>
-              <p>
-                All three lenses flagged concentration risk overnight. Consider
-                trimming to <span class="fig">~25%</span> before Nvidia reports
-                in three weeks. A
-                <span class="fig">−10%</span> earnings miss would move your
-                total value by roughly <span class="fig">−$9,700</span>.
-              </p>
-            </div>
-            <div class="label">Concentration</div>
-          </div>
-          <div class="row">
-            <div class="rank">ii</div>
-            <div class="body">
-              <div class="head">Tesla earnings are Tuesday after the bell.</div>
-              <p>
-                You don&rsquo;t hold TSLA, but your research yesterday was a
-                deep read with <span class="fig">SELL · HIGH</span>. Tuesday is
-                the event if you&rsquo;re rethinking.
-              </p>
-            </div>
-            <div class="label">Calendar</div>
-          </div>
-          <div class="row">
-            <div class="rank">iii</div>
-            <div class="body">
-              <div class="head">The 10-year is back to 4.32%.</div>
-              <p>
-                Highest since January. The macro lens has been calling this a
-                headwind for long-duration growth. Your cash at
-                <span class="fig">9.1%</span> is slightly light for a regime
-                like this.
-              </p>
-            </div>
-            <div class="label">Macro</div>
-          </div>
-        </div>
-      </section>
+    <!-- Greeting -->
+    <div class="greeting">
+      <h1>Good morning, Sang. Portfolio is <span class="delta">+2.31% today</span>.</h1>
+      <span class="sub">Updated <span class="mono">6:42 AM</span> · Friday, Apr 17</span>
+    </div>
 
-      <!-- ═══ 2. Performance chart (from Journal — optional) ═══ -->
-      <section class="block" id="chart" data-active="true">
-        <div class="block-head">
-          <h2>Performance this year.</h2>
-          <span class="hint"
-            >YTD · <span class="mono pos">+10.9%</span> ·
-            <span class="mono">+$28,117</span></span
-          >
-        </div>
-        <div class="block-controls">
-          <button>Move up</button><button>Move down</button
-          ><button>Hide</button>
-        </div>
-        <div class="chart-card">
-          <div class="chart-wrap">
-            <svg
-              class="chart-svg"
-              viewBox="0 0 1000 180"
-              preserveAspectRatio="none"
-            >
-              <defs>
-                <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#152238" stop-opacity="0.14" />
-                  <stop offset="100%" stop-color="#152238" stop-opacity="0" />
-                </linearGradient>
-              </defs>
-              <!-- area -->
-              <path
-                d="M 0,130 L 40,126 L 90,118 L 140,130 L 190,112 L 240,100 L 290,108 L 340,92 L 390,80 L 440,96 L 490,72 L 540,62 L 600,70 L 660,50 L 720,54 L 780,40 L 840,35 L 900,44 L 950,28 L 1000,24 L 1000,180 L 0,180 Z"
-                fill="url(#area)"
-              />
-              <!-- line -->
-              <path
-                d="M 0,130 L 40,126 L 90,118 L 140,130 L 190,112 L 240,100 L 290,108 L 340,92 L 390,80 L 440,96 L 490,72 L 540,62 L 600,70 L 660,50 L 720,54 L 780,40 L 840,35 L 900,44 L 950,28 L 1000,24"
-                fill="none"
-                stroke="#152238"
-                stroke-width="1.8"
-              />
-              <!-- last point -->
-              <circle cx="1000" cy="24" r="4" fill="#c4a574" />
-            </svg>
-          </div>
-          <div class="chart-meta">
-            <span>Jan 1</span>
-            <span>Apr 17 · <span class="mono">$284,617</span></span>
-          </div>
-        </div>
-      </section>
+    <main class="dash">
+      <div class="grid" id="grid"></div>
 
-      <!-- ═══ 3. Holdings (Terminal density) ═══ -->
-      <section class="block" id="holdings" data-active="true">
-        <div class="block-head">
-          <h2>Holdings.</h2>
-          <span class="hint">Six positions · sorted by weight</span>
-        </div>
-        <div class="block-controls">
-          <button>Move up</button><button>Move down</button
-          ><button>Hide</button>
-        </div>
-        <table class="dense">
-          <thead>
-            <tr>
-              <th>Ticker</th>
-              <th>Name</th>
-              <th>Weight</th>
-              <th class="num">Price</th>
-              <th class="num">Today</th>
-              <th class="num">Value</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td class="sym">NVDA</td>
-              <td class="name">Nvidia</td>
-              <td>
-                <div class="bar"><div class="fill" style="--w: 92%"></div></div>
-              </td>
-              <td class="num">1,294.18</td>
-              <td class="num pos">+3.29%</td>
-              <td class="num">97,348</td>
-            </tr>
-            <tr>
-              <td class="sym">AAPL</td>
-              <td class="name">Apple</td>
-              <td>
-                <div class="bar"><div class="fill" style="--w: 62%"></div></div>
-              </td>
-              <td class="num">248.11</td>
-              <td class="num pos">+0.84%</td>
-              <td class="num">64,952</td>
-            </tr>
-            <tr>
-              <td class="sym">MSFT</td>
-              <td class="name">Microsoft</td>
-              <td>
-                <div class="bar"><div class="fill" style="--w: 50%"></div></div>
-              </td>
-              <td class="num">514.23</td>
-              <td class="num pos">+1.12%</td>
-              <td class="num">52,332</td>
-            </tr>
-            <tr>
-              <td class="sym">BTC</td>
-              <td class="name">Bitcoin</td>
-              <td>
-                <div class="bar"><div class="fill" style="--w: 33%"></div></div>
-              </td>
-              <td class="num">75,077.12</td>
-              <td class="num pos">+4.10%</td>
-              <td class="num">34,471</td>
-            </tr>
-            <tr>
-              <td class="sym">VOO</td>
-              <td class="name">S&amp;P 500 ETF</td>
-              <td>
-                <div class="bar"><div class="fill" style="--w: 25%"></div></div>
-              </td>
-              <td class="num">498.74</td>
-              <td class="num pos">+0.62%</td>
-              <td class="num">26,200</td>
-            </tr>
-            <tr>
-              <td class="sym">F</td>
-              <td class="name">Ford Motor</td>
-              <td>
-                <div class="bar"><div class="fill" style="--w: 9%"></div></div>
-              </td>
-              <td class="num">11.82</td>
-              <td class="num neg">−1.48%</td>
-              <td class="num">9,314</td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
-
-      <!-- ═══ 4. Two-col: News + Alerts ═══ -->
-      <div class="two-col">
-        <section class="block" id="news" data-active="true">
-          <div class="block-head">
-            <h2>In the news.</h2>
-            <span class="hint">Four outlets · last 24h</span>
-          </div>
-          <div class="block-controls">
-            <button>Move up</button><button>Move down</button
-            ><button>Hide</button>
-          </div>
-          <div>
-            <div class="news-item">
-              <div class="news-src">
-                WSJ · <span class="mono">NVDA</span> · 2h ago
-              </div>
-              <div class="news-hed">
-                <a href="#"
-                  >Nvidia&rsquo;s next act: can custom chips defend the
-                  moat?</a
-                >
-              </div>
-            </div>
-            <div class="news-item">
-              <div class="news-src">
-                IBD · <span class="mono">TSLA</span> · 5h ago
-              </div>
-              <div class="news-hed">
-                <a href="#"
-                  >Tesla Earnings: What Robotaxi Updates Should Investors
-                  Expect?</a
-                >
-              </div>
-            </div>
-            <div class="news-item">
-              <div class="news-src">
-                CNBC · <span class="mono">AAPL</span> · yesterday
-              </div>
-              <div class="news-hed">
-                <a href="#"
-                  >Apple&rsquo;s India ramp is working faster than analysts
-                  expected</a
-                >
-              </div>
-            </div>
-            <div class="news-item">
-              <div class="news-src">
-                MarketWatch · <span class="mono">MSFT</span> · yesterday
-              </div>
-              <div class="news-hed">
-                <a href="#"
-                  >Microsoft&rsquo;s Azure growth decelerates; analysts pause
-                  upgrades</a
-                >
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="block" id="alerts" data-active="true">
-          <div class="block-head">
-            <h2>Alerts.</h2>
-            <span class="hint">3 open</span>
-          </div>
-          <div class="block-controls">
-            <button>Move up</button><button>Move down</button
-            ><button>Hide</button>
-          </div>
-          <div class="module">
-            <div class="item">
-              <div class="l">
-                <span class="mono" style="font-weight: 600">BTC</span> +4.10%
-                move
-              </div>
-              <span class="t">5%+ move</span>
-            </div>
-            <div class="item">
-              <div class="l">
-                <span class="mono" style="font-weight: 600">NVDA</span> 34% of
-                portfolio
-              </div>
-              <span class="t">Concentration</span>
-            </div>
-            <div class="item">
-              <div class="l">
-                <span class="mono" style="font-weight: 600">TSLA</span>
-                earnings Tue
-              </div>
-              <span class="t">Calendar</span>
-            </div>
-          </div>
-        </section>
+      <!-- Add-a-section panel (shown in edit mode) -->
+      <div class="add-panel">
+        <h3>+ Add a section</h3>
+        <div class="list" id="addList"></div>
       </div>
-
-      <!-- ═══ 5. Calendar (from Journal) ═══ -->
-      <section class="block" id="calendar" data-active="true">
-        <div class="block-head">
-          <h2>Calendar.</h2>
-          <span class="hint">Upcoming events on your holdings</span>
-        </div>
-        <div class="block-controls">
-          <button>Move up</button><button>Move down</button
-          ><button>Hide</button>
-        </div>
-        <ul class="cal">
-          <li>
-            <div class="date">21<span class="day">Tue</span></div>
-            <div class="ev">
-              <strong>TSLA</strong> · Earnings call, Q1
-              <div class="desc">
-                Robotaxi + margin commentary are what the street is positioning
-                for.
-              </div>
-            </div>
-            <div class="when">4:30 pm ET</div>
-          </li>
-          <li>
-            <div class="date">22<span class="day">Wed</span></div>
-            <div class="ev">
-              <strong>NFLX</strong> · Earnings call, Q1
-              <div class="desc">
-                Subscriber growth + password-sharing follow-through.
-              </div>
-            </div>
-            <div class="when">After close</div>
-          </li>
-          <li>
-            <div class="date">24<span class="day">Fri</span></div>
-            <div class="ev">
-              <strong>AAPL</strong> · Ex-dividend
-              <div class="desc">$0.25/share, payable May 15.</div>
-            </div>
-            <div class="when">Open</div>
-          </li>
-          <li>
-            <div class="date">25<span class="day">Fri</span></div>
-            <div class="ev">
-              <strong>MSFT</strong> · 10-Q filing expected
-              <div class="desc">
-                MD&amp;A typically lands within 24 hours after earnings.
-              </div>
-            </div>
-            <div class="when">Expected</div>
-          </li>
-        </ul>
-      </section>
-
-      <!-- ═══ 6. Macro (optional, off by default) ═══ -->
-      <section class="block" id="macro" data-active="false">
-        <div class="block-head">
-          <h2>Macro.</h2>
-          <span class="hint">FRED · last read</span>
-        </div>
-        <div class="block-controls">
-          <button>Move up</button><button>Move down</button
-          ><button>Hide</button>
-        </div>
-        <div class="macro-strip">
-          <div class="cell">
-            <div class="k">10-Y Yield</div>
-            <div class="v">4.32%</div>
-            <div class="d">+0.04 vs last wk</div>
-          </div>
-          <div class="cell">
-            <div class="k">Fed Funds</div>
-            <div class="v">4.25%</div>
-            <div class="d">Unchanged</div>
-          </div>
-          <div class="cell">
-            <div class="k">CPI YoY</div>
-            <div class="v">3.32%</div>
-            <div class="d">+0.52 vs 12mo ago</div>
-          </div>
-          <div class="cell">
-            <div class="k">USD Index</div>
-            <div class="v">107.4</div>
-            <div class="d">+1.1 vs last wk</div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ═══ 7. Sector mix (optional, off by default) ═══ -->
-      <section class="block" id="sector" data-active="false">
-        <div class="block-head">
-          <h2>Sector mix.</h2>
-          <span class="hint">By weight</span>
-        </div>
-        <div class="block-controls">
-          <button>Move up</button><button>Move down</button
-          ><button>Hide</button>
-        </div>
-        <div style="padding: 8px 0">
-          <div style="display: flex; flex-direction: column; gap: 10px">
-            <div
-              style="
-                display: grid;
-                grid-template-columns: 160px 1fr 60px;
-                gap: 12px;
-                align-items: center;
-                font-size: 13px;
-              "
-            >
-              <span>Technology</span>
-              <div class="bar" style="width: 100%">
-                <div class="fill" style="--w: 75%"></div>
-              </div>
-              <span class="mono" style="text-align: right">75.4%</span>
-            </div>
-            <div
-              style="
-                display: grid;
-                grid-template-columns: 160px 1fr 60px;
-                gap: 12px;
-                align-items: center;
-                font-size: 13px;
-              "
-            >
-              <span>Digital assets</span>
-              <div class="bar" style="width: 100%">
-                <div class="fill" style="--w: 12%"></div>
-              </div>
-              <span class="mono" style="text-align: right">12.1%</span>
-            </div>
-            <div
-              style="
-                display: grid;
-                grid-template-columns: 160px 1fr 60px;
-                gap: 12px;
-                align-items: center;
-                font-size: 13px;
-              "
-            >
-              <span>Index / ETF</span>
-              <div class="bar" style="width: 100%">
-                <div class="fill" style="--w: 9%"></div>
-              </div>
-              <span class="mono" style="text-align: right">9.2%</span>
-            </div>
-            <div
-              style="
-                display: grid;
-                grid-template-columns: 160px 1fr 60px;
-                gap: 12px;
-                align-items: center;
-                font-size: 13px;
-              "
-            >
-              <span>Consumer cyclical</span>
-              <div class="bar" style="width: 100%">
-                <div class="fill" style="--w: 3%"></div>
-              </div>
-              <span class="mono" style="text-align: right">3.3%</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ═══ 8. Recent research (optional, off by default) ═══ -->
-      <section class="block" id="research" data-active="false">
-        <div class="block-head">
-          <h2>Recent research.</h2>
-          <span class="hint">Last 7 days</span>
-        </div>
-        <div class="block-controls">
-          <button>Move up</button><button>Move down</button
-          ><button>Hide</button>
-        </div>
-        <div class="module">
-          <div class="item">
-            <div class="l">
-              <span class="mono" style="font-weight: 600">NVDA</span> ·
-              <span class="pill hold">HOLD · MED</span>
-            </div>
-            <span class="t">Deep read · 12m ago</span>
-          </div>
-          <div class="item">
-            <div class="l">
-              <span class="mono" style="font-weight: 600">TSLA</span> ·
-              <span class="pill sell">SELL · HIGH</span>
-            </div>
-            <span class="t">Deep read · yesterday</span>
-          </div>
-          <div class="item">
-            <div class="l">
-              <span class="mono" style="font-weight: 600">COIN</span> ·
-              <span class="pill buy">BUY · LOW</span>
-            </div>
-            <span class="t">Quick read · 2d ago</span>
-          </div>
-          <div class="item">
-            <div class="l">
-              <span class="mono" style="font-weight: 600">IONQ</span> ·
-              <span class="pill sell">SELL · MED</span>
-            </div>
-            <span class="t">Deep read · 3d ago</span>
-          </div>
-        </div>
-      </section>
-
-      <!-- ═══ 9. Worth reading (optional, off by default) ═══ -->
-      <section class="block" id="reading" data-active="false">
-        <div class="block-head">
-          <h2>Worth reading.</h2>
-          <span class="hint">Long-form · not breaking news</span>
-        </div>
-        <div class="block-controls">
-          <button>Move up</button><button>Move down</button
-          ><button>Hide</button>
-        </div>
-        <div>
-          <div class="news-item">
-            <div class="news-src">Howard Marks · Oaktree · 2 days ago</div>
-            <div class="news-hed">
-              <a href="#"
-                >&ldquo;Sea Change, Still&rdquo; — the memo revisited, three
-                years on.</a
-              >
-            </div>
-          </div>
-          <div class="news-item">
-            <div class="news-src">Aswath Damodaran · blog · yesterday</div>
-            <div class="news-hed">
-              <a href="#"
-                >The cost of capital question: why it matters more in 2026.</a
-              >
-            </div>
-          </div>
-          <div class="news-item">
-            <div class="news-src">Financial Times · Apr 15</div>
-            <div class="news-hed">
-              <a href="#"
-                >Private credit&rsquo;s next test won&rsquo;t be rates.</a
-              >
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ═══ Add-section panel (editing mode) ═══ -->
-      <div class="add-section-wrap">
-        <h4>Add a section to your dashboard</h4>
-        <div class="list">
-          <button>+ Performance chart</button>
-          <button>+ Sector mix</button>
-          <button>+ Watchlist (coming)</button>
-          <button>+ Macro indicators</button>
-          <button>+ Recent research</button>
-          <button>+ Worth reading</button>
-          <button>+ Insider activity</button>
-        </div>
-      </div>
-
-      <footer>
-        <a href="/drafts/index.html">· Compare drafts ·</a>
-        · Informational only · Not investment advice
-      </footer>
     </main>
 
+    <footer>
+      <a href="/drafts/index.html">← Compare drafts</a>
+      &nbsp;·&nbsp; Informational only · Not investment advice
+    </footer>
+
     <script>
-      // Simple demo: toggle chips on/off, toggle edit mode
-      const chips = document.querySelectorAll(".chip[data-target]");
-      chips.forEach((chip) => {
-        chip.addEventListener("click", () => {
-          chip.classList.toggle("on");
-          const target = document.getElementById(chip.dataset.target);
-          if (target) {
-            const active = chip.classList.contains("on");
-            target.dataset.active = active ? "true" : "false";
+      // ═══════════════════════════════════════════════════
+      // Helpers — all DOM built via createElement (no innerHTML)
+      // ═══════════════════════════════════════════════════
+      function el(tag, attrs, children) {
+        const n = document.createElement(tag);
+        if (attrs) {
+          for (const k in attrs) {
+            if (k === "className") n.className = attrs[k];
+            else if (k === "style") n.style.cssText = attrs[k];
+            else if (k.startsWith("on") && typeof attrs[k] === "function")
+              n.addEventListener(k.slice(2).toLowerCase(), attrs[k]);
+            else n.setAttribute(k, attrs[k]);
+          }
+        }
+        if (children != null) {
+          const arr = Array.isArray(children) ? children : [children];
+          for (const c of arr) {
+            if (c == null) continue;
+            if (typeof c === "string") n.appendChild(document.createTextNode(c));
+            else n.appendChild(c);
+          }
+        }
+        return n;
+      }
+      function t(tag, className, text) {
+        return el(tag, className ? { className } : null, text == null ? null : String(text));
+      }
+
+      // ═══ Ticker tape ═══
+      const tickerItems = [
+        { s: "S&P 500", p: "7,142.18", d: "+0.62%", up: true },
+        { s: "NASDAQ", p: "22,487.03", d: "+1.12%", up: true },
+        { s: "DOW", p: "44,891.22", d: "+0.34%", up: true },
+        { s: "RUT", p: "2,314.71", d: "-0.18%", up: false },
+        { s: "10Y", p: "4.32%", d: "+4 bps", up: true },
+        { s: "VIX", p: "14.8", d: "-2.1%", up: false },
+        { s: "NVDA", p: "$1,294.18", d: "+3.29%", up: true },
+        { s: "AAPL", p: "$248.11", d: "+0.84%", up: true },
+        { s: "MSFT", p: "$514.23", d: "+1.12%", up: true },
+        { s: "BTC", p: "$75,077", d: "+4.10%", up: true },
+        { s: "VOO", p: "$498.74", d: "+0.62%", up: true },
+        { s: "F", p: "$11.82", d: "-1.48%", up: false },
+      ];
+      const track = document.getElementById("tickerTrack");
+      function renderTicker(items) {
+        for (const it of items) {
+          const span = el("span", { className: "tkr-item" }, [
+            t("span", "s", it.s),
+            t("span", "p", it.p),
+            t("span", "d " + (it.up ? "up" : "dn"), it.d),
+          ]);
+          track.appendChild(span);
+          track.appendChild(t("span", "tkr-sep", "·"));
+        }
+      }
+      renderTicker(tickerItems);
+      renderTicker(tickerItems); // duplicate for seamless loop
+
+      // ═══ Block factory ═══
+      function makeEditBar(defaultSz) {
+        const grip = t("span", "grip", "⋮⋮");
+        grip.setAttribute("draggable", "true");
+        grip.setAttribute("title", "Drag to move");
+
+        const szGroup = el("div", { className: "sz-group" });
+        const sizes = [
+          { sz: 3, label: "S" },
+          { sz: 4, label: "M" },
+          { sz: 6, label: "L" },
+          { sz: 8, label: "XL" },
+          { sz: 12, label: "Full" },
+        ];
+        for (const sz of sizes) {
+          const b = el(
+            "button",
+            { className: "sz" + (sz.sz === defaultSz ? " on" : ""), "data-sz": sz.sz },
+            sz.label
+          );
+          szGroup.appendChild(b);
+        }
+        const x = t("button", "x", "×");
+        x.setAttribute("title", "Hide");
+        return el("div", { className: "block-edit" }, [grip, szGroup, x]);
+      }
+
+      function makeBlock(id, sizeCols, title, hint, body) {
+        const head = el("div", { className: "block-head" }, [
+          t("h2", null, title),
+          t("span", "hint", hint),
+        ]);
+        return el(
+          "section",
+          { className: "block col-" + sizeCols, "data-id": id },
+          [makeEditBar(sizeCols), head, body]
+        );
+      }
+
+      // ═══ Individual block content builders ═══
+      function bodySummary() {
+        const row = el("div", { className: "stat-row" });
+        const stats = [
+          { k: "Total Value", v: "$284,617", d: "+$6,421 (+2.31%) today", cls: "up" },
+          { k: "YTD", v: "+10.9%", d: "+$28,117", cls: "up" },
+          { k: "Positions", v: "6", d: "Across 3 brokerages", cls: "" },
+          { k: "Cash", v: "9.1%", d: "Slightly light", cls: "" },
+          { k: "Hit rate", v: "64%", d: "Last 12 months", cls: "" },
+        ];
+        for (const s of stats) {
+          row.appendChild(
+            el("div", { className: "stat" }, [
+              t("div", "k", s.k),
+              t("div", "v mono" + (s.cls === "up" ? " pos" : ""), s.v),
+              t("div", "d " + s.cls, s.d),
+            ])
+          );
+        }
+        return row;
+      }
+
+      function bodyHoldings() {
+        const rows = [
+          ["NVDA", "Nvidia", 92, "1,294.18", "+3.29%", "97,348", true],
+          ["AAPL", "Apple", 62, "248.11", "+0.84%", "64,952", true],
+          ["MSFT", "Microsoft", 50, "514.23", "+1.12%", "52,332", true],
+          ["BTC", "Bitcoin", 33, "75,077.12", "+4.10%", "34,471", true],
+          ["VOO", "S&P 500 ETF", 25, "498.74", "+0.62%", "26,200", true],
+          ["F", "Ford Motor", 9, "11.82", "−1.48%", "9,314", false],
+        ];
+        const thead = el("thead", null,
+          el("tr", null, [
+            t("th", null, "Ticker"),
+            t("th", null, "Name"),
+            t("th", null, "Weight"),
+            t("th", "num", "Price"),
+            t("th", "num", "Today"),
+            t("th", "num", "Value"),
+          ])
+        );
+        const tbody = el("tbody");
+        for (const r of rows) {
+          const barWrap = el("div", { className: "bar" });
+          const fill = el("div", { className: "fill", style: "--w:" + r[2] + "%" });
+          barWrap.appendChild(fill);
+          const tr = el("tr", null, [
+            t("td", "sym", r[0]),
+            t("td", "name", r[1]),
+            el("td", null, barWrap),
+            t("td", "num", r[3]),
+            t("td", "num " + (r[6] ? "pos" : "neg"), r[4]),
+            t("td", "num", r[5]),
+          ]);
+          tbody.appendChild(tr);
+        }
+        return el("table", { className: "t" }, [thead, tbody]);
+      }
+
+      function bodyAlerts() {
+        const items = [
+          ["NVDA", "34% weight", "Concentration"],
+          ["BTC", "+4.10% move", "5%+ move"],
+          ["TSLA", "earnings Tue", "Calendar"],
+        ];
+        const wrap = el("div");
+        for (const it of items) {
+          const row = el("div", { className: "row-item" }, [
+            el("span", { className: "l" }, [
+              el("span", { className: "mono", style: "font-weight:600" }, document.createTextNode(it[0])),
+              document.createTextNode(" " + it[1]),
+            ]),
+            t("span", "r", it[2]),
+          ]);
+          wrap.appendChild(row);
+        }
+        return wrap;
+      }
+
+      function bodyChart() {
+        const svgNS = "http://www.w3.org/2000/svg";
+        const svg = document.createElementNS(svgNS, "svg");
+        svg.setAttribute("class", "chart-svg");
+        svg.setAttribute("viewBox", "0 0 800 140");
+        svg.setAttribute("preserveAspectRatio", "none");
+
+        const defs = document.createElementNS(svgNS, "defs");
+        const lg = document.createElementNS(svgNS, "linearGradient");
+        lg.setAttribute("id", "grad");
+        lg.setAttribute("x1", "0"); lg.setAttribute("y1", "0");
+        lg.setAttribute("x2", "0"); lg.setAttribute("y2", "1");
+        const s1 = document.createElementNS(svgNS, "stop");
+        s1.setAttribute("offset", "0%");
+        s1.setAttribute("stop-color", "#2563eb");
+        s1.setAttribute("stop-opacity", "0.16");
+        const s2 = document.createElementNS(svgNS, "stop");
+        s2.setAttribute("offset", "100%");
+        s2.setAttribute("stop-color", "#2563eb");
+        s2.setAttribute("stop-opacity", "0");
+        lg.appendChild(s1); lg.appendChild(s2);
+        defs.appendChild(lg);
+        svg.appendChild(defs);
+
+        const area = document.createElementNS(svgNS, "path");
+        area.setAttribute("fill", "url(#grad)");
+        area.setAttribute("d", "M 0,100 L 40,96 L 90,90 L 140,100 L 190,84 L 240,72 L 290,80 L 340,66 L 390,56 L 440,70 L 490,50 L 540,44 L 600,52 L 660,34 L 720,38 L 780,22 L 800,18 L 800,140 L 0,140 Z");
+        svg.appendChild(area);
+
+        const line = document.createElementNS(svgNS, "path");
+        line.setAttribute("fill", "none");
+        line.setAttribute("stroke", "#2563eb");
+        line.setAttribute("stroke-width", "1.8");
+        line.setAttribute("d", "M 0,100 L 40,96 L 90,90 L 140,100 L 190,84 L 240,72 L 290,80 L 340,66 L 390,56 L 440,70 L 490,50 L 540,44 L 600,52 L 660,34 L 720,38 L 780,22 L 800,18");
+        svg.appendChild(line);
+
+        const dot = document.createElementNS(svgNS, "circle");
+        dot.setAttribute("cx", "800");
+        dot.setAttribute("cy", "18");
+        dot.setAttribute("r", "4");
+        dot.setAttribute("fill", "#2563eb");
+        svg.appendChild(dot);
+
+        const meta = el("div", { className: "chart-meta" }, [
+          t("span", null, "Jan 1"),
+          el("span", null, [
+            document.createTextNode("Today · "),
+            t("span", "mono", "$284,617"),
+          ]),
+        ]);
+
+        return el("div", null, [svg, meta]);
+      }
+
+      function bodyNews() {
+        const items = [
+          ["WSJ", "NVDA", "2h ago", "Nvidia's next act: can custom chips defend the moat?"],
+          ["IBD", "TSLA", "5h ago", "Tesla earnings: what robotaxi updates should investors expect?"],
+          ["CNBC", "AAPL", "yesterday", "Apple's India ramp is working faster than analysts expected"],
+        ];
+        const wrap = el("div");
+        for (const it of items) {
+          const item = el("div", { className: "list-item" }, [
+            t("div", "src", it[0] + " · " + it[1] + " · " + it[2]),
+            el("div", { className: "hed" }, el("a", { href: "#" }, document.createTextNode(it[3]))),
+          ]);
+          wrap.appendChild(item);
+        }
+        return wrap;
+      }
+
+      function bodyCalendar() {
+        const items = [
+          ["21", "Tue", "TSLA", "Earnings · Q1", "4:30p"],
+          ["22", "Wed", "NFLX", "Earnings · Q1", "After close"],
+          ["24", "Fri", "AAPL", "Ex-dividend", "Open"],
+          ["25", "Fri", "MSFT", "10-Q filing", "Expected"],
+        ];
+        const wrap = el("div");
+        for (const i of items) {
+          wrap.appendChild(
+            el("div", { className: "cal-item" }, [
+              el("div", { className: "date" }, [document.createTextNode(i[0]), t("span", "day", i[1])]),
+              el("div", { className: "ev" }, [
+                t("strong", null, i[2]),
+                t("span", "t", i[3]),
+              ]),
+              t("div", "w", i[4]),
+            ])
+          );
+        }
+        return wrap;
+      }
+
+      function bodySector() {
+        const items = [
+          ["Technology", 75],
+          ["Digital assets", 12],
+          ["Index / ETF", 9],
+          ["Consumer cyc.", 3],
+        ];
+        const wrap = el("div");
+        for (const s of items) {
+          const barWrap = el("div", { className: "bar", style: "width:100%" });
+          barWrap.appendChild(el("div", { className: "fill", style: "--w:" + s[1] + "%" }));
+          wrap.appendChild(
+            el("div", { className: "sector-bar" }, [
+              t("span", "lbl", s[0]),
+              barWrap,
+              t("span", "p", s[1] + "%"),
+            ])
+          );
+        }
+        return wrap;
+      }
+
+      function bodyMacro() {
+        const items = [
+          ["10-Y yield", "4.32%", "+4bps wk"],
+          ["Fed funds", "4.25%", "Unchanged"],
+          ["CPI YoY", "3.32%", "+0.5 vs 12mo"],
+          ["USD idx", "107.4", "+1.1 wk"],
+        ];
+        const grid = el("div", { className: "macro-grid" });
+        for (const m of items) {
+          grid.appendChild(
+            el("div", { className: "macro-item" }, [
+              t("div", "k", m[0]),
+              t("div", "v", m[1]),
+              t("div", "d", m[2]),
+            ])
+          );
+        }
+        return grid;
+      }
+
+      function bodyResearch() {
+        const items = [
+          ["NVDA", "HOLD", "hold", "12m ago"],
+          ["TSLA", "SELL", "sell", "1d ago"],
+          ["COIN", "BUY", "buy", "2d ago"],
+          ["IONQ", "SELL", "sell", "3d ago"],
+        ];
+        const wrap = el("div");
+        for (const r of items) {
+          wrap.appendChild(
+            el("div", { className: "row-item" }, [
+              el("span", { className: "l" }, [
+                el("span", { className: "mono", style: "font-weight:600" }, document.createTextNode(r[0])),
+                document.createTextNode(" "),
+                t("span", "pill " + r[2], r[1]),
+              ]),
+              t("span", "r", r[3]),
+            ])
+          );
+        }
+        return wrap;
+      }
+
+      function bodyMovers() {
+        const items = [
+          ["BTC", "+4.10%", "pos"],
+          ["NVDA", "+3.29%", "pos"],
+          ["MSFT", "+1.12%", "pos"],
+          ["F", "−1.48%", "neg"],
+        ];
+        const wrap = el("div");
+        for (const m of items) {
+          wrap.appendChild(
+            el("div", { className: "mover" }, [
+              t("span", "t", m[0]),
+              t("span", "v " + m[2], m[1]),
+            ])
+          );
+        }
+        return wrap;
+      }
+
+      function bodyPlaceholder(name) {
+        return el("div", {
+          style:
+            "padding:20px 0; text-align:center; color:var(--muted); font-size:12px;",
+        }, document.createTextNode('Content for "' + name + '" would render here.'));
+      }
+
+      // ═══ Default layout ═══
+      const defaultBlocks = [
+        { id: "summary", size: 12, title: "Portfolio summary", hint: "Today · 3 institutions", body: bodySummary },
+        { id: "holdings", size: 8, title: "Holdings", hint: "6 positions · by weight", body: bodyHoldings },
+        { id: "alerts", size: 4, title: "Alerts", hint: "3 open", body: bodyAlerts },
+        { id: "chart", size: 6, title: "Performance (YTD)", hint: "+10.9%", body: bodyChart },
+        { id: "news", size: 6, title: "In the news", hint: "Your holdings · 24h", body: bodyNews },
+        { id: "calendar", size: 4, title: "Calendar", hint: "This week", body: bodyCalendar },
+        { id: "sector", size: 4, title: "Sector mix", hint: "By weight", body: bodySector },
+        { id: "macro", size: 4, title: "Macro", hint: "FRED · last read", body: bodyMacro },
+        { id: "research", size: 4, title: "Recent research", hint: "Last 7 days", body: bodyResearch },
+        { id: "movers", size: 4, title: "Top movers", hint: "Today", body: bodyMovers },
+      ];
+      const grid = document.getElementById("grid");
+      for (const b of defaultBlocks) {
+        grid.appendChild(makeBlock(b.id, b.size, b.title, b.hint, b.body()));
+      }
+
+      // ═══ Add-section catalog ═══
+      const addCatalog = [
+        "Watchlist",
+        "Worth reading",
+        "Insider activity",
+        "Dividend calendar",
+        "Options activity",
+        "Allocation drift",
+        "Tax-loss harvesting",
+        "Notes",
+        "Fed calendar",
+        "Correlation matrix",
+        "Benchmark vs S&P",
+        "Cash flow",
+      ];
+      const addList = document.getElementById("addList");
+      for (const name of addCatalog) {
+        const btn = el("button", null, name);
+        btn.addEventListener("click", () => {
+          const block = makeBlock("custom-" + Date.now(), 4, name, "New block · mock content", bodyPlaceholder(name));
+          block.classList.add("added");
+          grid.appendChild(block);
+          wireBlock(block);
+        });
+        addList.appendChild(btn);
+      }
+
+      // ═══ Edit mode toggle ═══
+      const editBtn = document.getElementById("editToggle");
+      editBtn.addEventListener("click", () => {
+        document.body.classList.toggle("editing");
+        editBtn.classList.toggle("active");
+      });
+
+      // ═══ Per-block interactions ═══
+      function wireBlock(block) {
+        // Size buttons
+        block.querySelectorAll(".block-edit .sz").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const newSz = btn.dataset.sz;
+            block.classList.forEach((c) => {
+              if (c.startsWith("col-")) block.classList.remove(c);
+            });
+            block.classList.add("col-" + newSz);
+            btn.closest(".sz-group").querySelectorAll(".sz").forEach((b) => b.classList.remove("on"));
+            btn.classList.add("on");
+          });
+        });
+        // Hide
+        const x = block.querySelector(".block-edit .x");
+        if (x) {
+          x.addEventListener("click", (e) => {
+            e.stopPropagation();
+            block.style.display = "none";
+          });
+        }
+        // Drag-to-reorder
+        block.setAttribute("draggable", "true");
+        block.addEventListener("dragstart", (e) => {
+          if (!document.body.classList.contains("editing")) {
+            e.preventDefault();
+            return;
+          }
+          dragSource = block;
+          block.style.opacity = "0.4";
+          e.dataTransfer.effectAllowed = "move";
+        });
+        block.addEventListener("dragend", () => {
+          block.style.opacity = "1";
+          dragSource = null;
+        });
+        block.addEventListener("dragover", (e) => {
+          if (!dragSource || dragSource === block) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+        });
+        block.addEventListener("drop", (e) => {
+          if (!dragSource || dragSource === block) return;
+          e.preventDefault();
+          const blocks = [...grid.children];
+          const srcIndex = blocks.indexOf(dragSource);
+          const tgtIndex = blocks.indexOf(block);
+          if (srcIndex < tgtIndex) {
+            grid.insertBefore(dragSource, block.nextSibling);
+          } else {
+            grid.insertBefore(dragSource, block);
           }
         });
-      });
-      const edit = document.getElementById("editToggle");
-      edit.addEventListener("click", () => {
-        document.body.classList.toggle("editing");
-        edit.classList.toggle("editing");
-        edit.textContent = document.body.classList.contains("editing")
-          ? "✓ Done"
-          : "⚙ Customize";
-      });
+      }
+      let dragSource = null;
+      document.querySelectorAll(".block").forEach(wireBlock);
     </script>
   </body>
 </html>
