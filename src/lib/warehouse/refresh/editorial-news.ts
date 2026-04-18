@@ -30,20 +30,42 @@ export type EditorialRefreshResult = {
 };
 
 export async function refreshEditorialNews(): Promise<EditorialRefreshResult> {
-  // Fold the holdings universe into a Set for O(1) lookups in the
-  // ticker-mention extractor. Same privacy rule as getTickerUniverse —
-  // string array only, no userId crosses this boundary.
-  let universe = new Set<string>();
+  // Build the ticker universe for mention-extraction.
+  //
+  // Three sources unioned:
+  //   1. Every ticker anyone currently holds.
+  //   2. Every ticker researched in the last 60 days (catches "pre-
+  //      purchase" interest so CNBC coverage of AAPL matches even if
+  //      nobody has connected a brokerage yet holding it).
+  //   3. A small set of mega-caps (AAPL, MSFT, NVDA, TSLA, META, GOOGL,
+  //      AMZN, etc.) so the dashboard has SOMETHING to surface on day 1
+  //      — otherwise demo/empty-brokerage users see a permanently
+  //      empty 'In the news' strip.
+  //
+  // String array only; no userId crosses this boundary.
+  const MEGA_CAPS = [
+    "AAPL", "MSFT", "NVDA", "GOOGL", "GOOG", "META", "AMZN", "TSLA",
+    "AVGO", "BRK.B", "JPM", "V", "MA", "WMT", "XOM", "UNH", "JNJ",
+    "PG", "HD", "LLY", "CVX", "ABBV", "MRK", "COST", "PEP", "KO",
+    "BAC", "NFLX", "AMD", "ADBE", "CRM", "ORCL", "PLTR", "PYPL",
+    "DIS", "INTC", "BA", "F", "GM", "SPY", "QQQ", "DIA", "IWM",
+    "VTI", "VOO", "BTC", "ETH", "COIN", "MSTR", "RIOT", "MARA",
+  ];
+  const universeSet = new Set<string>(MEGA_CAPS);
   try {
     const { rows } = await pool.query(
-      `SELECT DISTINCT ticker FROM "holding" WHERE ticker IS NOT NULL`
+      `SELECT ticker FROM "holding" WHERE ticker IS NOT NULL
+       UNION
+       SELECT DISTINCT ticker FROM "recommendation"
+        WHERE "createdAt" > NOW() - INTERVAL '60 days'`
     );
-    universe = new Set(
-      (rows as Array<{ ticker: string }>).map((r) => r.ticker.toUpperCase())
-    );
+    for (const r of rows as Array<{ ticker: string }>) {
+      universeSet.add(r.ticker.toUpperCase());
+    }
   } catch (err) {
     log.warn("editorial-refresh", "universe lookup failed", errorInfo(err));
   }
+  const universe = universeSet;
 
   const failed: EditorialRefreshResult["failed"] = [];
   let fetched = 0;

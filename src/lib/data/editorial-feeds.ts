@@ -70,13 +70,9 @@ export const EDITORIAL_PROVIDERS: EditorialProvider[] = [
     url: "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114",
     format: "rss",
   },
-  {
-    id: "barrons",
-    name: "Barron's",
-    category: "news",
-    url: "https://www.barrons.com/xml/rss/3_7455.xml",
-    format: "rss",
-  },
+  // Barron's RSS (https://www.barrons.com/xml/rss/3_7455.xml) returns
+  // 403 to every client — Dow Jones locked down their feeds in 2024.
+  // Paid NewsWare/Factiva access would unlock it; not worth it for us.
   {
     id: "ibd",
     name: "Investor's Business Daily",
@@ -88,13 +84,9 @@ export const EDITORIAL_PROVIDERS: EditorialProvider[] = [
   // arrives via Polygon's news feed (which syndicates Reuters).
 
   // ── Analysis / aggregator ───────────────────────────────────────
-  {
-    id: "stock_analysis",
-    name: "Stock Analysis",
-    category: "analysis",
-    url: "https://stockanalysis.com/rss/news/",
-    format: "rss",
-  },
+  // Stock Analysis (stockanalysis.com) has no RSS feed — every path
+  // probed (/rss/, /rss/news/, /feed) returns 404. Keeping a note
+  // here in case they ever publish one.
   {
     id: "seeking_alpha_market",
     name: "Seeking Alpha",
@@ -113,18 +105,10 @@ export const EDITORIAL_PROVIDERS: EditorialProvider[] = [
     url: "https://aswathdamodaran.blogspot.com/feeds/posts/default?alt=rss",
     format: "rss",
   },
-  {
-    id: "oaktree_memos",
-    name: "Howard Marks (Oaktree)",
-    category: "thinker",
-    // Oaktree's feed has been intermittent. We try it; if it 404s we
-    // degrade quietly. User-visible alternative: a direct link to
-    // oaktreecapital.com/insights/memos surfaced in the UI.
-    url: "https://www.oaktreecapital.com/insights/rss",
-    format: "rss",
-  },
-  // Berkshire shareholder letters — annual, no RSS, handled as a
-  // curated link in the UI.
+  // Howard Marks / Oaktree — no RSS at /insights/rss or elsewhere.
+  // Their memos page is the authoritative surface. Surfaced as a
+  // hand-curated link in the research starter rather than via feed.
+  // Berkshire shareholder letters — same treatment (annual, no RSS).
 
   // ── Regulatory ──────────────────────────────────────────────────
   {
