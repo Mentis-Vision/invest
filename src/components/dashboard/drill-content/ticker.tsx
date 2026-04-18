@@ -120,9 +120,23 @@ type WarehouseBundle = {
   } | null;
 };
 
+type NewsItem = {
+  id: string;
+  publishedAt: string;
+  providerName: string;
+  category: "news" | "analysis" | "thinker" | "regulatory";
+  title: string;
+  url: string;
+};
+type CoveragePayload = {
+  items: NewsItem[];
+  outletCount: number;
+};
+
 export function DrillTicker({ ticker }: { ticker: string }) {
   const [data, setData] = useState<WarehouseBundle | null>(null);
   const [loading, setLoading] = useState(true);
+  const [coverage, setCoverage] = useState<CoveragePayload | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -138,6 +152,15 @@ export function DrillTicker({ ticker }: { ticker: string }) {
         if (!alive) return;
         setLoading(false);
       });
+    // Parallel fetch: editorial coverage — WSJ/CNBC/MarketWatch/etc.
+    // items that mention this ticker in the last 21 days.
+    fetch(`/api/market-news?ticker=${encodeURIComponent(ticker)}&limit=6`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((c: CoveragePayload | null) => {
+        if (!alive || !c) return;
+        setCoverage(c);
+      })
+      .catch(() => {});
     return () => {
       alive = false;
     };
@@ -508,6 +531,56 @@ export function DrillTicker({ ticker }: { ticker: string }) {
                 );
               })}
             </ul>
+          </DrillSection>
+        )}
+
+        {/* Cross-source editorial coverage — WSJ/CNBC/MarketWatch/etc.
+            When outletCount ≥ 3 different publishers covered this
+            ticker in the last 7 days it's meaningful consensus; <3 is
+            chatter. We only surface the card when there's something
+            to show — empty state hides entirely. */}
+        {!loading && coverage && coverage.items.length > 0 && (
+          <DrillSection
+            label="Press coverage"
+            description={
+              coverage.outletCount >= 3
+                ? `${coverage.outletCount} outlets this week — consensus`
+                : coverage.outletCount >= 1
+                  ? `${coverage.outletCount} outlet${coverage.outletCount === 1 ? "" : "s"} this week`
+                  : `${coverage.items.length} item${coverage.items.length === 1 ? "" : "s"} · last 21 days`
+            }
+          >
+            <ul className="space-y-2">
+              {coverage.items.slice(0, 5).map((n) => (
+                <li key={n.id}>
+                  <a
+                    href={n.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block rounded-md px-2 py-1.5 transition-colors hover:bg-[var(--secondary)]/40"
+                  >
+                    <div className="text-sm leading-snug text-[var(--foreground)]">
+                      {n.title}
+                    </div>
+                    <div className="mt-0.5 flex items-center gap-2 text-[10px] text-[var(--muted-foreground)]">
+                      <span className="uppercase tracking-wider">
+                        {n.providerName}
+                      </span>
+                      <span>·</span>
+                      <span>
+                        {new Date(n.publishedAt).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </span>
+                    </div>
+                  </a>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-3 text-[10px] italic text-[var(--muted-foreground)]">
+              Published by third parties. We cite; we don&rsquo;t endorse.
+            </p>
           </DrillSection>
         )}
 

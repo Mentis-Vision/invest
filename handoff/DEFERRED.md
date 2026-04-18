@@ -6,6 +6,45 @@ Running list of everything that was tabled during the P1–P5 implementation pus
 
 ---
 
+## SEC EDGAR — what we pull now, and what's deferred
+
+**Live today:**
+- **Recent filings per ticker** (10-K, 10-Q, 8-K, DEF 14A) — feeds the research AI data block via `formatFilingsForAI`.
+- **Company Facts XBRL** — `getCompanyFacts(ticker)` returns every XBRL fact a company has reported across all filings, slimmed to the 15 most-useful series (revenue, net income, assets, equity, cash, shares outstanding, R&D, FCF, etc.). Authoritative — sits upstream of what Yahoo/AV scrape. Ready to feed into the research data block when we want to replace Yahoo fundamentals; not yet wired because Yahoo's shape is what the existing AI prompts read.
+- **EDGAR getcurrent Atom feed** — every filing across every company, in near-real time. Flows through `editorial-feeds.ts` → `market_news_daily` alongside WSJ/CNBC/etc. Regulatory surface sits next to narrative surface in the same table.
+- **Insider Form 4 scan** — `scanInsiderActivity` cron job flags meaningful officer/director buys + sells.
+
+**Deferred:**
+- **13F institutional holdings tracker** — quarterly filings showing what big funds actually own (Berkshire, Citadel, Bridgewater, etc.). Requires a separate XBRL-parsing pipeline because 13F rows are line-item holdings, not single facts. Highest-signal free SEC data we don't yet use. ~1 day of work to build + a new `institutional_holding` table. Unblocks "Berkshire added 2M shares of AAPL last quarter" signal on the ticker drill.
+- **NPORT-P fund profile builder** — expense ratio + AUM + top holdings for any mutual fund / ETF. Unblocks the free alternative to Morningstar we talked about earlier. ~half-day.
+- **SC 13D / 13G activist filings** — beneficial ownership > 5%. Flow into `market_news_daily` as a separate category if we add them. ~2 hours.
+- **XBRL Concepts API** — `getCompanyConcept(ticker, tag)` for single-metric historical series. Nice-to-have for a future charts surface.
+
+---
+
+## Editorial news feeds — shipped 2026-04-17
+
+Nightly cron pulls 10 public RSS/Atom sources into `market_news_daily`:
+- **News:** WSJ Markets, MarketWatch, CNBC, Barron's, Investor's Business Daily
+- **Analysis:** Stock Analysis, Seeking Alpha market currents
+- **Thinker:** Aswath Damodaran, Howard Marks (Oaktree — intermittent)
+- **Regulatory:** SEC EDGAR getcurrent
+
+Each item is scanned for ticker mentions against the holdings universe
+(cashtag `$AAPL`, parenthetical `(AAPL)`, standalone word `AAPL` when in
+universe). Surfaced as:
+- Dashboard **"In the news"** strip (4-item max, portfolio-filtered)
+- Ticker drill **"Press coverage"** section (5-item max, per-ticker)
+- Each with publisher chip + click-through to full article
+
+**Berkshire shareholder letters:** annual, no RSS. Handled as a curated
+link in a future research surface rather than a feed.
+
+**Reuters:** RSS was partially deprecated 2020–2022. Reuters coverage
+arrives via Polygon's news syndication.
+
+---
+
 ## Data sources we evaluated but DIDN'T wire (2026-04-17)
 
 ### TipRanks — no usable RSS

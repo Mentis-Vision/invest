@@ -13,6 +13,7 @@ import RecDistribution from "@/components/dashboard/rec-distribution";
 import HitRateGauge from "@/components/dashboard/hit-rate-gauge";
 import UpcomingEvaluations from "@/components/dashboard/upcoming-evaluations";
 import AlertFeed from "@/components/dashboard/alert-feed";
+import PortfolioNewsStrip from "@/components/dashboard/portfolio-news-strip";
 import TickerCard, {
   type TickerCardDensity,
 } from "@/components/dashboard/ticker-card";
@@ -293,6 +294,11 @@ function DashboardBody({ userName }: { userName: string }) {
 
       {/* Overnight-changes alert feed — only renders when there are alerts. */}
       <AlertFeed />
+
+      {/* Compact editorial news strip — 4 items max, only renders when
+          something has been written about any of your holdings. Empty
+          state hides the card entirely so there's no noise. */}
+      <PortfolioNewsStrip />
 
       {/* Connected but zero holdings — guide them to link or retry sync. */}
       {!loading && connected && holdings.length === 0 && (

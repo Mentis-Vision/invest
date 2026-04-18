@@ -18,6 +18,7 @@ import {
   generatePortfolioReview,
   getCachedPortfolioReview,
 } from "@/lib/portfolio-review";
+import { refreshEditorialNews } from "@/lib/warehouse/refresh/editorial-news";
 
 /**
  * Daily cron:
@@ -123,7 +124,20 @@ export async function GET(req: NextRequest) {
     result.warehouse = { error: "failed" };
   }
 
-  // 9. Auto-run AI portfolio review per connected user. Pre-computing
+  // 9. Editorial news sweep — pull WSJ / CNBC / MarketWatch / Barron's
+  //    / IBD / Stock Analysis / Seeking Alpha / Damodaran / Oaktree /
+  //    SEC EDGAR. Extract ticker mentions against the holdings
+  //    universe. Upsert into market_news_daily. Done ahead of the
+  //    portfolio review so the review prompt can reference today's
+  //    headlines on held tickers.
+  try {
+    result.editorialNews = await refreshEditorialNews();
+  } catch (err) {
+    log.error("cron", "editorial news refresh failed", errorInfo(err));
+    result.editorialNews = { error: "failed" };
+  }
+
+  // 10. Auto-run AI portfolio review per connected user. Pre-computing
   //    overnight means first-login the next morning loads a stored
   //    review with $0 spent. Users opted into "auto every night" over
   //    "click to spend tokens" — the AI is the value, not the gating.
