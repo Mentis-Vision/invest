@@ -51,7 +51,7 @@ export function BlockShell({
   onResize?: (sz: BlockSize) => void;
   onHide?: () => void;
   onDragStart?: (id: string) => void;
-  onDragOver?: (id: string) => void;
+  onDragOver?: (id: string, e: React.DragEvent<HTMLElement>) => void;
   onDrop?: (id: string) => void;
   onDragEnd?: () => void;
   children: ReactNode;
@@ -71,7 +71,7 @@ export function BlockShell({
         if (!editing) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
-        onDragOver?.(id);
+        onDragOver?.(id, e);
       }}
       onDrop={(e) => {
         if (!editing) return;

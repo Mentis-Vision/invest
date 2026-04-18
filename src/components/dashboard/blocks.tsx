@@ -151,7 +151,19 @@ function useHoldings(): { data: Totals | null; loading: boolean } {
 
 // ─── 1. Summary (KPI row) ────────────────────────────────────────────
 
-export function BlockSummary() {
+/**
+ * Responsive summary KPIs.
+ *
+ * Layout adapts to the block's own size:
+ *   - S (3) or M (4): stack vertically, show only 2 stats (total value
+ *     + day change) in a compact form. Fits a narrow column cleanly.
+ *   - L (6) / XL (8): 2×2 grid, 4 stats
+ *   - Full (12): single row of 5 stats
+ *
+ * Forgets about viewport breakpoints — the block's own col-span is the
+ * correct anchor for how much room we have.
+ */
+export function BlockSummary({ size }: { size?: BlockSize } = {}) {
   const { data, loading } = useHoldings();
   const [hitRate, setHitRate] = useState<number | null>(null);
 
@@ -170,33 +182,85 @@ export function BlockSummary() {
     };
   }, []);
 
+  // Decide variant from block width. Default to full when undefined.
+  const variant: "compact" | "half" | "full" =
+    size == null || size >= 12
+      ? "full"
+      : size >= 6
+        ? "half"
+        : "compact";
+
   if (loading) {
+    const skeletonCols =
+      variant === "full" ? 5 : variant === "half" ? 4 : 2;
     return (
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
-        {[...Array(5)].map((_, i) => (
-          <div
-            key={i}
-            className="h-14 animate-pulse rounded bg-secondary/50"
-          />
+      <div
+        className="grid gap-3"
+        style={{ gridTemplateColumns: `repeat(${skeletonCols}, 1fr)` }}
+      >
+        {[...Array(skeletonCols)].map((_, i) => (
+          <div key={i} className="h-14 animate-pulse rounded bg-secondary/50" />
         ))}
       </div>
     );
   }
+
+  const dayChangeTone =
+    data?.dayChangePct != null && data.dayChangePct > 0
+      ? "text-[var(--buy)]"
+      : data?.dayChangePct != null && data.dayChangePct < 0
+        ? "text-[var(--sell)]"
+        : undefined;
+
+  const valueStr = data?.connected ? fmtMoney(data.totalValue, 0) : "Not connected";
+  const dayDesc =
+    data?.dayChangeDollar != null && data?.dayChangePct != null
+      ? `${data.dayChangeDollar > 0 ? "+" : ""}${fmtMoney(data.dayChangeDollar, 0)} (${fmtPct(data.dayChangePct)}) today`
+      : undefined;
+
+  // ── Compact: narrow column (size ≤ 4). Show value + change only. ──
+  if (variant === "compact") {
+    return (
+      <div className="space-y-3">
+        <div>
+          <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+            Total Value
+          </div>
+          <div
+            className={`mt-1 font-mono text-[22px] font-semibold leading-none tracking-[-0.02em] ${dayChangeTone ?? "text-foreground"}`}
+          >
+            {valueStr}
+          </div>
+          {dayDesc && (
+            <div className={`mt-1.5 text-[11px] ${dayChangeTone ?? "text-muted-foreground"}`}>
+              {dayDesc}
+            </div>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-3 border-t border-border pt-3">
+          <div>
+            <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+              Positions
+            </div>
+            <div className="mt-1 font-mono text-[15px] font-semibold">
+              {data ? data.holdings.length : "—"}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+              Cash
+            </div>
+            <div className="mt-1 font-mono text-[15px] font-semibold">
+              {data ? `${data.cashPct.toFixed(1)}%` : "—"}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const stats: Array<{ k: string; v: string; d?: string; tone?: string }> = [
-    {
-      k: "Total Value",
-      v: data?.connected ? fmtMoney(data.totalValue, 0) : "Not connected",
-      d:
-        data?.dayChangeDollar != null && data?.dayChangePct != null
-          ? `${data.dayChangeDollar > 0 ? "+" : ""}${fmtMoney(data.dayChangeDollar, 0)} (${fmtPct(data.dayChangePct)}) today`
-          : undefined,
-      tone:
-        data?.dayChangePct != null && data.dayChangePct > 0
-          ? "text-[var(--buy)]"
-          : data?.dayChangePct != null && data.dayChangePct < 0
-            ? "text-[var(--sell)]"
-            : undefined,
-    },
+    { k: "Total Value", v: valueStr, d: dayDesc, tone: dayChangeTone },
     {
       k: "Positions",
       v: data ? String(data.holdings.length) : "—",
@@ -215,28 +279,34 @@ export function BlockSummary() {
     {
       k: "Day change",
       v: data?.dayChangePct != null ? fmtPct(data.dayChangePct) : "—",
-      tone:
-        data?.dayChangePct != null && data.dayChangePct > 0
-          ? "text-[var(--buy)]"
-          : data?.dayChangePct != null && data.dayChangePct < 0
-            ? "text-[var(--sell)]"
-            : undefined,
+      tone: dayChangeTone,
     },
   ];
+
+  // Half variant: 2×2 (drop the 5th stat since day-change is already
+  // in the Total Value description line).
+  const display = variant === "half" ? stats.slice(0, 4) : stats;
+  const gridCols = variant === "half" ? 2 : 5;
+
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-      {stats.map((s) => (
+    <div
+      className="grid gap-4"
+      style={{ gridTemplateColumns: `repeat(${gridCols}, 1fr)` }}
+    >
+      {display.map((s) => (
         <div key={s.k}>
           <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
             {s.k}
           </div>
           <div
-            className={`mt-1 font-mono text-[20px] font-semibold tracking-[-0.02em] ${s.tone ?? "text-foreground"}`}
+            className={`mt-1 font-mono text-[20px] font-semibold leading-none tracking-[-0.02em] ${s.tone ?? "text-foreground"}`}
           >
             {s.v}
           </div>
           {s.d && (
-            <div className={`mt-1 text-[11px] ${s.tone ?? "text-muted-foreground"}`}>
+            <div
+              className={`mt-1.5 text-[11px] ${s.tone ?? "text-muted-foreground"}`}
+            >
               {s.d}
             </div>
           )}
@@ -852,7 +922,9 @@ export type BlockDef = {
   title: string;
   hint?: string;
   defaultSize: BlockSize;
-  Component: ComponentType;
+  /** Component accepts the block's current size so it can adapt its
+   *  layout (e.g. Summary collapses to vertical stack at S/M). */
+  Component: ComponentType<{ size?: BlockSize }>;
   /** Short description for the Add panel. */
   description: string;
 };

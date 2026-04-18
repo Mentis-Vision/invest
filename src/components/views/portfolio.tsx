@@ -1,10 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Plus, Link as LinkIcon, RefreshCw, Loader2 } from "lucide-react";
+import {
+  Plus as PlusIcon,
+  Link as LinkIcon,
+  RefreshCw,
+  Loader2,
+  ChevronRight,
+  Landmark,
+  Layers,
+  Filter,
+} from "lucide-react";
 import {
   getHoldings,
   invalidateAndRefresh,
@@ -16,17 +22,26 @@ import {
 } from "@/components/dashboard/drill-context";
 import DrillPanel from "@/components/dashboard/drill-panel";
 
-// Use the shared Holding shape so drill-panel targets type-check.
-type Holding = CacheHolding;
+/**
+ * Portfolio — redesigned as a grouped drill-down view.
+ *
+ * Key capabilities:
+ *   - Group-by dimensions:
+ *       · Institution (Schwab, Fidelity, Coinbase...)
+ *       · Institution + Account type (Schwab → IRA, 401k, Taxable)
+ *       · Sector (Technology, Financials...)
+ *       · Asset class (Equity, Crypto, ETF, Cash)
+ *       · Flat list (no grouping)
+ *   - Filter by account — checkbox each linked account; defaults all on
+ *   - Summary row: total value, day change, positions, institutions
+ *   - Expandable group headers: count · value · weight · day-change
+ *   - Position rows still drillable into existing ticker/position panel
+ *
+ * Data source: the same /api/snaptrade/holdings payload the dashboard
+ * uses — no new endpoints, just a smarter UI on top.
+ */
 
-type HoldingsResponse = {
-  holdings: Holding[];
-  connected?: boolean;
-  totalValue?: number;
-  institutions?: string[];
-  accountCount?: number;
-  message?: string;
-};
+type Holding = CacheHolding;
 
 function money(n: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -35,6 +50,94 @@ function money(n: number): string {
     maximumFractionDigits: n >= 10000 ? 0 : 2,
   }).format(n);
 }
+
+function moneyCompact(n: number): string {
+  if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
+  if (Math.abs(n) >= 1e3) return `$${(n / 1e3).toFixed(1)}k`;
+  return `$${n.toFixed(0)}`;
+}
+
+function pct(n: number, digits = 1): string {
+  return `${n.toFixed(digits)}%`;
+}
+
+// ─── Group detection ─────────────────────────────────────────────────
+
+/** Standard account-type buckets we try to detect from freeform
+ *  accountName strings. Brokers label these inconsistently — we match
+ *  by keyword. */
+function detectAccountType(accountName: string | null | undefined): string {
+  if (!accountName) return "Default";
+  const n = accountName.toUpperCase();
+  if (/\bROTH\b/.test(n)) return "Roth IRA";
+  if (/\bIRA\b/.test(n) || /RETIREMENT/i.test(n)) return "Traditional IRA";
+  if (/401\s*[\-\(]?\s*K/.test(n)) return "401(k)";
+  if (/403\s*[\-\(]?\s*B/.test(n)) return "403(b)";
+  if (/HSA/.test(n)) return "HSA";
+  if (/529/.test(n)) return "529 Plan";
+  if (/\bBROKERAGE\b|\bINDIVIDUAL\b|\bTAXABLE\b|\bJOINT\b/.test(n))
+    return "Taxable";
+  if (/CHECKING|SAVINGS|CASH/.test(n)) return "Cash";
+  return accountName;
+}
+
+type GroupKey = "institution_account" | "institution" | "sector" | "asset_class" | "flat";
+
+type Group = {
+  id: string;
+  label: string;
+  sublabel?: string;
+  holdings: Holding[];
+  totalValue: number;
+};
+
+function buildGroups(holdings: Holding[], by: GroupKey): Group[] {
+  if (by === "flat") {
+    return [
+      {
+        id: "all",
+        label: "All positions",
+        holdings,
+        totalValue: holdings.reduce((s, h) => s + h.value, 0),
+      },
+    ];
+  }
+
+  const buckets = new Map<string, Group>();
+  for (const h of holdings) {
+    const key =
+      by === "institution"
+        ? h.institutionName ?? "Unclassified"
+        : by === "institution_account"
+          ? `${h.institutionName ?? "Unclassified"}::${detectAccountType(h.accountName)}`
+          : by === "sector"
+            ? h.sector ?? "Unclassified"
+            : by === "asset_class"
+              ? (h.assetClass ?? "Unclassified").toLowerCase()
+              : "all";
+
+    let g = buckets.get(key);
+    if (!g) {
+      const label =
+        by === "institution_account"
+          ? detectAccountType(h.accountName)
+          : by === "institution"
+            ? h.institutionName ?? "Unclassified"
+            : by === "sector"
+              ? h.sector ?? "Unclassified"
+              : (h.assetClass ?? "Unclassified").replace(/^\w/, (c) => c.toUpperCase());
+      const sublabel =
+        by === "institution_account" ? h.institutionName ?? undefined : undefined;
+      g = { id: key, label, sublabel, holdings: [], totalValue: 0 };
+      buckets.set(key, g);
+    }
+    g.holdings.push(h);
+    g.totalValue += h.value;
+  }
+  return [...buckets.values()].sort((a, b) => b.totalValue - a.totalValue);
+}
+
+// ─── Component ───────────────────────────────────────────────────────
 
 export default function PortfolioView() {
   return (
@@ -58,6 +161,12 @@ function PortfolioBody() {
   const popupRef = useRef<Window | null>(null);
   const pollingRef = useRef<number | null>(null);
 
+  // ── Grouping + filter UI state ──
+  const [groupBy, setGroupBy] = useState<GroupKey>("institution_account");
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [excludedAccounts, setExcludedAccounts] = useState<Set<string>>(new Set());
+  const [showFilters, setShowFilters] = useState(false);
+
   const loadHoldings = useCallback(async (force = false) => {
     setLoadingHoldings(true);
     try {
@@ -80,17 +189,12 @@ function PortfolioBody() {
     loadHoldings();
   }, [loadHoldings]);
 
-  // If a popup is open, poll holdings every 3s and close when linked.
   useEffect(() => {
     return () => {
       if (pollingRef.current) window.clearInterval(pollingRef.current);
     };
   }, []);
 
-  // Listen for the snaptrade:connection_complete postMessage from our
-  // /snaptrade/callback landing page. Lets us refresh holdings the instant
-  // the user clicks "Done" in the SnapTrade popup instead of waiting for
-  // the 1-second popup-closed poll. Origin-checked to avoid spoofed messages.
   useEffect(() => {
     function onMessage(evt: MessageEvent) {
       if (evt.origin !== window.location.origin) return;
@@ -100,7 +204,7 @@ function PortfolioBody() {
         try {
           popupRef.current.close();
         } catch {
-          /* opener-only close may be blocked; user can close manually */
+          /* opener-only close may be blocked */
         }
       }
       if (pollingRef.current) {
@@ -128,7 +232,6 @@ function PortfolioBody() {
         setError(data.message ?? "Could not start brokerage linking.");
         return;
       }
-
       const url: string = data.loginUrl;
       const w = Math.min(window.innerWidth * 0.9, 720);
       const h = Math.min(window.innerHeight * 0.9, 820);
@@ -140,21 +243,15 @@ function PortfolioBody() {
         `width=${w},height=${h},left=${left},top=${top}`
       );
       popupRef.current = popup;
-
       if (!popup) {
-        setError(
-          "Pop-up blocked. Enable pop-ups for this site, then try again."
-        );
+        setError("Pop-up blocked. Enable pop-ups for this site, then try again.");
         return;
       }
-
-      // Poll until popup closes, then refresh (bypassing cache).
       pollingRef.current = window.setInterval(async () => {
         if (popup.closed) {
           if (pollingRef.current) window.clearInterval(pollingRef.current);
           pollingRef.current = null;
           await loadHoldings(true);
-          // Also trigger a trade sync in the background
           fetch("/api/snaptrade/sync", { method: "POST" }).catch(() => {});
         }
       }, 1000);
@@ -175,370 +272,481 @@ function PortfolioBody() {
     }
   }, [loadHoldings]);
 
-  const institutions = holdings.reduce<Record<string, number>>((acc, h) => {
-    const bucket = h.institutionName ?? h.accountName ?? "Unclassified";
-    acc[bucket] = (acc[bucket] ?? 0) + h.value;
-    return acc;
-  }, {});
+  // ── Derived ──
+  const accounts = useMemo(() => {
+    const set = new Map<string, { key: string; label: string; institution: string }>();
+    for (const h of holdings) {
+      const key = `${h.institutionName ?? "?"}::${h.accountName ?? "?"}`;
+      if (!set.has(key)) {
+        set.set(key, {
+          key,
+          label: h.accountName ?? "Default",
+          institution: h.institutionName ?? "Unclassified",
+        });
+      }
+    }
+    return [...set.values()].sort((a, b) =>
+      a.institution.localeCompare(b.institution) ||
+      a.label.localeCompare(b.label)
+    );
+  }, [holdings]);
 
-  const sectorBreakdown = holdings.reduce<Record<string, number>>((acc, h) => {
-    const bucket = h.sector ?? "Unclassified";
-    acc[bucket] = (acc[bucket] ?? 0) + h.value;
-    return acc;
-  }, {});
-  const sectorRows = Object.entries(sectorBreakdown).sort((a, b) => b[1] - a[1]);
+  const filteredHoldings = useMemo(() => {
+    if (excludedAccounts.size === 0) return holdings;
+    return holdings.filter(
+      (h) =>
+        !excludedAccounts.has(`${h.institutionName ?? "?"}::${h.accountName ?? "?"}`)
+    );
+  }, [holdings, excludedAccounts]);
 
+  const filteredTotal = useMemo(
+    () => filteredHoldings.reduce((s, h) => s + h.value, 0),
+    [filteredHoldings]
+  );
+
+  const groups = useMemo(
+    () => buildGroups(filteredHoldings, groupBy),
+    [filteredHoldings, groupBy]
+  );
+
+  function toggleCollapse(id: string) {
+    setCollapsed((c) => ({ ...c, [id]: !c[id] }));
+  }
+  function toggleAccount(key: string) {
+    setExcludedAccounts((cur) => {
+      const next = new Set(cur);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-semibold tracking-tight text-[var(--foreground)]">
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+        <div className="min-w-0">
+          <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-foreground">
             My Portfolio
           </h2>
-          <p className="text-sm text-muted-foreground">
-            A detailed look at your current holdings — synced from your brokerage.
+          <p className="mt-0.5 text-[13px] text-muted-foreground">
+            Everything you hold, grouped however you want to look at it.
           </p>
         </div>
         <div className="flex items-center gap-2">
           {connected && (
-            <Button size="sm" variant="outline" onClick={handleRefresh} disabled={syncing}>
+            <button
+              onClick={handleRefresh}
+              disabled={syncing}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-[12px] font-medium text-foreground/80 hover:border-primary/50 hover:text-foreground disabled:opacity-60"
+            >
               {syncing ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <RefreshCw className="mr-2 h-4 w-4" />
+                <RefreshCw className="h-3.5 w-3.5" />
               )}
               Refresh
-            </Button>
+            </button>
           )}
-          <Button size="sm" onClick={startLinking} disabled={loadingToken}>
+          <button
+            onClick={startLinking}
+            disabled={loadingToken}
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-colors hover:opacity-90 disabled:opacity-60"
+          >
             {loadingToken ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
-              <LinkIcon className="mr-2 h-4 w-4" />
+              <LinkIcon className="h-3.5 w-3.5" />
             )}
-            {connected ? "Link another account" : "Connect Brokerage"}
-          </Button>
+            {connected ? "Link another" : "Connect Brokerage"}
+          </button>
         </div>
       </div>
 
       {error && (
-        <Card className="border-destructive/40 bg-destructive/5">
-          <CardContent className="py-3 text-sm text-destructive">{error}</CardContent>
-        </Card>
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-[13px] text-destructive">
+          {error}
+        </div>
       )}
-
       {notConfiguredMessage && !connected && (
-        <Card className="border-[var(--hold)]/30 bg-[var(--hold)]/5">
-          <CardContent className="py-4 text-sm text-[var(--muted-foreground)]">
-            <span className="font-medium text-[var(--foreground)]">
-              Brokerage linking not available.
-            </span>{" "}
-            {notConfiguredMessage}
-          </CardContent>
-        </Card>
+        <div className="rounded-md border border-border bg-card px-3 py-2.5 text-[13px] text-muted-foreground">
+          <span className="font-medium text-foreground">
+            Brokerage linking not available.
+          </span>{" "}
+          {notConfiguredMessage}
+        </div>
       )}
 
+      {/* Summary strip */}
       {connected && holdings.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Summary</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
-              <Drillable
-                target={{
-                  kind: "kpi",
-                  metric: "total_value",
-                  label: "Positions value",
-                  valueLabel: money(totalValue),
-                }}
-                ariaLabel="Open details on positions value"
-                className="!block !p-0 !text-left !hover:no-underline"
-              >
-                <div className="text-xs text-muted-foreground">Positions value</div>
-                <div className="mt-1 text-2xl font-semibold tracking-tight">
-                  {money(totalValue)}
-                </div>
-                {brokerageBalance != null && brokerageBalance > totalValue && (
-                  <div className="mt-0.5 text-[10px] text-muted-foreground">
-                    Cash drag:{" "}
-                    <span className="font-mono text-foreground/80">
-                      {money(brokerageBalance - totalValue)}
-                    </span>
-                  </div>
-                )}
-              </Drillable>
-              <Drillable
-                target={
-                  brokerageBalance != null
-                    ? {
-                        kind: "kpi",
-                        metric: "brokerage_balance",
-                        label: "Brokerage balance",
-                        valueLabel: money(brokerageBalance),
-                      }
-                    : {
-                        kind: "kpi",
-                        metric: "positions",
-                        label: "Positions",
-                        valueLabel: `${holdings.length}`,
-                      }
-                }
-                ariaLabel="Open details on brokerage balance"
-                className="!block !p-0 !text-left !hover:no-underline"
-              >
-                <div className="text-xs text-muted-foreground">
-                  {brokerageBalance != null
-                    ? "Brokerage balance"
-                    : "Positions"}
-                </div>
-                <div className="mt-1 text-2xl font-semibold tracking-tight">
-                  {brokerageBalance != null
-                    ? money(brokerageBalance)
-                    : holdings.length}
-                </div>
-                {brokerageBalance != null && (
-                  <div className="mt-0.5 text-[10px] text-muted-foreground">
-                    includes cash &amp; settlements
-                  </div>
-                )}
-              </Drillable>
-              <Drillable
-                target={{
-                  kind: "kpi",
-                  metric: "institution_count",
-                  label: "Linked institutions",
-                  valueLabel: `${Object.keys(institutions).length}`,
-                }}
-                ariaLabel="Open details on linked institutions"
-                className="!block !p-0 !text-left !hover:no-underline"
-              >
-                <div className="text-xs text-muted-foreground">Institutions</div>
-                <div className="mt-1 text-2xl font-semibold tracking-tight">
-                  {Object.keys(institutions).length}
-                </div>
-              </Drillable>
-              <Drillable
-                target={{
-                  kind: "kpi",
-                  metric: "largest_position_pct",
-                  label: "Largest position",
-                  valueLabel:
-                    holdings.length > 0 && totalValue > 0
-                      ? `${Math.round(
-                          (Math.max(...holdings.map((h) => h.value)) / totalValue) * 100
-                        )}%`
-                      : "—",
-                }}
-                ariaLabel="Open details on largest position"
-                className="!block !p-0 !text-left !hover:no-underline"
-              >
-                <div className="text-xs text-muted-foreground">Largest position</div>
-                <div className="mt-1 text-2xl font-semibold tracking-tight">
-                  {holdings.length > 0 && totalValue > 0
-                    ? `${Math.round(
-                        (Math.max(...holdings.map((h) => h.value)) / totalValue) * 100
-                      )}%`
-                    : "—"}
-                </div>
-              </Drillable>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="grid grid-cols-2 gap-3 rounded-[10px] border border-border bg-card p-4 sm:grid-cols-4">
+          <Stat label="Total value" value={money(filteredTotal)} />
+          <Stat
+            label="Positions"
+            value={String(filteredHoldings.length)}
+            hint={
+              filteredHoldings.length !== holdings.length
+                ? `of ${holdings.length}`
+                : undefined
+            }
+          />
+          <Stat
+            label="Institutions"
+            value={String(
+              new Set(filteredHoldings.map((h) => h.institutionName ?? "?")).size
+            )}
+          />
+          <Stat
+            label="Accounts"
+            value={String(accounts.length)}
+            hint={brokerageBalance ? `balance ${moneyCompact(brokerageBalance)}` : undefined}
+          />
+        </div>
       )}
 
-      {connected && sectorRows.length > 0 && totalValue > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Sector breakdown</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {sectorRows.map(([sector, value]) => {
-                const pct = (value / totalValue) * 100;
-                const bucketHoldings = holdings.filter(
-                  (h) =>
-                    (h.sector ?? "Unclassified") === sector
-                );
-                return (
-                  <Drillable
-                    key={sector}
-                    target={{
-                      kind: "allocation",
-                      bucket: sector,
-                      holdings: bucketHoldings,
-                      totalValue,
-                    }}
-                    ariaLabel={`Open ${sector} sector detail`}
-                    className="!block w-full !hover:no-underline"
+      {/* Controls */}
+      {connected && holdings.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+              Group by
+            </span>
+            <GroupSelector value={groupBy} onChange={setGroupBy} />
+          </div>
+          <div className="flex-1" />
+          <button
+            type="button"
+            onClick={() => setShowFilters((v) => !v)}
+            className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors ${
+              showFilters || excludedAccounts.size > 0
+                ? "border-primary/50 bg-primary/5 text-primary"
+                : "border-border bg-card text-foreground/80 hover:border-primary/50"
+            }`}
+          >
+            <Filter className="h-3.5 w-3.5" />
+            Accounts{" "}
+            {excludedAccounts.size > 0
+              ? `(${accounts.length - excludedAccounts.size} of ${accounts.length})`
+              : `(${accounts.length})`}
+          </button>
+        </div>
+      )}
+
+      {/* Account filter panel */}
+      {showFilters && connected && (
+        <div className="rounded-[10px] border border-primary/30 bg-primary/5 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-primary">
+              Show / hide accounts
+            </span>
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                onClick={() => setExcludedAccounts(new Set())}
+                className="rounded text-[11px] text-primary underline-offset-4 hover:underline"
+              >
+                All on
+              </button>
+              <span className="text-[11px] text-muted-foreground">·</span>
+              <button
+                type="button"
+                onClick={() =>
+                  setExcludedAccounts(new Set(accounts.map((a) => a.key)))
+                }
+                className="rounded text-[11px] text-primary underline-offset-4 hover:underline"
+              >
+                All off
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+            {accounts.map((a) => {
+              const active = !excludedAccounts.has(a.key);
+              return (
+                <label
+                  key={a.key}
+                  className={`flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-[12px] transition-colors ${
+                    active
+                      ? "border-border bg-card"
+                      : "border-border/60 bg-secondary/30 opacity-60"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={active}
+                    onChange={() => toggleAccount(a.key)}
+                    className="h-3.5 w-3.5 accent-[var(--primary)]"
+                  />
+                  <span className="flex-1 truncate">
+                    <span className="text-foreground">{a.label}</span>
+                    <span className="ml-1.5 text-muted-foreground">
+                      · {a.institution}
+                    </span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Grouped body */}
+      {loadingHoldings ? (
+        <div className="flex items-center justify-center rounded-[10px] border border-border bg-card py-12">
+          <Loader2 className="mr-2 h-4 w-4 animate-spin text-muted-foreground" />
+          <span className="text-[13px] text-muted-foreground">Loading your positions…</span>
+        </div>
+      ) : holdings.length === 0 ? (
+        <EmptyState onConnect={startLinking} loading={loadingToken} />
+      ) : (
+        <div className="space-y-3">
+          {groups.map((g) => {
+            const isFlat = groupBy === "flat";
+            const isCollapsed = collapsed[g.id] ?? false;
+            const weight =
+              filteredTotal > 0 ? (g.totalValue / filteredTotal) * 100 : 0;
+            return (
+              <section
+                key={g.id}
+                className="overflow-hidden rounded-[10px] border border-border bg-card"
+              >
+                {!isFlat && (
+                  <button
+                    type="button"
+                    onClick={() => toggleCollapse(g.id)}
+                    className="flex w-full items-center gap-3 border-b border-border px-4 py-3 text-left transition-colors hover:bg-secondary/40"
                   >
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between text-xs">
-                        <span
-                          className={
-                            sector === "Unclassified"
-                              ? "text-muted-foreground"
-                              : "text-foreground"
-                          }
-                        >
-                          {sector}
+                    <ChevronRight
+                      className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
+                        isCollapsed ? "" : "rotate-90"
+                      }`}
+                    />
+                    <GroupIcon by={groupBy} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline gap-2">
+                        <span className="truncate text-[14px] font-semibold text-foreground">
+                          {g.label}
                         </span>
-                        <span className="font-mono text-muted-foreground">
-                          {money(value)} · {pct.toFixed(1)}%
-                        </span>
+                        {g.sublabel && (
+                          <span className="truncate text-[12px] text-muted-foreground">
+                            · {g.sublabel}
+                          </span>
+                        )}
                       </div>
-                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                        <div
-                          className={`h-full ${
-                            sector === "Unclassified"
-                              ? "bg-muted-foreground/40"
-                              : "bg-[var(--buy)]/60"
-                          }`}
-                          style={{ width: `${Math.min(pct, 100)}%` }}
-                        />
+                      <div className="mt-0.5 text-[11px] text-muted-foreground">
+                        {g.holdings.length} position{g.holdings.length === 1 ? "" : "s"}
                       </div>
                     </div>
-                  </Drillable>
-                );
-              })}
-            </div>
-            <p className="mt-4 text-[11px] text-muted-foreground">
-              Sector classification via Yahoo Finance; may be missing for
-              non-US or niche tickers.
-            </p>
-          </CardContent>
-        </Card>
+                    <div className="shrink-0 text-right">
+                      <div className="font-mono text-[14px] font-semibold text-foreground">
+                        {money(g.totalValue)}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {pct(weight)} of filtered
+                      </div>
+                    </div>
+                  </button>
+                )}
+                {!isCollapsed && (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-[12.5px]">
+                      <thead>
+                        <tr className="border-b border-border text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                          <th className="px-4 py-2 text-left font-medium">Ticker</th>
+                          <th className="px-2 py-2 text-left font-medium">Name</th>
+                          <th className="px-2 py-2 text-right font-medium font-mono">
+                            Shares
+                          </th>
+                          <th className="px-2 py-2 text-right font-medium font-mono">
+                            Price
+                          </th>
+                          <th className="px-2 py-2 text-right font-medium font-mono">
+                            Value
+                          </th>
+                          {groupBy !== "institution_account" && (
+                            <th className="px-4 py-2 text-left font-medium">Account</th>
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {g.holdings
+                          .slice()
+                          .sort((a, b) => b.value - a.value)
+                          .map((h, i) => (
+                            <tr
+                              key={`${h.ticker}-${h.accountName}-${i}`}
+                              className="border-b border-border/60 last:border-b-0 hover:bg-secondary/30"
+                            >
+                              <td className="px-4 py-2.5 font-mono font-semibold text-foreground">
+                                <Drillable
+                                  target={{ kind: "position", holding: h }}
+                                  ariaLabel={`Open ${h.ticker} position detail`}
+                                  className="!p-0"
+                                >
+                                  {h.ticker}
+                                </Drillable>
+                              </td>
+                              <td className="px-2 py-2.5 text-muted-foreground">
+                                <Drillable
+                                  target={{ kind: "ticker", ticker: h.ticker }}
+                                  ariaLabel={`Open ${h.ticker} warehouse detail`}
+                                  as="span"
+                                  className="!block !p-0 !hover:no-underline"
+                                >
+                                  <span className="block truncate">{h.name}</span>
+                                  {h.sector && (
+                                    <span className="mt-0.5 block text-[10px] text-muted-foreground/70">
+                                      {h.sector}
+                                      {h.industry ? ` · ${h.industry}` : ""}
+                                    </span>
+                                  )}
+                                </Drillable>
+                              </td>
+                              <td className="px-2 py-2.5 text-right font-mono tabular-nums text-muted-foreground">
+                                {h.shares.toLocaleString("en-US", {
+                                  maximumFractionDigits: 4,
+                                })}
+                              </td>
+                              <td className="px-2 py-2.5 text-right font-mono tabular-nums">
+                                {money(h.price)}
+                              </td>
+                              <td className="px-2 py-2.5 text-right font-mono tabular-nums font-medium">
+                                <Drillable
+                                  target={{ kind: "position", holding: h }}
+                                  ariaLabel={`Open ${h.ticker} position detail`}
+                                  className="!p-0 !inline-block"
+                                >
+                                  {money(h.value)}
+                                </Drillable>
+                              </td>
+                              {groupBy !== "institution_account" && (
+                                <td className="px-4 py-2.5 text-[11px] text-muted-foreground">
+                                  {h.institutionName ?? "—"}
+                                  {h.accountName && (
+                                    <span className="block text-muted-foreground/70">
+                                      {h.accountName}
+                                    </span>
+                                  )}
+                                </td>
+                              )}
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+            );
+          })}
+        </div>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Holdings</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loadingHoldings ? (
-            <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Loading your positions…
-            </div>
-          ) : holdings.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-                <Plus className="h-6 w-6 text-muted-foreground" />
-              </div>
-              <h3 className="text-sm font-medium">No holdings yet</h3>
-              <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                Connect your brokerage account to sync your portfolio automatically.
-                Read-only access — we never move money or place trades.
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-4"
-                onClick={startLinking}
-                disabled={loadingToken}
-              >
-                {loadingToken && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Connect Brokerage
-              </Button>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground">
-                  <tr className="border-b">
-                    <th className="px-3 py-2 font-medium">Ticker</th>
-                    <th className="px-3 py-2 font-medium">Name</th>
-                    <th className="px-3 py-2 text-right font-medium">Shares</th>
-                    <th className="px-3 py-2 text-right font-medium">Price</th>
-                    <th className="px-3 py-2 text-right font-medium">Value</th>
-                    <th className="px-3 py-2 font-medium">Account</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {holdings
-                    .slice()
-                    .sort((a, b) => b.value - a.value)
-                    .map((h, i) => (
-                      <tr
-                        key={`${h.ticker}-${h.accountName}-${i}`}
-                        className="border-b last:border-0"
-                      >
-                        <td className="px-3 py-3 font-mono font-medium">
-                          <Drillable
-                            target={{ kind: "position", holding: h }}
-                            ariaLabel={`Open ${h.ticker} position detail`}
-                            className="!p-0"
-                          >
-                            {h.ticker}
-                          </Drillable>
-                        </td>
-                        <td className="px-3 py-3 text-muted-foreground">
-                          <Drillable
-                            target={{ kind: "ticker", ticker: h.ticker }}
-                            ariaLabel={`Open ${h.ticker} warehouse detail`}
-                            as="span"
-                            className="!block !p-0 !hover:no-underline"
-                          >
-                            {/* Spans only — putting a <div> inside a <button>
-                                (or even an inline-element <span> in HTML5)
-                                breaks the implicit content model and causes
-                                the browser to auto-close the wrapping element.
-                                That was the source of the "drill flashes
-                                open then page reloads" bug — the broken DOM
-                                surfaced as inconsistent click targets. */}
-                            <span className="block">{h.name}</span>
-                            {h.sector && (
-                              <span className="block mt-0.5 text-[10px] text-muted-foreground/70">
-                                {h.sector}
-                                {h.industry ? ` · ${h.industry}` : ""}
-                              </span>
-                            )}
-                          </Drillable>
-                        </td>
-                        <td className="px-3 py-3 text-right tabular-nums">
-                          {h.shares.toLocaleString("en-US", { maximumFractionDigits: 4 })}
-                        </td>
-                        <td className="px-3 py-3 text-right tabular-nums">
-                          <Drillable
-                            target={{ kind: "ticker", ticker: h.ticker }}
-                            ariaLabel={`Open ${h.ticker} ticker drill from price`}
-                            className="!p-0 !inline-block"
-                          >
-                            {money(h.price)}
-                          </Drillable>
-                        </td>
-                        <td className="px-3 py-3 text-right tabular-nums font-medium">
-                          <Drillable
-                            target={{ kind: "position", holding: h }}
-                            ariaLabel={`Open ${h.ticker} position detail`}
-                            className="!p-0 !inline-block"
-                          >
-                            {money(h.value)}
-                          </Drillable>
-                        </td>
-                        <td className="px-3 py-3 text-xs text-muted-foreground">
-                          {h.institutionName ? (
-                            <Badge variant="outline" className="font-normal">
-                              {h.institutionName}
-                            </Badge>
-                          ) : (
-                            "—"
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <p className="text-xs text-muted-foreground">
+      <p className="text-[11px] leading-relaxed text-muted-foreground">
         Brokerage data is read-only via SnapTrade. We never initiate trades or
-        move money on your behalf. Positions reflect the last sync from your
-        institution and may lag real-time.
+        move money. Positions reflect your last sync.
       </p>
+    </div>
+  );
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────
+
+function Stat({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
+  return (
+    <div>
+      <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
+      </div>
+      <div className="mt-1 font-mono text-[18px] font-semibold tracking-[-0.015em] text-foreground">
+        {value}
+      </div>
+      {hint && (
+        <div className="mt-0.5 text-[10px] text-muted-foreground">{hint}</div>
+      )}
+    </div>
+  );
+}
+
+function GroupSelector({
+  value,
+  onChange,
+}: {
+  value: GroupKey;
+  onChange: (v: GroupKey) => void;
+}) {
+  const opts: Array<{ v: GroupKey; label: string }> = [
+    { v: "institution_account", label: "Broker + account" },
+    { v: "institution", label: "Broker" },
+    { v: "sector", label: "Sector" },
+    { v: "asset_class", label: "Asset class" },
+    { v: "flat", label: "Flat list" },
+  ];
+  return (
+    <div className="inline-flex rounded-md border border-border bg-card p-0.5">
+      {opts.map((o) => (
+        <button
+          key={o.v}
+          type="button"
+          onClick={() => onChange(o.v)}
+          className={`rounded-[5px] px-2.5 py-1 text-[11.5px] font-medium transition-colors ${
+            value === o.v
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function GroupIcon({ by }: { by: GroupKey }) {
+  const Icon = by === "institution" || by === "institution_account" ? Landmark : Layers;
+  return (
+    <span
+      aria-hidden
+      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-secondary text-muted-foreground"
+    >
+      <Icon className="h-3.5 w-3.5" />
+    </span>
+  );
+}
+
+function EmptyState({
+  onConnect,
+  loading,
+}: {
+  onConnect: () => void;
+  loading: boolean;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center rounded-[10px] border border-dashed border-border bg-card py-14 text-center">
+      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-secondary">
+        <PlusIcon className="h-6 w-6 text-muted-foreground" />
+      </div>
+      <h3 className="text-[14px] font-medium text-foreground">No holdings yet</h3>
+      <p className="mt-1 max-w-sm text-[13px] text-muted-foreground">
+        Connect your brokerage account to sync your portfolio automatically.
+        Read-only access — we never move money or place trades.
+      </p>
+      <button
+        onClick={onConnect}
+        disabled={loading}
+        className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60"
+      >
+        {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+        Connect Brokerage
+      </button>
     </div>
   );
 }

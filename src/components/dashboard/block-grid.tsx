@@ -1,45 +1,63 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Settings, Check, Plus } from "lucide-react";
 import {
-  BLOCK_REGISTRY,
-  ADD_CATALOG,
-  BlockPlaceholder,
-} from "./blocks";
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
+import { Plus } from "lucide-react";
+import { BLOCK_REGISTRY, ADD_CATALOG, BlockPlaceholder } from "./blocks";
 import { BlockShell } from "./block-shell";
 import type { BlockSize, LayoutBlock } from "@/lib/dashboard-layout";
 
 /**
  * Customizable grid of dashboard blocks.
  *
- * Loads layout from /api/dashboard/layout (or the default fallback).
- * When the user enters edit mode (⚙ Customize), per-block resize and
- * hide controls appear, the blocks become HTML5-draggable, and an
- * "+ Add a section" panel slides in below the grid.
+ * Edit-mode is controlled from OUTSIDE this component (the dashboard
+ * page wraps it with a single Customize button in the header).
+ * Expose an imperative handle so the parent can toggle editing /
+ * trigger an add-panel without the grid owning its own button.
  *
- * Changes auto-save to the API via a debounced PATCH — the user never
- * has to hit a save button. Layout flicks back to server truth on
- * successful save.
+ * Drag-to-reorder uses the pointer X position within the target block:
+ *   - Drop on left half  → insert BEFORE target
+ *   - Drop on right half → insert AFTER target
+ * That makes "drag a block past this one to push it further" actually
+ * work, instead of only being able to slide blocks earlier in the list.
+ *
+ * Block size is passed to each Block component via a simple context
+ * ticket — blocks that care about layout width read it and render
+ * compact vs full layouts.
  */
 
-function labelSize(size: BlockSize): string {
-  switch (size) {
-    case 3: return "S";
-    case 4: return "M";
-    case 6: return "L";
-    case 8: return "XL";
-    case 12: return "Full";
-  }
-}
+export type BlockGridHandle = {
+  /** Toggle edit mode from outside. */
+  toggleEdit: () => void;
+  /** Current edit state (for button styling). */
+  isEditing: () => boolean;
+  /** Open / close the add-section panel. */
+  toggleAdd: () => void;
+};
 
-export default function BlockGrid() {
+const BlockGrid = forwardRef<BlockGridHandle>(function BlockGrid(_, ref) {
   const [layout, setLayout] = useState<LayoutBlock[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const dragIdRef = useRef<string | null>(null);
+  const dropPositionRef = useRef<"before" | "after">("before");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    toggleEdit: () =>
+      setEditing((v) => {
+        if (v) setShowAdd(false);
+        return !v;
+      }),
+    isEditing: () => editing,
+    toggleAdd: () => setShowAdd((v) => !v),
+  }));
 
   // Initial load from API
   useEffect(() => {
@@ -61,10 +79,7 @@ export default function BlockGrid() {
     };
   }, []);
 
-  // Debounced auto-save on any layout change after initial load.
-  // 600ms is long enough that rapid clicks (resize → hide → resize)
-  // coalesce into one save, short enough that a quick close-tab
-  // still lands before the navigation.
+  // Debounced auto-save — 600ms after the last edit action.
   useEffect(() => {
     if (!loaded) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -78,15 +93,11 @@ export default function BlockGrid() {
   }, [layout, loaded]);
 
   function updateSize(id: string, size: BlockSize) {
-    setLayout((cur) =>
-      cur.map((b) => (b.id === id ? { ...b, size } : b))
-    );
+    setLayout((cur) => cur.map((b) => (b.id === id ? { ...b, size } : b)));
   }
-
   function hideBlock(id: string) {
     setLayout((cur) => cur.filter((b) => b.id !== id));
   }
-
   function addBlock(id: string) {
     setLayout((cur) => {
       if (cur.some((b) => b.id === id)) return cur;
@@ -100,19 +111,28 @@ export default function BlockGrid() {
   function handleDragStart(id: string) {
     dragIdRef.current = id;
   }
-  function handleDragOver(_: string) {
-    // no-op — reorder happens on drop
+  function handleDragOver(id: string, e: React.DragEvent<HTMLElement>) {
+    // Capture which half of the target the pointer is over — left =
+    // insert-before, right = insert-after. Makes drag feel natural.
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midpoint = rect.left + rect.width / 2;
+    dropPositionRef.current = e.clientX < midpoint ? "before" : "after";
+    void id;
   }
   function handleDrop(targetId: string) {
     const srcId = dragIdRef.current;
     if (!srcId || srcId === targetId) return;
+    const position = dropPositionRef.current;
     setLayout((cur) => {
       const idxSrc = cur.findIndex((b) => b.id === srcId);
       const idxTgt = cur.findIndex((b) => b.id === targetId);
       if (idxSrc < 0 || idxTgt < 0) return cur;
       const next = [...cur];
       const [moved] = next.splice(idxSrc, 1);
-      next.splice(idxTgt, 0, moved);
+      // After splice, the target's index shifts by 1 if src was before it.
+      const adjustedTgt = idxSrc < idxTgt ? idxTgt - 1 : idxTgt;
+      const insertAt = position === "after" ? adjustedTgt + 1 : adjustedTgt;
+      next.splice(Math.max(0, Math.min(insertAt, next.length)), 0, moved);
       return next;
     });
   }
@@ -139,57 +159,23 @@ export default function BlockGrid() {
 
   return (
     <div>
-      {/* Customize toolbar — sits above the grid, right-aligned */}
-      <div className="mb-4 flex items-center justify-between">
-        <div className="text-[12px] text-muted-foreground">
-          {editing ? (
-            <span>
-              Editing — drag, resize, or hide blocks. Changes save
-              automatically.
-            </span>
-          ) : (
-            <span>&nbsp;</span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {editing && (
-            <button
-              type="button"
-              onClick={() => setShowAdd((v) => !v)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-[12px] font-medium text-foreground/80 hover:border-primary/50 hover:text-foreground"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add section
-            </button>
-          )}
+      {/* Editing status bar — only visible in edit mode */}
+      {editing && (
+        <div className="mb-3 flex items-center justify-between gap-3 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-[12px]">
+          <span className="text-foreground/80">
+            <span className="font-medium">Editing.</span> Drag, resize, or
+            hide blocks — changes save automatically.
+          </span>
           <button
             type="button"
-            onClick={() => {
-              setEditing((v) => {
-                if (v) setShowAdd(false);
-                return !v;
-              });
-            }}
-            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors ${
-              editing
-                ? "bg-primary text-primary-foreground"
-                : "border border-border bg-card text-foreground/80 hover:border-primary/50 hover:text-foreground"
-            }`}
+            onClick={() => setShowAdd((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-foreground/80 hover:border-primary/50 hover:text-foreground"
           >
-            {editing ? (
-              <>
-                <Check className="h-3.5 w-3.5" />
-                Done
-              </>
-            ) : (
-              <>
-                <Settings className="h-3.5 w-3.5" />
-                Customize
-              </>
-            )}
+            <Plus className="h-3 w-3" />
+            {showAdd ? "Hide add panel" : "Add section"}
           </button>
         </div>
-      </div>
+      )}
 
       {/* Add-section panel */}
       {editing && showAdd && (
@@ -241,7 +227,7 @@ export default function BlockGrid() {
               onDragEnd={handleDragEnd}
             >
               {meta ? (
-                <meta.Component />
+                <meta.Component size={b.size} />
               ) : (
                 <BlockPlaceholder label={toTitle(b.id)} />
               )}
@@ -250,41 +236,27 @@ export default function BlockGrid() {
         })}
       </div>
 
-      {/* Empty state — all blocks hidden */}
       {layout.length === 0 && (
         <div className="rounded-[10px] border border-dashed border-border bg-card p-8 text-center">
           <p className="text-[14px] font-medium text-foreground">
             Your dashboard is empty.
           </p>
           <p className="mt-1 text-[12px] text-muted-foreground">
-            Hit Customize and add a section to get started.
+            Hit Customize in the header and add a section to get started.
           </p>
-        </div>
-      )}
-
-      {/* Tiny footnote when editing */}
-      {editing && (
-        <div className="mt-6 text-center text-[11px] text-muted-foreground">
-          Resize buttons (S/M/L/XL/Full) appear on each block. Drag any
-          block to reorder. Changes save automatically.
         </div>
       )}
     </div>
   );
-}
+});
+
+export default BlockGrid;
 
 function toTitle(id: string): string {
-  // Convert "tax-loss" → "Tax loss" for placeholder blocks.
   return id.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 // Used to ensure Tailwind emits the dynamic col-span classes.
-// (JIT safety: these utility classes need to exist somewhere to
-// survive PurgeCSS / Tailwind content scanning.)
 // prettier-ignore
 const _colSpanEmit = ["lg:col-span-3 lg:col-span-4 lg:col-span-6 lg:col-span-8 lg:col-span-12"];
 void _colSpanEmit;
-
-// Silence the unused-label warning by using labelSize in a no-op — it's
-// exported-by-name for future use in tooltips.
-void labelSize;

@@ -1,21 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Settings, Check } from "lucide-react";
 import { getHoldings } from "@/lib/client/holdings-cache";
-import BlockGrid from "@/components/dashboard/block-grid";
+import BlockGrid, { type BlockGridHandle } from "@/components/dashboard/block-grid";
 import { DrillProvider } from "@/components/dashboard/drill-context";
 import DrillPanel from "@/components/dashboard/drill-panel";
 
 /**
- * The new dashboard (hybrid-v2 redesign).
+ * Dashboard (hybrid-v2 redesign).
  *
- * Structure:
- *   1. One-line greeting + portfolio day-change summary
- *   2. Customizable block grid (BlockGrid — handles everything else)
+ * Layout:
+ *   [greeting] ———————————— [date] [⚙ Customize]
+ *   [BlockGrid — customizable]
  *
- * The old big-hero / sectioned layout has been replaced entirely by
- * the grid. Blocks handle their own data fetching and empty states.
- * User's layout persists per-account in the dashboard_layout table.
+ * The Customize button lives here (in the page header) rather than
+ * inside BlockGrid so the grid has one less vertical element and the
+ * toggle is always visible at the top of the page alongside the date.
  */
 export default function DashboardView({
   userName,
@@ -31,14 +32,13 @@ export default function DashboardView({
 }
 
 function DashboardBody({ userName }: { userName: string }) {
+  const gridRef = useRef<BlockGridHandle>(null);
+  const [editing, setEditing] = useState(false);
   const [dayChangePct, setDayChangePct] = useState<number | null>(null);
   const [connected, setConnected] = useState<boolean | null>(null);
 
   useEffect(() => {
     let alive = true;
-    // Portfolio day-change from track-record portfolioSeries (today vs
-    // yesterday snapshot). Per-holding day change isn't in the
-    // SnapTrade payload, so we use the series delta.
     Promise.all([
       getHoldings(),
       fetch("/api/track-record")
@@ -76,11 +76,15 @@ function DashboardBody({ userName }: { userName: string }) {
     day: "numeric",
   });
 
+  function handleCustomizeClick() {
+    gridRef.current?.toggleEdit();
+    setEditing((v) => !v);
+  }
+
   return (
     <div className="space-y-4">
-      {/* One-line greeting + portfolio change — the only non-block
-          element. Everything else lives in the customizable grid. */}
-      <div className="flex flex-wrap items-baseline justify-between gap-4 pb-2">
+      {/* Header row: greeting (left) · date + Customize (right) */}
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 pb-2">
         <h1 className="text-[20px] font-semibold tracking-[-0.02em] text-foreground md:text-[22px]">
           {greeting}, {firstName}.{" "}
           {connected === false ? (
@@ -110,10 +114,31 @@ function DashboardBody({ userName }: { userName: string }) {
             </span>
           )}
         </h1>
-        <span className="text-[12px] text-muted-foreground">{dayString}</span>
+        <div className="flex items-center gap-3">
+          <span className="text-[12px] text-muted-foreground">{dayString}</span>
+          <button
+            type="button"
+            onClick={handleCustomizeClick}
+            className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-colors ${
+              editing
+                ? "bg-primary text-primary-foreground"
+                : "border border-border bg-card text-foreground/80 hover:border-primary/50 hover:text-foreground"
+            }`}
+          >
+            {editing ? (
+              <>
+                <Check className="h-3.5 w-3.5" /> Done
+              </>
+            ) : (
+              <>
+                <Settings className="h-3.5 w-3.5" /> Customize
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
-      <BlockGrid />
+      <BlockGrid ref={gridRef} />
     </div>
   );
 }
