@@ -3,15 +3,49 @@
 Reverse-chronological feature ship log. Pulls from git history;
 we'll keep this current as we ship.
 
-## 2026-04-17
+## 2026-04-18 — Hybrid v2 redesign (complete overhaul)
 
-### Redesign: "Editorial trading floor"
-- New color palette (dark-default, warm amber single-accent)
-- Typography swap: Onest (body) + JetBrains Mono (numbers) + Fraunces
-  (editorial eyebrows only)
-- Settings removed from sidebar; folded into the name-dropdown
-  alongside Change password / Contact support / Sign out
-- Sidebar active-item indicator: left amber rail instead of filled pill
+### Phase 2: Customizable block-based dashboard
+- **New `dashboard_layout` table** — persists each user's block
+  arrangement (order + sizes) as a single JSONB column.
+- **BlockGrid + BlockShell components** — 12-column CSS grid with
+  blocks sized at col-3 / col-4 / col-6 / col-8 / col-12.
+- **10 blocks shipped**: Portfolio summary, Holdings, Alerts,
+  Performance chart, In the news, Calendar, Sector mix, Macro, Recent
+  research, Top movers.
+- **⚙ Customize button** (top-right of grid): enters edit mode with
+  per-block toolbars (drag handle, S/M/L/XL/Full size pills, hide).
+  Drag any block onto another to reorder.
+- **+ Add section** panel lists blocks not currently in the user's
+  layout, plus 5 "coming soon" placeholders (Watchlist, Worth reading,
+  Insider activity, Dividend calendar, Notes).
+- **Auto-save** — debounced 600ms after the last change; no save
+  button.
+- **Big hero killed** — replaced with a one-line greeting:
+  "Good morning, Sang. Portfolio is +2.31% today."
+
+### Phase 1: Visual foundation
+- **Palette rewrite**: light cool off-white (#F4F7FB) + white cards +
+  #E4E9F1 borders + #2563EB single blue accent + standard
+  emerald/red for buy/sell. Replaces warm-cream + forest-green.
+- **Typography swap**: Inter (body + headings) + JetBrains Mono
+  (numbers). Dropped Fraunces/serif entirely.
+- **Ticker tape header** — scrolling marquee of market indexes (S&P,
+  NASDAQ, DOW, Russell, 10Y, VIX) + user's top 6 holdings with prices
+  + day deltas. Pauses on hover, refreshes every 60s.
+- **Sidebar killed** — replaced by horizontal tabs in the top nav:
+  Dashboard / Portfolio / Research / Strategy / History. Account menu
+  still on the name chip.
+- **Default theme** flipped back to light.
+- New `/api/ticker-tape` endpoint for the marquee data.
+- New `/api/dashboard/layout` GET + PATCH endpoints.
+
+## 2026-04-17 — Prior redesign (reverted)
+
+### Editorial trading floor (dark-default)
+- Dark-default palette with warm amber accent, Onest body, Fraunces
+  editorial eyebrows. Superseded by hybrid-v2 on 2026-04-18 after
+  user feedback ("too formal, want lighter + customizable").
 
 ### Editorial news integrated into AI research
 - Research prompts now receive a `[PRESS]` section with top 6 recent

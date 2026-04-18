@@ -1,87 +1,120 @@
 # Overview (`/app`)
 
-Top-to-bottom structure of the main landing screen.
+Your starting screen. Completely redesigned in the hybrid-v2 redesign
+(April 2026): no more sidebar, no more big hero card — it's a
+customizable grid of information blocks you arrange the way you want.
 
-## Portfolio hero
+## Top of the screen
 
-Oversized total-value + sparkline strip at the top. Shows:
-- **Total value** — sum of market value across every connected brokerage
-- **Today's change** — weighted by position size
-- **Timeframe selector** (1M / 3M / YTD / 1Y / ALL) — toggles the sparkline window
-- **Positions count** · asset-class count · institution count
-- **"Synced N min ago"** — how recent the SnapTrade sync is
+### Ticker tape
+A thin dark bar at the very top that scrolls horizontally:
+- **Indexes first** — S&P 500, NASDAQ, DOW, Russell 2000, 10-year yield, VIX
+- **Your top holdings next** — up to 6, sorted by value
+- Each shows current price + day change
+- Green = up, red = down
+- Hover anywhere on the bar to pause the scroll
 
-The total value is clickable (drills into the KPI explainer). So is
-today's change. Anything rendered big enough to read is usually drillable.
+Refreshes every 60 seconds. Uses Yahoo quote data via our cross-source
+verification pipeline.
 
-Right below the hero: a small compact freshness tag like "Last
-refreshed 6:42 AM today" — no card, just inline text.
+### Top navigation
+Horizontal tab row across the top. No sidebar anymore.
+- Dashboard · Portfolio · Research · Strategy · History
+- Your name + avatar on the right; click for Account menu (Settings,
+  Change password, Contact support, Sign out)
+- Theme toggle (light / dark) next to your name on desktop
 
-## KPI strip
+## The greeting
 
-Five tiles, all clickable into explainer panels:
+One line, right below the nav:
 
-| Tile | What it means |
+> **Good morning, Sang. Portfolio is +2.31% today.**
+> *Friday, Apr 17*
+
+That's it. No paragraph, no editorial lead — you can see everything
+else below.
+
+Portfolio day-change is computed from yesterday's daily snapshot vs
+today's total. If you just connected a brokerage and we don't have two
+snapshots yet, it shows "Loading your latest…" until tomorrow's cron.
+
+## The customizable block grid
+
+Everything below the greeting is a grid of **blocks** you can arrange.
+
+### Default layout (new users)
+
+1. **Portfolio summary** (full-width) — Total Value, Positions, Cash %,
+   Hit rate, Day change
+2. **Holdings** (2/3 wide) — dense table with ticker, name, weight,
+   shares, price, value
+3. **Alerts** (1/3 wide) — overnight price moves, insider activity,
+   concentration flags
+4. **Performance** (1/2 wide) — YTD portfolio sparkline
+5. **In the news** (1/2 wide) — WSJ/CNBC/IBD/MarketWatch headlines
+   mentioning your tickers
+6. **Calendar** (1/3 wide) — upcoming earnings, dividends, filings on
+   your holdings
+7. **Sector mix** (1/3 wide) — horizontal bars by sector weight
+8. **Recent research** (1/3 wide) — your last 5 research reads with
+   verdicts
+
+### Customizing the grid
+
+Hit the **⚙ Customize** button (top-right of the grid). The grid
+enters edit mode:
+- Every block gets a dashed blue outline
+- A small toolbar appears at the top-right corner of each block:
+  - **≡ drag handle** — drag the block onto any other block to swap
+    positions
+  - **S / M / L / XL / Full** — click to resize the block. These are
+    1/4, 1/3, 1/2, 2/3, and full-width on a 12-column grid
+  - **×** — hide the block
+- The **+ Add section** button appears; click to see the catalog of
+  blocks not currently in your layout
+- Changes save automatically (no save button; debounced 600ms after
+  the last edit)
+- Hit **✓ Done** when you're finished to exit edit mode
+
+### Available blocks
+
+Currently implemented:
+
+| Block | What it shows |
 |---|---|
-| **Today** | Portfolio-weighted day change % |
-| **Positions** | Distinct holdings |
-| **Hit rate** | Past recommendations that hit their target |
-| **Alerts** | Undismissed overnight alerts |
-| **Cash** | % of portfolio in cash / money-market |
+| Portfolio summary | 5 KPIs: total value, positions, cash, hit rate, day change |
+| Holdings | Dense table of all positions |
+| Alerts | Overnight flags: price moves, insider, concentration |
+| Performance | YTD portfolio value sparkline |
+| In the news | Headlines mentioning your holdings |
+| Calendar | Upcoming earnings + dividends + filings |
+| Sector mix | Horizontal bars by sector |
+| Macro | 10-Y, Fed funds, CPI, USD index (from FRED) |
+| Recent research | Your last research reads with verdicts |
+| Top movers | Biggest absolute % moves in your portfolio today |
 
-Clicking any tile opens the right-side drill panel with a "how this is
-computed" + "data dependencies" + "next step" breakdown.
+Coming soon (placeholder blocks, click to add — body says "coming soon"):
+- Watchlist (tickers you follow without holding)
+- Worth reading (long-form investor thinking: Damodaran, Howard Marks)
+- Insider activity (SEC Form 4 on your holdings)
+- Dividend calendar (ex-div + pay dates)
+- Notes (your own notes on holdings)
 
-## Overnight alerts
+### Where your layout is saved
 
-When the nightly scan finds:
-- Price moves > 5% on any held ticker
-- Material insider Form 4 transactions (officers/directors, not rank-and-file)
-- Concentration crossing 25% (info) or 40% (warn) in a position or sector
+Your arrangement (block order + sizes) is saved per-user in the
+`dashboard_layout` table. Sign in on a different device and you'll
+see the same layout. If you remove a block that later gets replaced
+with a new version (schema change), it's dropped silently — no
+migration dance for you.
 
-...they stack here newest-first. Click to expand, dismiss to archive.
-Empty = nothing to report, which is the normal state.
+## How drill-down works
 
-## In the news (portfolio-filtered)
+Most numbers on the dashboard are **clickable** into a right-side
+detail panel. Click a KPI to see "how this is computed." Click a
+ticker to see the full drill (valuation, technicals, fundamentals,
+press coverage, recent recommendations). Click a holding row to see
+your cost basis + unrealized P&L.
 
-Up to 4 items from WSJ, CNBC, MarketWatch, IBD, Seeking Alpha, or SEC
-EDGAR that mention **your held tickers** specifically. Each item:
-
-- Headline (click to open in new tab)
-- Ticker chip
-- Publisher name
-- Relative time ("2h", "1d")
-
-Hidden entirely when your holdings haven't been in the news — no
-empty state noise. See `09-data-sources.md` for how the mention
-extractor works.
-
-## Allocation
-
-Donut chart on the left (2/3) + table on the right (1/3). Click any
-sector slice or table row to drill into that bucket — shows what
-positions are in it and their relative weights.
-
-Sector classification comes from Yahoo. Non-US or niche tickers
-sometimes come back "Unclassified" — that's expected.
-
-## Track record
-
-Below allocation: a distribution bar (BUY/HOLD/SELL counts) + a hit-
-rate gauge. See `07-history.md` for the full history surface.
-
-## Holdings grid
-
-Tiered `TickerCard`s — one per held position. The detail-density is
-user-configurable (Basic / Standard / Advanced) via settings. Each
-card is drillable into the position detail panel.
-
-## Upcoming evaluations
-
-Past recommendations with their check dates coming up. Compact list,
-skim-friendly.
-
-## Macro strip
-
-Foot of the page: 10-Y yield, Fed funds, CPI, unemployment, dollar
-index — whatever FRED most-recent values are. Purely contextual.
+The drill panel is shared across every view — the same panel opens
+on the Portfolio and Research pages when you click a ticker there.
