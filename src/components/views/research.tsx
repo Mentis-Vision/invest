@@ -29,6 +29,7 @@ import ResearchStarter from "@/components/research/research-starter";
 import { WarehouseFreshness } from "@/components/warehouse-freshness";
 import { MarketPulse } from "@/components/research/market-pulse";
 import { MiniSparkline } from "@/components/research/mini-sparkline";
+import { WorthReading } from "@/components/research/worth-reading";
 
 type ModelKey = "claude" | "gpt" | "gemini";
 type ToolCallTrace = {
@@ -742,6 +743,12 @@ export default function ResearchView({
       {/* Market pulse: today's index closes + macro headline. Lands first
           so the page has SOMETHING valuable before any user input. */}
       <MarketPulse />
+
+      {/* Long-form investor thinking — quiet, renders nothing when
+          there's no new Damodaran / Oaktree / etc. posts recent
+          enough. Sits between the pulse and the search box so it's
+          there but not demanding. */}
+      <WorthReading />
 
       {/* Single-button flow:
           - Click "Analyze" → instant Quick scan (no mode picker)

@@ -133,10 +133,33 @@ type CoveragePayload = {
   outletCount: number;
 };
 
+type OptionContract = {
+  contractId: string;
+  strike: number;
+  type: "call" | "put";
+  quote: {
+    last: number | null;
+    bid: number | null;
+    ask: number | null;
+    volume: number | null;
+    openInterest: number | null;
+    impliedVolatility: number | null;
+    delta: number | null;
+  } | null;
+};
+type OptionsPayload = {
+  configured: boolean;
+  spotPrice?: number;
+  expiration?: string | null;
+  calls?: OptionContract[];
+  puts?: OptionContract[];
+};
+
 export function DrillTicker({ ticker }: { ticker: string }) {
   const [data, setData] = useState<WarehouseBundle | null>(null);
   const [loading, setLoading] = useState(true);
   const [coverage, setCoverage] = useState<CoveragePayload | null>(null);
+  const [options, setOptions] = useState<OptionsPayload | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -152,6 +175,18 @@ export function DrillTicker({ ticker }: { ticker: string }) {
         if (!alive) return;
         setLoading(false);
       });
+    // Parallel fetch: options chain. Expected to return
+    // { configured: false } when POLYGON_API_KEY isn't set; we just
+    // hide the section in that case. When populated, it holds an
+    // at-the-money front-month view (5 calls + 5 puts, sorted by
+    // strike distance from spot).
+    fetch(`/api/options/${encodeURIComponent(ticker)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((o: OptionsPayload | null) => {
+        if (!alive || !o) return;
+        setOptions(o);
+      })
+      .catch(() => {});
     // Parallel fetch: editorial coverage — WSJ/CNBC/MarketWatch/etc.
     // items that mention this ticker in the last 21 days.
     fetch(`/api/market-news?ticker=${encodeURIComponent(ticker)}&limit=6`)
@@ -584,6 +619,32 @@ export function DrillTicker({ ticker }: { ticker: string }) {
           </DrillSection>
         )}
 
+        {/* Options chain — at-the-money front-month view. Only renders
+            when Polygon is configured and returned a chain. Five calls
+            and five puts nearest the current price, with last / bid /
+            ask / IV. Quick-glance; full chain available at broker. */}
+        {options?.configured && options.calls && options.puts &&
+          (options.calls.length > 0 || options.puts.length > 0) && (
+          <DrillSection
+            label="Options chain"
+            description={
+              options.expiration
+                ? `Near-the-money · expires ${options.expiration}`
+                : "Near-the-money front-month"
+            }
+          >
+            <OptionsTable
+              calls={options.calls}
+              puts={options.puts}
+              spot={options.spotPrice ?? null}
+            />
+            <p className="mt-3 text-[10px] italic text-[var(--muted-foreground)]">
+              Options carry asymmetric risk. We surface the chain for
+              research; trades happen at your broker.
+            </p>
+          </DrillSection>
+        )}
+
         {!loading && data?.sentiment && (
           <DrillSection
             label="Sentiment"
@@ -714,4 +775,125 @@ function humanEventType(t: string): string {
     default:
       return t;
   }
+}
+
+/**
+ * Compact options chain table — calls on the left, puts on the right,
+ * strikes in the middle stacked newest-to-oldest from spot outward.
+ *
+ * Each side shows: last price · IV · volume. That's the minimum a
+ * researcher needs to eyeball liquidity + premium. Bid/ask and greeks
+ * are in the raw API response for a future drill, but pushing them
+ * into the card body here would break the "quick glance" rule.
+ *
+ * Highlights the strike row closest to spot with a subtle amber rule
+ * so the at-the-money level pops without being loud.
+ */
+function OptionsTable({
+  calls,
+  puts,
+  spot,
+}: {
+  calls: OptionContract[];
+  puts: OptionContract[];
+  spot: number | null;
+}) {
+  // Merge by strike — one row per distinct strike with its call + put.
+  const strikesSet = new Set<number>();
+  for (const c of calls) strikesSet.add(c.strike);
+  for (const p of puts) strikesSet.add(p.strike);
+  const strikes = [...strikesSet].sort((a, b) => a - b);
+  const callByStrike = new Map(calls.map((c) => [c.strike, c]));
+  const putByStrike = new Map(puts.map((p) => [p.strike, p]));
+
+  // Closest strike to spot — highlighted as "ATM"
+  const atmStrike = spot
+    ? strikes.reduce(
+        (best, s) =>
+          Math.abs(s - spot) < Math.abs(best - spot) ? s : best,
+        strikes[0] ?? 0
+      )
+    : null;
+
+  const fmtMoney = (n: number | null) =>
+    n == null ? "—" : `$${n.toFixed(2)}`;
+  const fmtIv = (n: number | null) =>
+    n == null ? "—" : `${(n * 100).toFixed(0)}%`;
+  const fmtInt = (n: number | null) =>
+    n == null ? "—" : n.toLocaleString("en-US");
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-[11px]">
+        <thead>
+          <tr className="border-b border-[var(--border)] text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
+            <th className="px-2 py-1.5 text-right font-medium" colSpan={3}>
+              Calls
+            </th>
+            <th className="px-3 py-1.5 text-center font-medium">Strike</th>
+            <th className="px-2 py-1.5 text-left font-medium" colSpan={3}>
+              Puts
+            </th>
+          </tr>
+          <tr className="border-b border-[var(--border)]/60 text-[9px] uppercase tracking-wider text-[var(--muted-foreground)]/70">
+            <th className="px-2 py-1 text-right font-normal">Last</th>
+            <th className="px-2 py-1 text-right font-normal">IV</th>
+            <th className="px-2 py-1 text-right font-normal">Vol</th>
+            <th />
+            <th className="px-2 py-1 text-left font-normal">Last</th>
+            <th className="px-2 py-1 text-left font-normal">IV</th>
+            <th className="px-2 py-1 text-left font-normal">Vol</th>
+          </tr>
+        </thead>
+        <tbody>
+          {strikes.map((k) => {
+            const c = callByStrike.get(k);
+            const p = putByStrike.get(k);
+            const isAtm = k === atmStrike;
+            return (
+              <tr
+                key={k}
+                className={`border-b border-[var(--border)]/40 font-mono tabular-nums ${
+                  isAtm ? "bg-[var(--decisive)]/5" : ""
+                }`}
+              >
+                <td className="px-2 py-1.5 text-right">
+                  {fmtMoney(c?.quote?.last ?? null)}
+                </td>
+                <td className="px-2 py-1.5 text-right text-[var(--muted-foreground)]">
+                  {fmtIv(c?.quote?.impliedVolatility ?? null)}
+                </td>
+                <td className="px-2 py-1.5 text-right text-[var(--muted-foreground)]">
+                  {fmtInt(c?.quote?.volume ?? null)}
+                </td>
+                <td
+                  className={`px-3 py-1.5 text-center font-medium ${
+                    isAtm
+                      ? "text-[var(--decisive)]"
+                      : "text-[var(--foreground)]"
+                  }`}
+                >
+                  ${k.toFixed(2)}
+                  {isAtm && (
+                    <span className="ml-1 text-[9px] font-sans uppercase tracking-wider opacity-70">
+                      ATM
+                    </span>
+                  )}
+                </td>
+                <td className="px-2 py-1.5 text-left">
+                  {fmtMoney(p?.quote?.last ?? null)}
+                </td>
+                <td className="px-2 py-1.5 text-left text-[var(--muted-foreground)]">
+                  {fmtIv(p?.quote?.impliedVolatility ?? null)}
+                </td>
+                <td className="px-2 py-1.5 text-left text-[var(--muted-foreground)]">
+                  {fmtInt(p?.quote?.volume ?? null)}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
 }
