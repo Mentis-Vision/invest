@@ -285,6 +285,7 @@ import {
   getTickerFundamentals,
   getTickerSentiment,
 } from "../warehouse";
+import { formatEditorialNewsForAI } from "./market-news";
 
 /**
  * Compose a DATA block that uses warehouse-backed fields for slowly-changing
@@ -302,10 +303,16 @@ export async function formatWarehouseEnhancedDataBlock(
   snapshot: StockSnapshot
 ): Promise<string> {
   const ticker = snapshot.symbol.toUpperCase();
-  const [market, fundamentals, sentiment] = await Promise.all([
+  // editorialNews comes from market_news_daily (nightly cron: WSJ, CNBC,
+  // MarketWatch, IBD, Seeking Alpha, Damodaran, SEC EDGAR). The AI sees
+  // these as [PRESS] tagged qualitative context — per the zero-
+  // hallucination rules, news is never cited as a numeric claim, but
+  // it does materially shape thesis language and risk framing.
+  const [market, fundamentals, sentiment, editorialNews] = await Promise.all([
     getTickerMarket(ticker),
     getTickerFundamentals(ticker),
     getTickerSentiment(ticker),
+    formatEditorialNewsForAI(ticker, { limit: 6, includeSummaries: true }),
   ]);
 
   const fmt = (n: number | null | undefined, opts?: Intl.NumberFormatOptions) =>
@@ -473,6 +480,15 @@ export async function formatWarehouseEnhancedDataBlock(
         `- Sector Avg Score: ${fmt(sentiment.sectorAvgScore, { maximumFractionDigits: 2 })}`
       );
     }
+  }
+
+  // Press coverage — WSJ / CNBC / MarketWatch / IBD / Seeking Alpha /
+  // SEC EDGAR headlines mentioning this ticker in the last 14 days.
+  // The formatter returns an empty string when there's no coverage;
+  // we concatenate it verbatim so quiet tickers don't get an empty
+  // section header.
+  if (editorialNews) {
+    lines.push(editorialNews);
   }
 
   return lines.join("\n");

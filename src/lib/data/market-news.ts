@@ -109,6 +109,67 @@ export async function getMentionsForTickers(
  * each ticker in the window. Cross-source consensus: when WSJ + CNBC
  * + Reuters all cover the same story, it's signal. One outlet = noise.
  */
+/**
+ * Produce a compact "PRESS COVERAGE" section for the AI research data
+ * block. Calls getMentionsForTickers + getCoverageCounts and renders:
+ *
+ *   [PRESS] COVERAGE (N headlines in last 14d across M outlets):
+ *   - 2026-04-17 WSJ: "Apple stock falls on supply-chain concerns"
+ *     Summary: Apple shares dropped 3% after...
+ *   - 2026-04-16 CNBC: "Tim Cook comments on AI strategy"
+ *     ...
+ *
+ * Returns empty string when there's no coverage — the data block skips
+ * the section entirely (keeps the prompt lean on quiet tickers).
+ *
+ * AI prompts already instruct "News is qualitative context only — do
+ * not cite as a numeric claim." The section tag [PRESS] makes that
+ * provenance auditable.
+ */
+export async function formatEditorialNewsForAI(
+  ticker: string,
+  options?: { limit?: number; includeSummaries?: boolean }
+): Promise<string> {
+  const limit = options?.limit ?? 6;
+  const includeSummaries = options?.includeSummaries ?? true;
+  const [items, coverage] = await Promise.all([
+    getMentionsForTickers([ticker], { limit, maxAgeDays: 14 }),
+    getCoverageCounts([ticker], { maxAgeDays: 7 }),
+  ]);
+  if (items.length === 0) return "";
+
+  const outletCount = coverage[ticker.toUpperCase()] ?? 0;
+  const consensusNote =
+    outletCount >= 3
+      ? ` — ${outletCount} outlets in the last 7d (broad coverage)`
+      : outletCount >= 1
+        ? ` — ${outletCount} outlet${outletCount === 1 ? "" : "s"} in the last 7d`
+        : "";
+
+  const lines: string[] = [
+    "",
+    `[PRESS] COVERAGE (${items.length} headlines in last 14d${consensusNote}):`,
+  ];
+  for (const item of items) {
+    const date = item.publishedAt.slice(0, 10);
+    const headline = item.title.slice(0, 180);
+    lines.push(`- ${date} ${item.providerName}: "${headline}"`);
+    if (includeSummaries && item.summary) {
+      // Summary is often truncated already; cap aggressively to keep
+      // prompts lean. The model doesn't need prose for context, just a
+      // one-sentence hint.
+      const trimmed = item.summary
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 220);
+      if (trimmed.length > 30) {
+        lines.push(`  ${trimmed}${item.summary.length > 220 ? "…" : ""}`);
+      }
+    }
+  }
+  return lines.join("\n");
+}
+
 export async function getCoverageCounts(
   tickers: string[],
   options?: { maxAgeDays?: number }

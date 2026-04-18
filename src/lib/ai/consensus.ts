@@ -22,6 +22,7 @@ const ZERO_HALLUCINATION_RULES = `ABSOLUTE RULES (non-negotiable):
 4. In keySignals.datum, quote the exact value verbatim, and include its source tag: "[DATA] P/E (Trailing): 28.5" or "[getFinancialsSummary] income.netIncome=93,736,000,000".
 5. You have up to 3 tool calls. Use them only when they will materially change your view. If the DATA block already contains what you need, DO NOT call tools.
 6. Never cite news tone or sentiment as a numeric claim. News is qualitative context only.
+7. The [PRESS] section contains recent headlines from WSJ, CNBC, MarketWatch, IBD, Seeking Alpha, and SEC EDGAR. Use it to frame thesis language and surface risks — e.g. "recent coverage highlights supply-chain concerns (cite: [PRESS] WSJ 2026-04-17)". If the press coverage materially contradicts the numeric story, call that out in riskFactors. Do not treat absence of press coverage as bearish.
 
 You are NOT a licensed advisor. Your output is informational only.`;
 
