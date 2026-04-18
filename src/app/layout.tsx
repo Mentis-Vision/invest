@@ -1,21 +1,22 @@
 import type { Metadata } from "next";
-import { Onest, JetBrains_Mono, Fraunces } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
 /**
- * Typography (2026-04 redesign):
- *   - Onest: body. Geometric-humanist sans with distinctive character
- *     (single-story 'a', quiet descenders). Not Inter. Not Geist.
+ * Typography (2026-04 hybrid-v2 redesign):
+ *   - Inter: body + headings. Utilitarian, familiar, excellent
+ *     small-size readability. Variable weights 400-700.
  *   - JetBrains Mono: tabular numbers, ticker symbols, citations.
- *   - Fraunces: small editorial eyebrows only ("QUICK READ", "ISSUE 01")
- *     where the serif quality is earned. Never body.
+ *
+ * Dropped Fraunces / serif entirely — the previous editorial direction
+ * read "too formal" per user feedback. Lighter, more generic.
  */
-const onest = Onest({
-  variable: "--font-onest",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
+  weight: ["400", "500", "600", "700"],
   display: "swap",
 });
 
@@ -24,12 +25,6 @@ const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   weight: ["400", "500", "600"],
   display: "swap",
-});
-
-const fraunces = Fraunces({
-  variable: "--font-fraunces",
-  subsets: ["latin"],
-  axes: ["SOFT", "opsz"],
 });
 
 const siteUrl =
@@ -94,14 +89,14 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${onest.variable} ${jetbrainsMono.variable} ${fraunces.variable} h-full antialiased`}
+      className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
-        {/* Default to dark — the editorial-trading-floor direction is
-            calibrated for dark-first. Users can toggle via the theme
-            switch. System preference still overrides when enableSystem. */}
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+        {/* Default to light — hybrid-v2 is calibrated for light-mode-
+            first. Users can toggle via the theme switch; system
+            preference still overrides when enableSystem. */}
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           <TooltipProvider>{children}</TooltipProvider>
         </ThemeProvider>
       </body>

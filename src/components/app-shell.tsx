@@ -5,9 +5,12 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Separator } from "@/components/ui/separator";
 import ThemeToggle from "@/components/theme-toggle";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,16 +24,15 @@ import {
   PieChart,
   Search,
   Lightbulb,
-  Plug,
+  History as HistoryIcon,
   Menu,
   LogOut,
-  TrendingUp,
-  History as HistoryIcon,
   Settings as SettingsIcon,
   KeyRound,
   HelpCircle,
   ChevronDown,
 } from "lucide-react";
+import TickerTape from "@/components/ticker-tape";
 
 type View =
   | "dashboard"
@@ -39,34 +41,31 @@ type View =
   | "strategy"
   | "integrations";
 
-type DashboardNav = {
-  kind: "view";
-  id: View;
+type NavItem = {
+  id: View | "history";
   label: string;
+  kind: "view" | "link";
   icon: typeof LayoutDashboard;
+  href?: string;
 };
-type LinkNav = {
-  kind: "link";
-  href: string;
-  label: string;
-  icon: typeof LayoutDashboard;
-};
-
-const dashboardNavItems: DashboardNav[] = [
-  { kind: "view", id: "dashboard", label: "Overview", icon: LayoutDashboard },
-  { kind: "view", id: "portfolio", label: "My Portfolio", icon: PieChart },
-  { kind: "view", id: "research", label: "Research", icon: Search },
-  { kind: "view", id: "strategy", label: "Strategy", icon: Lightbulb },
-  { kind: "view", id: "integrations", label: "Account", icon: Plug },
-];
 
 /**
- * Settings used to live here. Moved to the name-dropdown at the
- * bottom of the sidebar so the nav stays focused on WORK surfaces,
- * not account admin.
+ * Primary workspace navigation. No "Account" here anymore — Account
+ * lives in the name-dropdown. Sidebar was removed entirely in the
+ * hybrid-v2 redesign; these now ride as horizontal tabs in the top bar.
  */
-const linkNavItems: LinkNav[] = [
-  { kind: "link", href: "/app/history", label: "History", icon: HistoryIcon },
+const navItems: NavItem[] = [
+  { id: "dashboard", label: "Dashboard", kind: "view", icon: LayoutDashboard },
+  { id: "portfolio", label: "Portfolio", kind: "view", icon: PieChart },
+  { id: "research", label: "Research", kind: "view", icon: Search },
+  { id: "strategy", label: "Strategy", kind: "view", icon: Lightbulb },
+  {
+    id: "history",
+    label: "History",
+    kind: "link",
+    icon: HistoryIcon,
+    href: "/app/history",
+  },
 ];
 
 export default function AppShell({
@@ -93,126 +92,59 @@ export default function AppShell({
     .toUpperCase()
     .slice(0, 2);
 
+  const firstName = (user.name || user.email.split("@")[0]).split(" ")[0];
+
   async function handleSignOut() {
     await authClient.signOut();
-    // Full page reload — ensures the Set-Cookie: <cleared> response actually
-    // lands BEFORE any SSR-authed route tries to re-read the cookie. Same
-    // pattern as sign-in where router.push() races the cookie commit.
     window.location.href = "/sign-in";
   }
 
-  function handleViewNav(view: View) {
-    if (onDashboard && onViewChange) {
-      onViewChange(view);
-    } else {
-      router.push(`/app?view=${view}`);
-    }
+  function handleNavClick(item: NavItem) {
     setMobileOpen(false);
+    if (item.kind === "link" && item.href) {
+      router.push(item.href);
+      return;
+    }
+    if (item.kind === "view") {
+      if (onDashboard && onViewChange) {
+        onViewChange(item.id as View);
+      } else {
+        router.push(`/app?view=${item.id}`);
+      }
+    }
   }
 
-  function NavLinks() {
-    return (
-      <div className="space-y-0.5">
-        {dashboardNavItems.map((item) => {
-          const Icon = item.icon;
-          const active = onDashboard && currentView === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => handleViewNav(item.id)}
-              className={`group relative flex w-full items-center gap-3 rounded-md px-3 py-2 text-[13px] transition-all ${
-                active
-                  ? "bg-secondary text-foreground font-medium"
-                  : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
-              }`}
-            >
-              {/* Left accent rail — amber bar on the active item. A
-                  quieter alternative to the filled-pill active state
-                  common in SaaS nav. */}
-              {active && (
-                <span
-                  aria-hidden
-                  className="absolute left-0 top-1/2 h-4 w-[2px] -translate-y-1/2 rounded-r-full bg-primary"
-                />
-              )}
-              <Icon
-                className={`h-[15px] w-[15px] ${
-                  active ? "text-primary" : "text-muted-foreground/70"
-                }`}
-              />
-              {item.label}
-            </button>
-          );
-        })}
-        {linkNavItems.map((item) => {
-          const Icon = item.icon;
-          const active = pathname === item.href;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={() => setMobileOpen(false)}
-              className={`group relative flex w-full items-center gap-3 rounded-md px-3 py-2 text-[13px] transition-all ${
-                active
-                  ? "bg-secondary text-foreground font-medium"
-                  : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
-              }`}
-            >
-              {active && (
-                <span
-                  aria-hidden
-                  className="absolute left-0 top-1/2 h-4 w-[2px] -translate-y-1/2 rounded-r-full bg-primary"
-                />
-              )}
-              <Icon
-                className={`h-[15px] w-[15px] ${
-                  active ? "text-primary" : "text-muted-foreground/70"
-                }`}
-              />
-              {item.label}
-            </Link>
-          );
-        })}
-      </div>
-    );
+  function isActive(item: NavItem) {
+    if (item.kind === "link" && item.href) {
+      return pathname === item.href || pathname.startsWith(item.href + "/");
+    }
+    return onDashboard && currentView === item.id;
   }
 
   /**
-   * Unified account dropdown — Settings + password + help + sign out
-   * all live here now. Previously Settings was a sidebar link (removed
-   * per redesign) and sign-out existed in two places (dropdown +
-   * standalone button). Consolidating both reduces visual clutter in
-   * the sidebar and makes account actions a consistent click-the-name
-   * interaction.
-   *
-   * Base UI Menu doesn't support `asChild` on Trigger/Item the way
-   * Radix does — we navigate via router.push onClick instead of
-   * wrapping each item in a Link.
+   * Account dropdown — unchanged shape from previous round: Settings,
+   * Change password, Contact support, Sign out. Triggers from the
+   * name-chip in the top-right.
    */
-  function AccountMenu({ align }: { align: "start" | "end" }) {
+  function AccountMenu() {
     return (
       <DropdownMenu>
         <DropdownMenuTrigger
           aria-label="Account menu"
-          className="flex w-full items-center gap-3 rounded-md border border-transparent px-2 py-1.5 text-left transition-all hover:border-border hover:bg-secondary/50"
+          className="inline-flex items-center gap-2 rounded-full border border-border bg-card pl-1 pr-3 py-1 transition-colors hover:border-muted-foreground/40"
         >
-          <Avatar className="h-8 w-8 border border-border/60">
-            <AvatarFallback className="bg-secondary text-[11px] font-medium text-foreground">
+          <Avatar className="h-7 w-7 border border-border/60">
+            <AvatarFallback className="bg-foreground text-[11px] font-semibold text-background">
               {initials}
             </AvatarFallback>
           </Avatar>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-medium leading-none">
-              {user.name}
-            </p>
-            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-              {user.email}
-            </p>
-          </div>
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+          <span className="hidden text-[13px] text-foreground/80 sm:inline">
+            {firstName}
+          </span>
+          <ChevronDown className="h-3 w-3 text-muted-foreground" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align={align} className="w-56" sideOffset={8}>
-          <DropdownMenuLabel className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground">
+        <DropdownMenuContent align="end" className="w-56" sideOffset={8}>
+          <DropdownMenuLabel className="px-2 pt-2 pb-1 text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground">
             Account
           </DropdownMenuLabel>
           <DropdownMenuItem
@@ -230,9 +162,6 @@ export default function AppShell({
             Change password
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuLabel className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground">
-            Help
-          </DropdownMenuLabel>
           <DropdownMenuItem
             onClick={() => {
               window.location.href = "mailto:support@clearpathinvest.app";
@@ -257,60 +186,63 @@ export default function AppShell({
   }
 
   return (
-    <div className="relative flex h-screen overflow-hidden bg-background">
-      {/* Desktop sidebar */}
-      <aside className="hidden w-60 flex-col border-r border-sidebar-border bg-sidebar md:flex">
-        <div className="flex h-14 items-center gap-2 border-b border-sidebar-border px-5">
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
+      {/* ─── Ticker tape (very top) ─── */}
+      <TickerTape />
+
+      {/* ─── Top nav ─── */}
+      <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
+        <div className="mx-auto grid max-w-[1320px] grid-cols-[auto_1fr_auto] items-center gap-5 px-6 py-3 md:px-7">
           <Link
             href="/app"
-            className="group flex items-center gap-2.5 text-foreground"
+            className="flex items-center gap-2.5 text-foreground"
           >
             <span
               aria-hidden
-              className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/15 transition-colors group-hover:bg-primary/25"
+              className="flex h-7 w-7 items-center justify-center rounded-md bg-primary"
             >
-              <TrendingUp className="h-3.5 w-3.5 text-primary" />
+              <span className="block h-2.5 w-2.5 rotate-45 bg-primary-foreground" />
             </span>
-            <span className="text-[15px] font-semibold tracking-tight">
+            <span className="text-[15px] font-semibold tracking-[-0.015em]">
               ClearPath
             </span>
           </Link>
-        </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 py-4">
-          <div className="mb-2 px-3 text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground/70">
-            Workspace
-          </div>
-          <NavLinks />
-        </nav>
+          {/* Desktop tabs */}
+          <nav className="hidden justify-center md:flex">
+            <div className="flex gap-0.5">
+              {navItems.map((item) => {
+                const active = isActive(item);
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleNavClick(item)}
+                    className={`rounded-md px-4 py-2 text-[13px] font-medium transition-colors ${
+                      active
+                        ? "bg-secondary text-foreground"
+                        : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
 
-        <div className="border-t border-sidebar-border p-3">
-          <div className="mb-2 flex items-center justify-between px-1">
-            <span className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground/70">
-              Theme
-            </span>
-            <ThemeToggle />
-          </div>
-          <Separator className="my-2 opacity-60" />
-          <AccountMenu align="start" />
-        </div>
-      </aside>
-
-      {/* Mobile header */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex h-14 items-center justify-between gap-3 border-b border-border px-4 md:hidden">
-          <div className="flex items-center gap-3">
+          {/* Mobile menu trigger */}
+          <nav className="flex items-center justify-center md:hidden">
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <SheetTrigger
                 aria-label="Open navigation menu"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-secondary/60"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md hover:bg-secondary/60"
               >
                 <Menu className="h-4 w-4" />
               </SheetTrigger>
-              <SheetContent side="left" className="w-64 p-0 bg-sidebar">
-                <div className="flex h-14 items-center gap-2.5 border-b border-sidebar-border px-5">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/15">
-                    <TrendingUp className="h-3.5 w-3.5 text-primary" />
+              <SheetContent side="left" className="w-64 p-0 bg-card">
+                <div className="flex h-14 items-center gap-2.5 border-b border-border px-5">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-md bg-primary">
+                    <span className="block h-2 w-2 rotate-45 bg-primary-foreground" />
                   </span>
                   <span className="text-[15px] font-semibold tracking-tight">
                     ClearPath
@@ -320,36 +252,53 @@ export default function AppShell({
                   <div className="mb-2 px-3 text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground/70">
                     Workspace
                   </div>
-                  <NavLinks />
-                </div>
-                <div className="border-t border-sidebar-border p-3">
-                  <div className="mb-2 flex items-center justify-between px-1">
-                    <span className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground/70">
-                      Theme
-                    </span>
-                    <ThemeToggle />
+                  <div className="space-y-0.5">
+                    {navItems.map((item) => {
+                      const Icon = item.icon;
+                      const active = isActive(item);
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => handleNavClick(item)}
+                          className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-[13px] transition-colors ${
+                            active
+                              ? "bg-secondary font-medium text-foreground"
+                              : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+                          }`}
+                        >
+                          <Icon
+                            className={`h-[15px] w-[15px] ${
+                              active
+                                ? "text-primary"
+                                : "text-muted-foreground/70"
+                            }`}
+                          />
+                          {item.label}
+                        </button>
+                      );
+                    })}
                   </div>
-                  <Separator className="my-2 opacity-60" />
-                  <AccountMenu align="start" />
                 </div>
               </SheetContent>
             </Sheet>
-            <Link href="/app" className="flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/15">
-                <TrendingUp className="h-3.5 w-3.5 text-primary" />
-              </span>
-              <span className="text-[15px] font-semibold tracking-tight">
-                ClearPath
-              </span>
-            </Link>
-          </div>
-        </header>
+          </nav>
 
-        {/* Main content */}
-        <main className="relative flex-1 overflow-y-auto p-4 md:p-8">
-          <div className="relative z-10 mx-auto max-w-6xl">{children}</div>
-        </main>
-      </div>
+          {/* Right: theme toggle + account */}
+          <div className="flex items-center justify-end gap-2">
+            <div className="hidden md:block">
+              <ThemeToggle />
+            </div>
+            <AccountMenu />
+          </div>
+        </div>
+      </header>
+
+      {/* ─── Main content ─── */}
+      <main className="flex-1">
+        <div className="mx-auto max-w-[1320px] px-5 py-6 md:px-7 md:py-8">
+          {children}
+        </div>
+      </main>
     </div>
   );
 }
