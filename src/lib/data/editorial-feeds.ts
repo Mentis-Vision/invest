@@ -271,8 +271,16 @@ function cleanText(s: string): string {
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
     .replace(/&nbsp;/g, " ")
+    // Numeric entities like &#39; / &#039; / &#8217; — decimal form.
+    // Covers apostrophes, em/en dashes, smart quotes, etc. that RSS
+    // feeds routinely escape. Leading zeros allowed (&#039; = &#39;).
+    .replace(/&#0*(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    // Hex form: &#x27; / &#xA0;
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) =>
+      String.fromCharCode(parseInt(h, 16))
+    )
     .trim();
 }
 
