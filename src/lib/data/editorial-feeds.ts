@@ -295,13 +295,73 @@ function hashUrl(s: string): string {
 // ─── Ticker mention extractor ──────────────────────────────────────────
 
 /**
- * Scan text for tickers that appear in `universe`. Uses three patterns:
- *   1. $AAPL — cashtag convention (unambiguous)
- *   2. (AAPL) — parenthetical after a company name: "Apple (AAPL)"
- *   3. Standalone AAPL at a word boundary, ONLY when in universe —
- *      prevents false triggers on words like "ATOM" in prose.
+ * Ticker → company-name variants for name-based mention matching.
  *
- * Returns uppercase tickers, deduped.
+ * Why: smoke-testing showed our ticker-symbol-only extractor caught
+ * only ~2% of relevant articles because WSJ/CNBC/IBD write "Apple",
+ * "Microsoft", "Nvidia" — not "AAPL", "MSFT", "NVDA". Adding a
+ * curated name map closes the gap for the top 30 mega-caps without
+ * needing a heavy NLP pipeline.
+ *
+ * Variants should be reasonably unambiguous. "Ford" would false-match
+ * "Ford Foundation" etc.; use "Ford Motor" to be safe.
+ */
+const TICKER_NAMES: Record<string, string[]> = {
+  AAPL: ["Apple"],
+  MSFT: ["Microsoft"],
+  NVDA: ["Nvidia", "NVIDIA"],
+  GOOGL: ["Alphabet", "Google"],
+  GOOG: ["Alphabet", "Google"],
+  META: ["Meta Platforms", "Meta (the)"],
+  AMZN: ["Amazon"],
+  TSLA: ["Tesla"],
+  AVGO: ["Broadcom"],
+  JPM: ["JPMorgan", "JP Morgan"],
+  V: ["Visa "],
+  MA: ["Mastercard"],
+  WMT: ["Walmart"],
+  XOM: ["Exxon", "ExxonMobil"],
+  UNH: ["UnitedHealth"],
+  JNJ: ["Johnson & Johnson"],
+  PG: ["Procter & Gamble"],
+  HD: ["Home Depot"],
+  LLY: ["Eli Lilly"],
+  CVX: ["Chevron"],
+  ABBV: ["AbbVie"],
+  MRK: ["Merck"],
+  COST: ["Costco"],
+  PEP: ["PepsiCo", "Pepsi"],
+  KO: ["Coca-Cola", "Coca Cola"],
+  BAC: ["Bank of America"],
+  NFLX: ["Netflix"],
+  AMD: ["Advanced Micro Devices"],
+  ADBE: ["Adobe"],
+  CRM: ["Salesforce"],
+  ORCL: ["Oracle"],
+  PLTR: ["Palantir"],
+  DIS: ["Disney", "Walt Disney"],
+  INTC: ["Intel"],
+  BA: ["Boeing"],
+  F: ["Ford Motor"],
+  GM: ["General Motors"],
+  BTC: ["Bitcoin"],
+  ETH: ["Ethereum"],
+  COIN: ["Coinbase"],
+  MSTR: ["MicroStrategy", "Strategy Inc"],
+  SPY: ["S&P 500"],
+  QQQ: ["Nasdaq 100", "Nasdaq-100"],
+};
+
+/**
+ * Scan text for ticker mentions. Matches:
+ *   1. $AAPL — cashtag convention (unambiguous)
+ *   2. (AAPL) — parenthetical after company name: "Apple (AAPL)"
+ *   3. Standalone AAPL at a word boundary, ONLY when in universe
+ *   4. Company-name variants from TICKER_NAMES (e.g. "Apple" → AAPL)
+ *      — closes the ~98% of articles that use names not tickers
+ *
+ * Name matching is case-sensitive to avoid false positives ("apple"
+ * lowercase usually isn't the company).
  */
 export function extractTickers(
   text: string,
@@ -325,5 +385,25 @@ export function extractTickers(
     if (universe.has(t)) found.add(t);
   }
 
+  // Name-based matches — case-sensitive word boundary.
+  for (const ticker of universe) {
+    const names = TICKER_NAMES[ticker];
+    if (!names) continue;
+    for (const name of names) {
+      if (nameAppears(text, name)) {
+        found.add(ticker);
+        break;
+      }
+    }
+  }
+
   return [...found];
+}
+
+function nameAppears(text: string, name: string): boolean {
+  // Escape regex metacharacters in the name, then wrap with word
+  // boundaries. Case-sensitive on purpose.
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`\\b${escaped}\\b`);
+  return re.test(text);
 }
