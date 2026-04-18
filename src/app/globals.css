@@ -3,11 +3,22 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ─────────────────────────────────────────────────────────────────────
+   ClearPath Invest — design tokens (2026-04 redesign)
+   ─────────────────────────────────────────────────────────────────────
+   Direction: "Editorial trading floor"
+     — dark-default, warm amber as the single accent
+     — typography-forward, chrome-quiet
+     — Onest (body) + Fraunces (editorial eyebrows) + JetBrains Mono
+     — light mode remains refined warm off-white, not cream
+   Variable names preserved so all consumers update automatically.
+   ───────────────────────────────────────────────────────────────────── */
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  --font-sans: "Onest", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
   --font-serif: "Fraunces", "Georgia", "Times New Roman", serif;
   --font-heading: var(--font-serif);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -52,82 +63,99 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* Editorial Warm — a modern private-wealth-memo aesthetic */
+/* ═══ LIGHT MODE — refined warm off-white ═══════════════════════════ */
 :root {
-  --background: #FAF7F2;       /* warm ivory */
-  --foreground: #1A1A1E;       /* deep ink */
+  --background: #F5F2EC;       /* warm off-white */
+  --foreground: #18181B;       /* near-black */
   --card: #FFFFFF;
-  --card-foreground: #1A1A1E;
+  --card-foreground: #18181B;
   --popover: #FFFFFF;
-  --popover-foreground: #1A1A1E;
-  --primary: #2D5F3F;          /* deep forest — growth, considered */
-  --primary-foreground: #FAF7F2;
-  --secondary: #F0EDE6;        /* slightly deeper cream */
-  --secondary-foreground: #1A1A1E;
-  --muted: #F0EDE6;
-  --muted-foreground: #5A5F6B; /* slate */
-  --accent: #F0EDE6;
-  --accent-foreground: #1A1A1E;
-  --destructive: #8B1F2A;      /* deep wine — serious, not alarming */
-  --border: #E8E4DC;           /* warm gray */
-  --input: #E8E4DC;
-  --ring: #2D5F3F;
+  --popover-foreground: #18181B;
 
-  /* Semantic — decision colors */
-  --buy: #2D5F3F;              /* forest */
-  --hold: #9A7B3F;             /* burnished gold */
-  --sell: #8B1F2A;             /* wine */
-  --decisive: #B54F2A;         /* burnished rust — for CTAs and "pay attention" */
+  /* The single accent: muted amber.
+     Used only where meaning demands it — verified badge, decisive CTAs,
+     risk callouts. Everywhere else is black on cream. */
+  --primary: #8A6B3C;
+  --primary-foreground: #F5F2EC;
 
-  --chart-1: #2D5F3F;
-  --chart-2: #9A7B3F;
-  --chart-3: #5A5F6B;
-  --chart-4: #B54F2A;
-  --chart-5: #8B1F2A;
+  --secondary: #EDE8DE;
+  --secondary-foreground: #18181B;
+  --muted: #EDE8DE;
+  --muted-foreground: #6B6D75;
+  --accent: #EDE8DE;
+  --accent-foreground: #18181B;
+  --destructive: #9C3B1F;
+  --border: #E0DAC9;
+  --input: #E0DAC9;
+  --ring: #8A6B3C;
 
-  --radius: 0.5rem;
+  /* Semantic decision colors — muted, considered, not neon.
+     A BUY shouldn't look like a slot machine.                 */
+  --buy: #3F6B4E;
+  --hold: #8A6B3C;
+  --sell: #9C3B1F;
+  --decisive: #8A6B3C;
+
+  --chart-1: #3F6B4E;
+  --chart-2: #8A6B3C;
+  --chart-3: #6B6D75;
+  --chart-4: #9C3B1F;
+  --chart-5: #18181B;
+
+  --radius: 0.625rem;
 
   --sidebar: #FFFFFF;
-  --sidebar-foreground: #1A1A1E;
-  --sidebar-primary: #2D5F3F;
-  --sidebar-primary-foreground: #FAF7F2;
-  --sidebar-accent: #F0EDE6;
-  --sidebar-accent-foreground: #1A1A1E;
-  --sidebar-border: #E8E4DC;
-  --sidebar-ring: #2D5F3F;
+  --sidebar-foreground: #18181B;
+  --sidebar-primary: #8A6B3C;
+  --sidebar-primary-foreground: #F5F2EC;
+  --sidebar-accent: #EDE8DE;
+  --sidebar-accent-foreground: #18181B;
+  --sidebar-border: #E0DAC9;
+  --sidebar-ring: #8A6B3C;
 }
 
+/* ═══ DARK MODE — deep ink + warm amber accent (primary target) ═════ */
 .dark {
-  --background: #13110F;
-  --foreground: #F2EFEA;
-  --card: #1C1A17;
-  --card-foreground: #F2EFEA;
-  --popover: #1C1A17;
-  --popover-foreground: #F2EFEA;
-  --primary: #6EA782;
-  --primary-foreground: #13110F;
-  --secondary: #22201D;
-  --secondary-foreground: #F2EFEA;
-  --muted: #22201D;
-  --muted-foreground: #9A958D;
-  --accent: #22201D;
-  --accent-foreground: #F2EFEA;
-  --destructive: #D16B74;
+  --background: #0D0E11;       /* deep ink, slightly warm */
+  --foreground: #F0EDE7;       /* warm off-white */
+  --card: #16181C;             /* elevated surface */
+  --card-foreground: #F0EDE7;
+  --popover: #1C1E23;          /* further elevated — menus, modals */
+  --popover-foreground: #F0EDE7;
+
+  --primary: #D4A574;          /* muted amber — the one accent */
+  --primary-foreground: #0D0E11;
+
+  --secondary: #1B1D22;
+  --secondary-foreground: #F0EDE7;
+  --muted: #1B1D22;
+  --muted-foreground: #8C8F96;
+  --accent: #1B1D22;
+  --accent-foreground: #F0EDE7;
+  --destructive: #C77A5F;
   --border: rgba(255, 255, 255, 0.08);
-  --input: rgba(255, 255, 255, 0.1);
-  --ring: #6EA782;
-  --buy: #6EA782;
-  --hold: #D4AF6B;
-  --sell: #D16B74;
-  --decisive: #E08456;
-  --sidebar: #1C1A17;
-  --sidebar-foreground: #F2EFEA;
-  --sidebar-primary: #6EA782;
-  --sidebar-primary-foreground: #13110F;
-  --sidebar-accent: #22201D;
-  --sidebar-accent-foreground: #F2EFEA;
-  --sidebar-border: rgba(255, 255, 255, 0.08);
-  --sidebar-ring: #6EA782;
+  --input: rgba(255, 255, 255, 0.08);
+  --ring: #D4A574;
+
+  --buy: #7CA87B;              /* sage */
+  --hold: #AFA185;             /* stone */
+  --sell: #C77A5F;             /* terracotta */
+  --decisive: #D4A574;         /* amber (same as primary) */
+
+  --chart-1: #7CA87B;
+  --chart-2: #D4A574;
+  --chart-3: #8C8F96;
+  --chart-4: #C77A5F;
+  --chart-5: #F0EDE7;
+
+  --sidebar: #121316;
+  --sidebar-foreground: #F0EDE7;
+  --sidebar-primary: #D4A574;
+  --sidebar-primary-foreground: #0D0E11;
+  --sidebar-accent: #1B1D22;
+  --sidebar-accent-foreground: #F0EDE7;
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-ring: #D4A574;
 }
 
 @layer base {
@@ -137,13 +165,43 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "ss01", "cv11";
+    /* Slight letter-spacing at body size — Onest reads tighter than
+       Geist did. */
+    letter-spacing: -0.005em;
   }
   html {
     @apply font-sans;
   }
-  h1, h2, h3, .font-heading {
+  h1,
+  h2,
+  h3,
+  .font-heading {
     font-family: var(--font-serif);
     font-feature-settings: "ss01", "ss04";
-    letter-spacing: -0.01em;
+    letter-spacing: -0.015em;
   }
+  /* Tabular numerals in the mono face — makes tables line up without
+     us having to pepper `tabular-nums` everywhere. */
+  .font-mono,
+  code,
+  pre {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Subtle grain on the dark background — gives the deep ink some tooth
+   without looking noisy. Applied at very low opacity; only visible on
+   large empty surfaces. */
+.dark body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: radial-gradient(
+    rgba(255, 255, 255, 0.015) 1px,
+    transparent 1px
+  );
+  background-size: 3px 3px;
+  opacity: 0.7;
 }

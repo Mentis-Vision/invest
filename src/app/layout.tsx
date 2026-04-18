@@ -1,17 +1,29 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Fraunces } from "next/font/google";
+import { Onest, JetBrains_Mono, Fraunces } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+/**
+ * Typography (2026-04 redesign):
+ *   - Onest: body. Geometric-humanist sans with distinctive character
+ *     (single-story 'a', quiet descenders). Not Inter. Not Geist.
+ *   - JetBrains Mono: tabular numbers, ticker symbols, citations.
+ *   - Fraunces: small editorial eyebrows only ("QUICK READ", "ISSUE 01")
+ *     where the serif quality is earned. Never body.
+ */
+const onest = Onest({
+  variable: "--font-onest",
   subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-jetbrains-mono",
   subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  display: "swap",
 });
 
 const fraunces = Fraunces({
@@ -82,11 +94,14 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} h-full antialiased`}
+      className={`${onest.variable} ${jetbrainsMono.variable} ${fraunces.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
+        {/* Default to dark — the editorial-trading-floor direction is
+            calibrated for dark-first. Users can toggle via the theme
+            switch. System preference still overrides when enableSystem. */}
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
           <TooltipProvider>{children}</TooltipProvider>
         </ThemeProvider>
       </body>

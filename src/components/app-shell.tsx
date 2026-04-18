@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
-import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import ThemeToggle from "@/components/theme-toggle";
@@ -13,6 +12,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -26,6 +27,9 @@ import {
   TrendingUp,
   History as HistoryIcon,
   Settings as SettingsIcon,
+  KeyRound,
+  HelpCircle,
+  ChevronDown,
 } from "lucide-react";
 
 type View =
@@ -56,9 +60,13 @@ const dashboardNavItems: DashboardNav[] = [
   { kind: "view", id: "integrations", label: "Account", icon: Plug },
 ];
 
+/**
+ * Settings used to live here. Moved to the name-dropdown at the
+ * bottom of the sidebar so the nav stays focused on WORK surfaces,
+ * not account admin.
+ */
 const linkNavItems: LinkNav[] = [
   { kind: "link", href: "/app/history", label: "History", icon: HistoryIcon },
-  { kind: "link", href: "/app/settings", label: "Settings", icon: SettingsIcon },
 ];
 
 export default function AppShell({
@@ -88,9 +96,8 @@ export default function AppShell({
   async function handleSignOut() {
     await authClient.signOut();
     // Full page reload — ensures the Set-Cookie: <cleared> response actually
-    // lands BEFORE any SSR-authed route tries to re-read the cookie. This is
-    // the same pattern as sign-in/page.tsx where router.push() races the
-    // cookie commit and can flash authed state.
+    // lands BEFORE any SSR-authed route tries to re-read the cookie. Same
+    // pattern as sign-in where router.push() races the cookie commit.
     window.location.href = "/sign-in";
   }
 
@@ -98,7 +105,6 @@ export default function AppShell({
     if (onDashboard && onViewChange) {
       onViewChange(view);
     } else {
-      // Navigate back to dashboard with the view in a query param.
       router.push(`/app?view=${view}`);
     }
     setMobileOpen(false);
@@ -106,7 +112,7 @@ export default function AppShell({
 
   function NavLinks() {
     return (
-      <div className="space-y-1">
+      <div className="space-y-0.5">
         {dashboardNavItems.map((item) => {
           const Icon = item.icon;
           const active = onDashboard && currentView === item.id;
@@ -114,13 +120,26 @@ export default function AppShell({
             <button
               key={item.id}
               onClick={() => handleViewNav(item.id)}
-              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+              className={`group relative flex w-full items-center gap-3 rounded-md px-3 py-2 text-[13px] transition-all ${
                 active
-                  ? "bg-accent text-accent-foreground font-medium"
-                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                  ? "bg-secondary text-foreground font-medium"
+                  : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
               }`}
             >
-              <Icon className="h-4 w-4" />
+              {/* Left accent rail — amber bar on the active item. A
+                  quieter alternative to the filled-pill active state
+                  common in SaaS nav. */}
+              {active && (
+                <span
+                  aria-hidden
+                  className="absolute left-0 top-1/2 h-4 w-[2px] -translate-y-1/2 rounded-r-full bg-primary"
+                />
+              )}
+              <Icon
+                className={`h-[15px] w-[15px] ${
+                  active ? "text-primary" : "text-muted-foreground/70"
+                }`}
+              />
               {item.label}
             </button>
           );
@@ -133,13 +152,23 @@ export default function AppShell({
               key={item.href}
               href={item.href}
               onClick={() => setMobileOpen(false)}
-              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+              className={`group relative flex w-full items-center gap-3 rounded-md px-3 py-2 text-[13px] transition-all ${
                 active
-                  ? "bg-accent text-accent-foreground font-medium"
-                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                  ? "bg-secondary text-foreground font-medium"
+                  : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
               }`}
             >
-              <Icon className="h-4 w-4" />
+              {active && (
+                <span
+                  aria-hidden
+                  className="absolute left-0 top-1/2 h-4 w-[2px] -translate-y-1/2 rounded-r-full bg-primary"
+                />
+              )}
+              <Icon
+                className={`h-[15px] w-[15px] ${
+                  active ? "text-primary" : "text-muted-foreground/70"
+                }`}
+              />
               {item.label}
             </Link>
           );
@@ -148,101 +177,177 @@ export default function AppShell({
     );
   }
 
+  /**
+   * Unified account dropdown — Settings + password + help + sign out
+   * all live here now. Previously Settings was a sidebar link (removed
+   * per redesign) and sign-out existed in two places (dropdown +
+   * standalone button). Consolidating both reduces visual clutter in
+   * the sidebar and makes account actions a consistent click-the-name
+   * interaction.
+   *
+   * Base UI Menu doesn't support `asChild` on Trigger/Item the way
+   * Radix does — we navigate via router.push onClick instead of
+   * wrapping each item in a Link.
+   */
+  function AccountMenu({ align }: { align: "start" | "end" }) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          aria-label="Account menu"
+          className="flex w-full items-center gap-3 rounded-md border border-transparent px-2 py-1.5 text-left transition-all hover:border-border hover:bg-secondary/50"
+        >
+          <Avatar className="h-8 w-8 border border-border/60">
+            <AvatarFallback className="bg-secondary text-[11px] font-medium text-foreground">
+              {initials}
+            </AvatarFallback>
+          </Avatar>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[13px] font-medium leading-none">
+              {user.name}
+            </p>
+            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+              {user.email}
+            </p>
+          </div>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align={align} className="w-56" sideOffset={8}>
+          <DropdownMenuLabel className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground">
+            Account
+          </DropdownMenuLabel>
+          <DropdownMenuItem
+            onClick={() => router.push("/app/settings")}
+            className="cursor-pointer"
+          >
+            <SettingsIcon className="mr-2.5 h-3.5 w-3.5" />
+            Settings &amp; preferences
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => router.push("/forgot-password")}
+            className="cursor-pointer"
+          >
+            <KeyRound className="mr-2.5 h-3.5 w-3.5" />
+            Change password
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground">
+            Help
+          </DropdownMenuLabel>
+          <DropdownMenuItem
+            onClick={() => {
+              window.location.href = "mailto:support@clearpathinvest.app";
+            }}
+            className="cursor-pointer"
+          >
+            <HelpCircle className="mr-2.5 h-3.5 w-3.5" />
+            Contact support
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={handleSignOut}
+            variant="destructive"
+            className="cursor-pointer"
+          >
+            <LogOut className="mr-2.5 h-3.5 w-3.5" />
+            Sign out
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
+
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="relative flex h-screen overflow-hidden bg-background">
       {/* Desktop sidebar */}
-      <aside className="hidden w-56 flex-col border-r bg-card md:flex">
-        <div className="flex h-14 items-center gap-2 border-b px-4">
-          <Link href="/app" className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-primary" />
-            <span className="font-semibold">ClearPath</span>
+      <aside className="hidden w-60 flex-col border-r border-sidebar-border bg-sidebar md:flex">
+        <div className="flex h-14 items-center gap-2 border-b border-sidebar-border px-5">
+          <Link
+            href="/app"
+            className="group flex items-center gap-2.5 text-foreground"
+          >
+            <span
+              aria-hidden
+              className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/15 transition-colors group-hover:bg-primary/25"
+            >
+              <TrendingUp className="h-3.5 w-3.5 text-primary" />
+            </span>
+            <span className="text-[15px] font-semibold tracking-tight">
+              ClearPath
+            </span>
           </Link>
         </div>
-        <nav className="flex-1 overflow-y-auto p-3">
+
+        <nav className="flex-1 overflow-y-auto px-3 py-4">
+          <div className="mb-2 px-3 text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground/70">
+            Workspace
+          </div>
           <NavLinks />
         </nav>
-        <div className="px-3 pb-2">
-          <ThemeToggle />
-        </div>
-        <Separator />
-        <div className="space-y-1 p-3">
-          {/* User chip — tap opens the dropdown for more account actions. */}
-          <DropdownMenu>
-            <DropdownMenuTrigger aria-label="Account menu">
-              <button
-                aria-label="Account menu"
-                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-accent/50"
-              >
-                <Avatar className="h-7 w-7">
-                  <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-                </Avatar>
-                <div className="flex-1 text-left">
-                  <p className="truncate font-medium leading-none">{user.name}</p>
-                  <p className="truncate text-xs text-muted-foreground">{user.email}</p>
-                </div>
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-48">
-              <DropdownMenuItem onClick={handleSignOut}>
-                <LogOut className="mr-2 h-4 w-4" />
-                Sign out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          {/* Explicit sign-out — always visible. The dropdown above was too
-              hidden; users reported 'there's no logout' because they didn't
-              know to click the avatar. Keep both paths so discoverability
-              doesn't depend on avatar-hover intuition. */}
-          <button
-            onClick={handleSignOut}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-xs text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-          >
-            <LogOut className="h-3.5 w-3.5" />
-            Sign out
-          </button>
+
+        <div className="border-t border-sidebar-border p-3">
+          <div className="mb-2 flex items-center justify-between px-1">
+            <span className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground/70">
+              Theme
+            </span>
+            <ThemeToggle />
+          </div>
+          <Separator className="my-2 opacity-60" />
+          <AccountMenu align="start" />
         </div>
       </aside>
 
       {/* Mobile header */}
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex h-14 items-center gap-3 border-b px-4 md:hidden">
-          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-            <SheetTrigger aria-label="Open navigation menu">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
+        <header className="flex h-14 items-center justify-between gap-3 border-b border-border px-4 md:hidden">
+          <div className="flex items-center gap-3">
+            <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+              <SheetTrigger
                 aria-label="Open navigation menu"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-secondary/60"
               >
                 <Menu className="h-4 w-4" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-56 p-3">
-              <div className="mb-4 flex items-center gap-2 px-3 pt-2">
-                <TrendingUp className="h-5 w-5 text-primary" />
-                <span className="font-semibold">ClearPath</span>
-              </div>
-              <NavLinks />
-              <Separator className="my-3" />
-              <ThemeToggle />
-              <button
-                onClick={handleSignOut}
-                className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-              >
-                <LogOut className="h-4 w-4" />
-                Sign out
-              </button>
-            </SheetContent>
-          </Sheet>
-          <Link href="/app" className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-primary" />
-            <span className="font-semibold">ClearPath</span>
-          </Link>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-64 p-0 bg-sidebar">
+                <div className="flex h-14 items-center gap-2.5 border-b border-sidebar-border px-5">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/15">
+                    <TrendingUp className="h-3.5 w-3.5 text-primary" />
+                  </span>
+                  <span className="text-[15px] font-semibold tracking-tight">
+                    ClearPath
+                  </span>
+                </div>
+                <div className="px-3 py-4">
+                  <div className="mb-2 px-3 text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground/70">
+                    Workspace
+                  </div>
+                  <NavLinks />
+                </div>
+                <div className="border-t border-sidebar-border p-3">
+                  <div className="mb-2 flex items-center justify-between px-1">
+                    <span className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground/70">
+                      Theme
+                    </span>
+                    <ThemeToggle />
+                  </div>
+                  <Separator className="my-2 opacity-60" />
+                  <AccountMenu align="start" />
+                </div>
+              </SheetContent>
+            </Sheet>
+            <Link href="/app" className="flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/15">
+                <TrendingUp className="h-3.5 w-3.5 text-primary" />
+              </span>
+              <span className="text-[15px] font-semibold tracking-tight">
+                ClearPath
+              </span>
+            </Link>
+          </div>
         </header>
 
         {/* Main content */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">
-          <div className="mx-auto max-w-6xl">{children}</div>
+        <main className="relative flex-1 overflow-y-auto p-4 md:p-8">
+          <div className="relative z-10 mx-auto max-w-6xl">{children}</div>
         </main>
       </div>
     </div>
