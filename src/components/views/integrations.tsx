@@ -285,12 +285,14 @@ export default function IntegrationsView() {
  * The `purpose` text becomes the hover tooltip on each chip.
  */
 const ALWAYS_ON_DATA_SOURCES: Array<{ name: string; purpose: string }> = [
-  { name: "Yahoo Finance", purpose: "Primary equity quotes, OHLCV history, fundamentals, analyst targets" },
-  { name: "Alpha Vantage", purpose: "Cross-source verification + crypto pricing (DIGITAL_CURRENCY_DAILY) + supplementary news sentiment" },
-  { name: "CoinGecko", purpose: "Tertiary crypto pricing for tokens AV doesn't list (SPK, HYPE, newer DeFi)" },
-  { name: "SEC EDGAR", purpose: "Direct filings: 10-K, 10-Q, 8-K, insider Form 4, ownership data" },
-  { name: "Finnhub", purpose: "Per-ticker news + bullish/bearish sentiment scoring + buzz ratio" },
-  { name: "FRED (St. Louis Fed)", purpose: "Macro indicators: rates, CPI, unemployment, M2, yield curve" },
+  { name: "Yahoo Finance", purpose: "Primary equity quotes, history, fundamentals, analyst targets" },
+  { name: "Alpha Vantage", purpose: "Cross-source price verification + crypto coverage + a second news sentiment voice" },
+  { name: "Polygon.io", purpose: "Options chains (calls, puts, greeks, IV), intraday bars, third news feed" },
+  { name: "CoinGecko", purpose: "Crypto pricing for tokens Alpha Vantage doesn't list" },
+  { name: "SEC EDGAR", purpose: "Direct company filings: 10-K, 10-Q, 8-K, insider Form 4" },
+  { name: "Finnhub", purpose: "Per-ticker headlines, bullish/bearish sentiment, earnings call transcripts" },
+  { name: "Seeking Alpha", purpose: "Independent third-party commentary (opinion, not breaking news)" },
+  { name: "FRED (St. Louis Fed)", purpose: "Macro indicators: rates, CPI, unemployment, yield curve" },
   { name: "SnapTrade", purpose: "Read-only brokerage linking — holdings + trade activity sync" },
   { name: "Resend", purpose: "Transactional email delivery (verification + password reset)" },
 ];

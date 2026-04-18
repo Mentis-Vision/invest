@@ -18,11 +18,19 @@ import { log, errorInfo } from "../log";
 const BASE = "https://finnhub.io/api/v1";
 
 export function finnhubConfigured(): boolean {
-  return !!process.env.FINNHUB_API_KEY;
+  return !!key();
 }
 
 function key(): string | null {
-  return process.env.FINNHUB_API_KEY ?? null;
+  // Accept both spellings — the production env was originally typed as
+  // FINHUB_API_KEY (missing 'n'). Rather than force everyone to redo
+  // the env var, we read either. New deployments should use the
+  // correct FINNHUB_API_KEY.
+  return (
+    process.env.FINNHUB_API_KEY ??
+    process.env.FINHUB_API_KEY ??
+    null
+  );
 }
 
 export type NewsHeadline = {
@@ -233,3 +241,123 @@ export async function getTickerSentiment(
     return { ticker, configured: true, asOf, source: "finnhub" };
   }
 }
+
+/**
+ * Earnings call transcripts.
+ *
+ * Two-step lookup:
+ *   1. /stock/transcripts/list?symbol=AAPL → list of available
+ *      transcript IDs by quarter
+ *   2. /stock/transcripts?id=AAPL_30523 → the actual transcript
+ *
+ * Both endpoints are gated to Finnhub paid tiers. Free tier responds
+ * with 403 — we degrade gracefully (return null), the calling research
+ * surface just hides the 'Earnings call highlights' section.
+ *
+ * If/when the Finnhub plan upgrades to include transcripts, no code
+ * change is needed beyond plan billing.
+ */
+
+export type EarningsTranscriptSummary = {
+  id: string;
+  symbol: string;
+  title: string;
+  time: string;
+  year: number;
+  quarter: number;
+};
+
+export async function listEarningsTranscripts(
+  ticker: string
+): Promise<EarningsTranscriptSummary[]> {
+  const apiKey = key();
+  if (!apiKey) return [];
+  const url = new URL(`${BASE}/stock/transcripts/list`);
+  url.searchParams.set('symbol', ticker.toUpperCase());
+  url.searchParams.set('token', apiKey);
+  try {
+    const res = await fetch(url.toString(), {
+      next: { revalidate: 21600 }, // 6h — transcripts don't move
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) {
+      // 403 = not in tier. Quiet log; this is expected on free tier.
+      if (res.status !== 403) {
+        log.warn('finnhub', 'transcripts-list non-2xx', { status: res.status });
+      }
+      return [];
+    }
+    const data = (await res.json()) as {
+      transcripts?: Array<{
+        id?: string;
+        symbol?: string;
+        title?: string;
+        time?: string;
+        year?: number;
+        quarter?: number;
+      }>;
+    };
+    return (data.transcripts ?? []).map((t) => ({
+      id: t.id ?? '',
+      symbol: t.symbol ?? ticker.toUpperCase(),
+      title: t.title ?? '',
+      time: t.time ?? '',
+      year: t.year ?? 0,
+      quarter: t.quarter ?? 0,
+    }));
+  } catch (err) {
+    log.warn('finnhub', 'transcripts-list failed', errorInfo(err));
+    return [];
+  }
+}
+
+export type EarningsTranscriptBody = {
+  id: string;
+  symbol: string;
+  title: string;
+  time: string;
+  audio: string | null;
+  participants: Array<{ name: string; description: string | null }>;
+  transcript: Array<{ speaker: string; speech: string[] }>;
+};
+
+/**
+ * Fetch a specific transcript by its Finnhub ID. Returns the structured
+ * transcript with speakers and segments.
+ */
+export async function getEarningsTranscript(
+  id: string
+): Promise<EarningsTranscriptBody | null> {
+  const apiKey = key();
+  if (!apiKey) return null;
+  const url = new URL(`${BASE}/stock/transcripts`);
+  url.searchParams.set('id', id);
+  url.searchParams.set('token', apiKey);
+  try {
+    const res = await fetch(url.toString(), {
+      next: { revalidate: 86400 }, // 24h — transcripts are immutable once published
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) {
+      if (res.status !== 403) {
+        log.warn('finnhub', 'transcript non-2xx', { id, status: res.status });
+      }
+      return null;
+    }
+    const data = (await res.json()) as Partial<EarningsTranscriptBody>;
+    if (!data.id) return null;
+    return {
+      id: data.id,
+      symbol: data.symbol ?? '',
+      title: data.title ?? '',
+      time: data.time ?? '',
+      audio: data.audio ?? null,
+      participants: data.participants ?? [],
+      transcript: data.transcript ?? [],
+    };
+  } catch (err) {
+    log.warn('finnhub', 'transcript fetch failed', { id, ...errorInfo(err) });
+    return null;
+  }
+}
+
