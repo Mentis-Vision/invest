@@ -1,0 +1,1315 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ClearPath · Hybrid draft (C + B + customization)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,500&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* ═══ Tokens (Concierge palette) ═══════════════════ */
+      :root {
+        --cream: #faf4e8;
+        --cream-deep: #f2ead9;
+        --paper: #fff;
+        --navy: #152238;
+        --navy-soft: #2c3a54;
+        --navy-subtle: #475167;
+        --gold: #c4a574;
+        --gold-deep: #9e8355;
+        --gold-tint: rgba(196, 165, 116, 0.1);
+        --muted: #6b6d75;
+        --subtle: #a1a1aa;
+        --rule: #d9ceb6;
+        --rule-soft: #e5ddc9;
+        --buy: #4a7a5c;
+        --sell: #a5452a;
+        --hold: #8a7856;
+      }
+
+      /* ═══ Base ═════════════════════════════════════════ */
+      * {
+        box-sizing: border-box;
+        margin: 0;
+      }
+      html {
+        font-size: 15px;
+      }
+      body {
+        background: var(--cream);
+        color: var(--navy);
+        font-family: "Inter", -apple-system, sans-serif;
+        line-height: 1.55;
+        -webkit-font-smoothing: antialiased;
+        padding-bottom: 6rem;
+      }
+      a {
+        color: inherit;
+      }
+      .serif {
+        font-family: "Spectral", Georgia, serif;
+      }
+      .mono {
+        font-family: "JetBrains Mono", monospace;
+        font-variant-numeric: tabular-nums;
+      }
+      .eyebrow {
+        font-size: 10px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      /* ═══ Top bar (from Concierge) ═════════════════════ */
+      header.top {
+        padding: 22px 28px 18px;
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        gap: 20px;
+      }
+      .brand {
+        font-family: "Spectral", serif;
+        font-weight: 400;
+        font-size: 20px;
+        letter-spacing: -0.02em;
+      }
+      .brand em {
+        font-style: italic;
+        color: var(--gold-deep);
+      }
+      .nav-pills {
+        display: flex;
+        gap: 3px;
+        padding: 4px;
+        background: rgba(21, 34, 56, 0.04);
+        border-radius: 999px;
+        border: 1px solid var(--rule);
+      }
+      .nav-pills a {
+        padding: 7px 18px;
+        font-size: 13px;
+        text-decoration: none;
+        color: var(--navy-soft);
+        border-radius: 999px;
+        transition: all 0.15s;
+        letter-spacing: -0.005em;
+      }
+      .nav-pills a:hover {
+        color: var(--navy);
+      }
+      .nav-pills a.active {
+        background: var(--navy);
+        color: var(--cream);
+        font-weight: 500;
+      }
+      .user-chip {
+        justify-self: end;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 5px 12px 5px 5px;
+        border: 1px solid var(--rule);
+        border-radius: 999px;
+        background: var(--paper);
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .user-chip:hover {
+        border-color: var(--navy-subtle);
+      }
+      .user-chip .av {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: var(--navy);
+        color: var(--cream);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: "Spectral", serif;
+        font-size: 12px;
+        font-weight: 500;
+      }
+      .user-chip .name {
+        font-size: 12px;
+        color: var(--navy-soft);
+      }
+      .user-chip .chev {
+        color: var(--muted);
+        font-size: 10px;
+      }
+
+      /* ═══ Page frame ═══════════════════════════════════ */
+      main {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 0 24px;
+      }
+
+      /* ═══ Letter (from Concierge) — centered narrow ═══ */
+      .letter {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 40px 0 28px;
+      }
+      .dateline {
+        text-align: center;
+        font-size: 10px;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 28px;
+      }
+      .dateline::before,
+      .dateline::after {
+        content: "•";
+        margin: 0 14px;
+        color: var(--gold);
+      }
+      h1.greeting {
+        font-family: "Spectral", serif;
+        font-weight: 300;
+        font-size: clamp(28px, 4vw, 42px);
+        line-height: 1.15;
+        letter-spacing: -0.015em;
+        text-wrap: balance;
+      }
+      h1.greeting em {
+        font-style: italic;
+        color: var(--gold-deep);
+      }
+      p.lead {
+        margin-top: 22px;
+        font-size: 16px;
+        line-height: 1.65;
+        color: var(--navy-soft);
+      }
+      p.lead strong {
+        color: var(--navy);
+        font-weight: 600;
+      }
+      .fig {
+        font-family: "JetBrains Mono", monospace;
+        font-variant-numeric: tabular-nums;
+        font-weight: 500;
+        color: var(--navy);
+      }
+
+      /* ═══ Section wrapper ═════════════════════════════ */
+      section.block {
+        margin-top: 40px;
+        position: relative;
+      }
+      .block-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--rule);
+        margin-bottom: 14px;
+      }
+      .block-head h2 {
+        font-family: "Spectral", serif;
+        font-weight: 400;
+        font-size: 22px;
+        letter-spacing: -0.015em;
+        line-height: 1.2;
+      }
+      .block-head .hint {
+        font-size: 11px;
+        color: var(--muted);
+        letter-spacing: 0.06em;
+      }
+      .block-controls {
+        position: absolute;
+        right: 0;
+        top: 0;
+        display: none;
+        gap: 4px;
+        font-size: 10px;
+      }
+      body.editing section.block {
+        background: rgba(196, 165, 116, 0.04);
+        border-radius: 10px;
+        padding: 16px;
+        margin-left: -16px;
+        margin-right: -16px;
+        outline: 1px dashed var(--gold);
+      }
+      body.editing .block-controls {
+        display: inline-flex;
+        top: -10px;
+        right: 16px;
+      }
+      .block-controls button {
+        background: var(--paper);
+        border: 1px solid var(--rule);
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-size: 10px;
+        color: var(--muted);
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .block-controls button:hover {
+        color: var(--navy);
+      }
+
+      /* ═══ Priority rows (Concierge's "three things") ═══ */
+      .priority {
+        display: flex;
+        flex-direction: column;
+      }
+      .priority .row {
+        padding: 16px 0;
+        border-bottom: 1px solid var(--rule-soft);
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 16px;
+        align-items: baseline;
+      }
+      .priority .row:last-child {
+        border-bottom: 0;
+      }
+      .priority .row .rank {
+        font-family: "Spectral", serif;
+        font-weight: 400;
+        font-size: 28px;
+        color: var(--gold-deep);
+        font-style: italic;
+        line-height: 1;
+      }
+      .priority .row .body {
+        font-size: 14px;
+        line-height: 1.55;
+      }
+      .priority .row .body .head {
+        font-family: "Spectral", serif;
+        font-weight: 500;
+        font-size: 16px;
+        color: var(--navy);
+        letter-spacing: -0.01em;
+        margin-bottom: 3px;
+      }
+      .priority .row .body p {
+        color: var(--navy-soft);
+      }
+      .priority .row .label {
+        text-align: right;
+        font-size: 9px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--gold-deep);
+        font-weight: 600;
+      }
+
+      /* ═══ Holdings table (Terminal density) ═══════════ */
+      table.dense {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      .dense thead th {
+        text-align: left;
+        font-weight: 500;
+        font-size: 10px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted);
+        padding: 8px 12px 8px 0;
+        border-bottom: 1px solid var(--rule);
+      }
+      .dense thead th.num,
+      .dense tbody td.num {
+        text-align: right;
+        font-family: "JetBrains Mono", monospace;
+      }
+      .dense tbody td {
+        padding: 10px 12px 10px 0;
+        border-bottom: 1px solid var(--rule-soft);
+      }
+      .dense tbody tr:hover {
+        background: rgba(21, 34, 56, 0.02);
+      }
+      .dense td.sym {
+        font-weight: 600;
+        font-family: "JetBrains Mono", monospace;
+        font-variant-numeric: tabular-nums;
+      }
+      .dense td.name {
+        color: var(--muted);
+      }
+      .pos {
+        color: var(--buy);
+      }
+      .neg {
+        color: var(--sell);
+      }
+      .bar {
+        height: 4px;
+        background: var(--cream-deep);
+        border-radius: 2px;
+        overflow: hidden;
+        position: relative;
+        width: 70px;
+      }
+      .bar .fill {
+        position: absolute;
+        inset: 0;
+        width: var(--w, 50%);
+        background: var(--navy);
+      }
+
+      /* ═══ Two-column layout for rail blocks ═══════════ */
+      .two-col {
+        display: grid;
+        grid-template-columns: 1.6fr 1fr;
+        gap: 32px;
+      }
+      @media (max-width: 860px) {
+        .two-col {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      /* ═══ Chart block (from Journal) ══════════════════ */
+      .chart-card {
+        padding: 24px 0 8px;
+      }
+      .chart-wrap {
+        position: relative;
+      }
+      .chart-svg {
+        width: 100%;
+        height: 180px;
+        display: block;
+      }
+      .chart-meta {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 8px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      /* ═══ Rail modules (Terminal style) ═══════════════ */
+      .module .item {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--rule-soft);
+        font-size: 13px;
+      }
+      .module .item:last-child {
+        border-bottom: 0;
+      }
+      .module .item .l {
+        color: var(--navy-soft);
+      }
+      .module .item .t {
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .pill {
+        display: inline-block;
+        padding: 2px 7px;
+        font-size: 10px;
+        font-family: "JetBrains Mono", monospace;
+        letter-spacing: 0.04em;
+        border-radius: 3px;
+      }
+      .pill.buy {
+        color: var(--buy);
+        background: rgba(74, 122, 92, 0.1);
+      }
+      .pill.hold {
+        color: var(--hold);
+        background: rgba(138, 120, 86, 0.12);
+      }
+      .pill.sell {
+        color: var(--sell);
+        background: rgba(165, 69, 42, 0.1);
+      }
+
+      /* ═══ News block ═══════════════════════════════════ */
+      .news-item {
+        padding: 12px 0;
+        border-bottom: 1px solid var(--rule-soft);
+      }
+      .news-item:last-child {
+        border-bottom: 0;
+      }
+      .news-src {
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .news-hed {
+        font-family: "Spectral", serif;
+        font-weight: 400;
+        font-size: 15px;
+        line-height: 1.35;
+        margin-top: 4px;
+      }
+      .news-hed a {
+        text-decoration: none;
+      }
+      .news-hed a:hover {
+        color: var(--gold-deep);
+      }
+
+      /* ═══ Calendar (from Journal) ═════════════════════ */
+      .cal {
+        list-style: none;
+      }
+      .cal li {
+        padding: 12px 0;
+        border-bottom: 1px solid var(--rule-soft);
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 14px;
+        align-items: baseline;
+      }
+      .cal li:last-child {
+        border-bottom: 0;
+      }
+      .cal .date {
+        font-family: "Spectral", serif;
+        font-size: 18px;
+        color: var(--gold-deep);
+        line-height: 1;
+        letter-spacing: -0.01em;
+      }
+      .cal .date .day {
+        display: block;
+        font-size: 10px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-top: 2px;
+        font-family: "Inter", sans-serif;
+      }
+      .cal .ev {
+        font-size: 14px;
+      }
+      .cal .ev strong {
+        font-family: "JetBrains Mono", monospace;
+        font-weight: 600;
+      }
+      .cal .ev .desc {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 2px;
+      }
+      .cal .when {
+        text-align: right;
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      /* ═══ Macro strip ══════════════════════════════════ */
+      .macro-strip {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1px;
+        background: var(--rule);
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      .macro-strip .cell {
+        padding: 14px 18px;
+        background: var(--paper);
+      }
+      .macro-strip .k {
+        font-size: 10px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .macro-strip .v {
+        font-family: "JetBrains Mono", monospace;
+        font-weight: 500;
+        font-size: 18px;
+        letter-spacing: -0.015em;
+        margin-top: 4px;
+      }
+      .macro-strip .d {
+        font-size: 10px;
+        color: var(--muted);
+        margin-top: 2px;
+      }
+      @media (max-width: 640px) {
+        .macro-strip {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+
+      /* ═══ Customize affordance ═════════════════════════ */
+      .toolbar {
+        margin-top: 36px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-bottom: 18px;
+        border-bottom: 1px solid var(--rule);
+      }
+      .toolbar-left {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .chip {
+        font-size: 11px;
+        padding: 6px 12px;
+        border: 1px solid var(--rule);
+        border-radius: 999px;
+        background: var(--paper);
+        color: var(--navy-soft);
+        cursor: pointer;
+        transition: all 0.15s;
+        font-family: inherit;
+      }
+      .chip:hover {
+        border-color: var(--navy-subtle);
+      }
+      .chip.on {
+        background: var(--navy);
+        color: var(--cream);
+        border-color: var(--navy);
+      }
+      .customize-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        padding: 7px 14px;
+        border: 1px solid var(--gold);
+        border-radius: 999px;
+        background: var(--paper);
+        color: var(--gold-deep);
+        cursor: pointer;
+        font-family: inherit;
+        transition: all 0.15s;
+      }
+      .customize-btn:hover {
+        background: var(--gold-tint);
+      }
+      .customize-btn.editing {
+        background: var(--gold-deep);
+        color: var(--cream);
+        border-color: var(--gold-deep);
+      }
+
+      /* Add section affordance in editing mode */
+      .add-section-wrap {
+        display: none;
+        margin: 40px auto 0;
+        padding: 24px;
+        border: 1px dashed var(--gold);
+        border-radius: 10px;
+        text-align: center;
+      }
+      body.editing .add-section-wrap {
+        display: block;
+      }
+      .add-section-wrap h4 {
+        font-family: "Spectral", serif;
+        font-size: 14px;
+        font-weight: 500;
+        margin-bottom: 12px;
+      }
+      .add-section-wrap .list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: center;
+      }
+      .add-section-wrap button {
+        font-size: 11px;
+        padding: 6px 12px;
+        border: 1px solid var(--rule);
+        border-radius: 999px;
+        background: var(--paper);
+        color: var(--navy-soft);
+        cursor: pointer;
+        font-family: inherit;
+      }
+
+      /* Hide-off sections in editing mode */
+      body.editing section.block[data-active="false"] {
+        opacity: 0.4;
+      }
+      section.block[data-active="false"] {
+        display: none;
+      }
+      body.editing section.block[data-active="false"] {
+        display: block;
+      }
+
+      /* Footer */
+      footer {
+        margin-top: 80px;
+        padding: 24px;
+        text-align: center;
+        font-size: 11px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--muted);
+        border-top: 1px solid var(--rule);
+      }
+
+      @media (max-width: 720px) {
+        header.top {
+          grid-template-columns: 1fr;
+          gap: 14px;
+          text-align: center;
+        }
+        .nav-pills {
+          justify-self: center;
+          overflow-x: auto;
+          max-width: 100%;
+        }
+        .user-chip {
+          justify-self: center;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- ═══ Top nav (Concierge) ═══ -->
+    <header class="top">
+      <div class="brand">ClearPath <em>Private</em></div>
+      <nav class="nav-pills">
+        <a href="#" class="active">Today</a>
+        <a href="#">Portfolio</a>
+        <a href="#">Research</a>
+        <a href="#">Strategy</a>
+        <a href="#">History</a>
+      </nav>
+      <button class="user-chip">
+        <span class="av">SL</span>
+        <span class="name">Sang Lippert</span>
+        <span class="chev">▾</span>
+      </button>
+    </header>
+
+    <main>
+      <!-- ═══ Morning letter (Concierge) ═══ -->
+      <div class="letter">
+        <div class="dateline">Friday Morning · April 17, 2026</div>
+        <h1 class="greeting">
+          Good morning, Sang. Your portfolio is up
+          <em>2.31%</em> on the day.
+        </h1>
+        <p class="lead">
+          You&rsquo;re sitting at <strong>$284,617</strong> across three
+          institutions, driven mainly by Nvidia&rsquo;s continued datacenter
+          strength. Nothing structural has changed — the overnight read still
+          leans to
+          <strong>trim technology ahead of earnings next week</strong>.
+          Three things below are worth your attention today.
+        </p>
+      </div>
+
+      <!-- ═══ Customize toolbar ═══ -->
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <span class="eyebrow" style="align-self: center; margin-right: 8px"
+            >On this page</span
+          >
+          <button class="chip on" data-target="priority">Priorities</button>
+          <button class="chip on" data-target="chart">Performance</button>
+          <button class="chip on" data-target="holdings">Holdings</button>
+          <button class="chip on" data-target="news">In the news</button>
+          <button class="chip on" data-target="calendar">Calendar</button>
+          <button class="chip on" data-target="alerts">Alerts</button>
+          <button class="chip" data-target="sector">Sector mix</button>
+          <button class="chip" data-target="macro">Macro</button>
+          <button class="chip" data-target="research">Recent research</button>
+          <button class="chip" data-target="reading">Worth reading</button>
+        </div>
+        <button class="customize-btn" id="editToggle">
+          <span class="icon">⚙</span> Customize
+        </button>
+      </div>
+
+      <!-- ═══ 1. Priorities (from Concierge 'three things') ═══ -->
+      <section class="block" id="priority" data-active="true">
+        <div class="block-head">
+          <h2>Three things for today.</h2>
+          <span class="hint">In order of priority</span>
+        </div>
+        <div class="block-controls">
+          <button>Move up</button><button>Move down</button
+          ><button>Hide</button>
+        </div>
+        <div class="priority">
+          <div class="row">
+            <div class="rank">i</div>
+            <div class="body">
+              <div class="head">Nvidia is now 34% of your portfolio.</div>
+              <p>
+                All three lenses flagged concentration risk overnight. Consider
+                trimming to <span class="fig">~25%</span> before Nvidia reports
+                in three weeks. A
+                <span class="fig">−10%</span> earnings miss would move your
+                total value by roughly <span class="fig">−$9,700</span>.
+              </p>
+            </div>
+            <div class="label">Concentration</div>
+          </div>
+          <div class="row">
+            <div class="rank">ii</div>
+            <div class="body">
+              <div class="head">Tesla earnings are Tuesday after the bell.</div>
+              <p>
+                You don&rsquo;t hold TSLA, but your research yesterday was a
+                deep read with <span class="fig">SELL · HIGH</span>. Tuesday is
+                the event if you&rsquo;re rethinking.
+              </p>
+            </div>
+            <div class="label">Calendar</div>
+          </div>
+          <div class="row">
+            <div class="rank">iii</div>
+            <div class="body">
+              <div class="head">The 10-year is back to 4.32%.</div>
+              <p>
+                Highest since January. The macro lens has been calling this a
+                headwind for long-duration growth. Your cash at
+                <span class="fig">9.1%</span> is slightly light for a regime
+                like this.
+              </p>
+            </div>
+            <div class="label">Macro</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ 2. Performance chart (from Journal — optional) ═══ -->
+      <section class="block" id="chart" data-active="true">
+        <div class="block-head">
+          <h2>Performance this year.</h2>
+          <span class="hint"
+            >YTD · <span class="mono pos">+10.9%</span> ·
+            <span class="mono">+$28,117</span></span
+          >
+        </div>
+        <div class="block-controls">
+          <button>Move up</button><button>Move down</button
+          ><button>Hide</button>
+        </div>
+        <div class="chart-card">
+          <div class="chart-wrap">
+            <svg
+              class="chart-svg"
+              viewBox="0 0 1000 180"
+              preserveAspectRatio="none"
+            >
+              <defs>
+                <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#152238" stop-opacity="0.14" />
+                  <stop offset="100%" stop-color="#152238" stop-opacity="0" />
+                </linearGradient>
+              </defs>
+              <!-- area -->
+              <path
+                d="M 0,130 L 40,126 L 90,118 L 140,130 L 190,112 L 240,100 L 290,108 L 340,92 L 390,80 L 440,96 L 490,72 L 540,62 L 600,70 L 660,50 L 720,54 L 780,40 L 840,35 L 900,44 L 950,28 L 1000,24 L 1000,180 L 0,180 Z"
+                fill="url(#area)"
+              />
+              <!-- line -->
+              <path
+                d="M 0,130 L 40,126 L 90,118 L 140,130 L 190,112 L 240,100 L 290,108 L 340,92 L 390,80 L 440,96 L 490,72 L 540,62 L 600,70 L 660,50 L 720,54 L 780,40 L 840,35 L 900,44 L 950,28 L 1000,24"
+                fill="none"
+                stroke="#152238"
+                stroke-width="1.8"
+              />
+              <!-- last point -->
+              <circle cx="1000" cy="24" r="4" fill="#c4a574" />
+            </svg>
+          </div>
+          <div class="chart-meta">
+            <span>Jan 1</span>
+            <span>Apr 17 · <span class="mono">$284,617</span></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ 3. Holdings (Terminal density) ═══ -->
+      <section class="block" id="holdings" data-active="true">
+        <div class="block-head">
+          <h2>Holdings.</h2>
+          <span class="hint">Six positions · sorted by weight</span>
+        </div>
+        <div class="block-controls">
+          <button>Move up</button><button>Move down</button
+          ><button>Hide</button>
+        </div>
+        <table class="dense">
+          <thead>
+            <tr>
+              <th>Ticker</th>
+              <th>Name</th>
+              <th>Weight</th>
+              <th class="num">Price</th>
+              <th class="num">Today</th>
+              <th class="num">Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="sym">NVDA</td>
+              <td class="name">Nvidia</td>
+              <td>
+                <div class="bar"><div class="fill" style="--w: 92%"></div></div>
+              </td>
+              <td class="num">1,294.18</td>
+              <td class="num pos">+3.29%</td>
+              <td class="num">97,348</td>
+            </tr>
+            <tr>
+              <td class="sym">AAPL</td>
+              <td class="name">Apple</td>
+              <td>
+                <div class="bar"><div class="fill" style="--w: 62%"></div></div>
+              </td>
+              <td class="num">248.11</td>
+              <td class="num pos">+0.84%</td>
+              <td class="num">64,952</td>
+            </tr>
+            <tr>
+              <td class="sym">MSFT</td>
+              <td class="name">Microsoft</td>
+              <td>
+                <div class="bar"><div class="fill" style="--w: 50%"></div></div>
+              </td>
+              <td class="num">514.23</td>
+              <td class="num pos">+1.12%</td>
+              <td class="num">52,332</td>
+            </tr>
+            <tr>
+              <td class="sym">BTC</td>
+              <td class="name">Bitcoin</td>
+              <td>
+                <div class="bar"><div class="fill" style="--w: 33%"></div></div>
+              </td>
+              <td class="num">75,077.12</td>
+              <td class="num pos">+4.10%</td>
+              <td class="num">34,471</td>
+            </tr>
+            <tr>
+              <td class="sym">VOO</td>
+              <td class="name">S&amp;P 500 ETF</td>
+              <td>
+                <div class="bar"><div class="fill" style="--w: 25%"></div></div>
+              </td>
+              <td class="num">498.74</td>
+              <td class="num pos">+0.62%</td>
+              <td class="num">26,200</td>
+            </tr>
+            <tr>
+              <td class="sym">F</td>
+              <td class="name">Ford Motor</td>
+              <td>
+                <div class="bar"><div class="fill" style="--w: 9%"></div></div>
+              </td>
+              <td class="num">11.82</td>
+              <td class="num neg">−1.48%</td>
+              <td class="num">9,314</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- ═══ 4. Two-col: News + Alerts ═══ -->
+      <div class="two-col">
+        <section class="block" id="news" data-active="true">
+          <div class="block-head">
+            <h2>In the news.</h2>
+            <span class="hint">Four outlets · last 24h</span>
+          </div>
+          <div class="block-controls">
+            <button>Move up</button><button>Move down</button
+            ><button>Hide</button>
+          </div>
+          <div>
+            <div class="news-item">
+              <div class="news-src">
+                WSJ · <span class="mono">NVDA</span> · 2h ago
+              </div>
+              <div class="news-hed">
+                <a href="#"
+                  >Nvidia&rsquo;s next act: can custom chips defend the
+                  moat?</a
+                >
+              </div>
+            </div>
+            <div class="news-item">
+              <div class="news-src">
+                IBD · <span class="mono">TSLA</span> · 5h ago
+              </div>
+              <div class="news-hed">
+                <a href="#"
+                  >Tesla Earnings: What Robotaxi Updates Should Investors
+                  Expect?</a
+                >
+              </div>
+            </div>
+            <div class="news-item">
+              <div class="news-src">
+                CNBC · <span class="mono">AAPL</span> · yesterday
+              </div>
+              <div class="news-hed">
+                <a href="#"
+                  >Apple&rsquo;s India ramp is working faster than analysts
+                  expected</a
+                >
+              </div>
+            </div>
+            <div class="news-item">
+              <div class="news-src">
+                MarketWatch · <span class="mono">MSFT</span> · yesterday
+              </div>
+              <div class="news-hed">
+                <a href="#"
+                  >Microsoft&rsquo;s Azure growth decelerates; analysts pause
+                  upgrades</a
+                >
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="block" id="alerts" data-active="true">
+          <div class="block-head">
+            <h2>Alerts.</h2>
+            <span class="hint">3 open</span>
+          </div>
+          <div class="block-controls">
+            <button>Move up</button><button>Move down</button
+            ><button>Hide</button>
+          </div>
+          <div class="module">
+            <div class="item">
+              <div class="l">
+                <span class="mono" style="font-weight: 600">BTC</span> +4.10%
+                move
+              </div>
+              <span class="t">5%+ move</span>
+            </div>
+            <div class="item">
+              <div class="l">
+                <span class="mono" style="font-weight: 600">NVDA</span> 34% of
+                portfolio
+              </div>
+              <span class="t">Concentration</span>
+            </div>
+            <div class="item">
+              <div class="l">
+                <span class="mono" style="font-weight: 600">TSLA</span>
+                earnings Tue
+              </div>
+              <span class="t">Calendar</span>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ═══ 5. Calendar (from Journal) ═══ -->
+      <section class="block" id="calendar" data-active="true">
+        <div class="block-head">
+          <h2>Calendar.</h2>
+          <span class="hint">Upcoming events on your holdings</span>
+        </div>
+        <div class="block-controls">
+          <button>Move up</button><button>Move down</button
+          ><button>Hide</button>
+        </div>
+        <ul class="cal">
+          <li>
+            <div class="date">21<span class="day">Tue</span></div>
+            <div class="ev">
+              <strong>TSLA</strong> · Earnings call, Q1
+              <div class="desc">
+                Robotaxi + margin commentary are what the street is positioning
+                for.
+              </div>
+            </div>
+            <div class="when">4:30 pm ET</div>
+          </li>
+          <li>
+            <div class="date">22<span class="day">Wed</span></div>
+            <div class="ev">
+              <strong>NFLX</strong> · Earnings call, Q1
+              <div class="desc">
+                Subscriber growth + password-sharing follow-through.
+              </div>
+            </div>
+            <div class="when">After close</div>
+          </li>
+          <li>
+            <div class="date">24<span class="day">Fri</span></div>
+            <div class="ev">
+              <strong>AAPL</strong> · Ex-dividend
+              <div class="desc">$0.25/share, payable May 15.</div>
+            </div>
+            <div class="when">Open</div>
+          </li>
+          <li>
+            <div class="date">25<span class="day">Fri</span></div>
+            <div class="ev">
+              <strong>MSFT</strong> · 10-Q filing expected
+              <div class="desc">
+                MD&amp;A typically lands within 24 hours after earnings.
+              </div>
+            </div>
+            <div class="when">Expected</div>
+          </li>
+        </ul>
+      </section>
+
+      <!-- ═══ 6. Macro (optional, off by default) ═══ -->
+      <section class="block" id="macro" data-active="false">
+        <div class="block-head">
+          <h2>Macro.</h2>
+          <span class="hint">FRED · last read</span>
+        </div>
+        <div class="block-controls">
+          <button>Move up</button><button>Move down</button
+          ><button>Hide</button>
+        </div>
+        <div class="macro-strip">
+          <div class="cell">
+            <div class="k">10-Y Yield</div>
+            <div class="v">4.32%</div>
+            <div class="d">+0.04 vs last wk</div>
+          </div>
+          <div class="cell">
+            <div class="k">Fed Funds</div>
+            <div class="v">4.25%</div>
+            <div class="d">Unchanged</div>
+          </div>
+          <div class="cell">
+            <div class="k">CPI YoY</div>
+            <div class="v">3.32%</div>
+            <div class="d">+0.52 vs 12mo ago</div>
+          </div>
+          <div class="cell">
+            <div class="k">USD Index</div>
+            <div class="v">107.4</div>
+            <div class="d">+1.1 vs last wk</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ 7. Sector mix (optional, off by default) ═══ -->
+      <section class="block" id="sector" data-active="false">
+        <div class="block-head">
+          <h2>Sector mix.</h2>
+          <span class="hint">By weight</span>
+        </div>
+        <div class="block-controls">
+          <button>Move up</button><button>Move down</button
+          ><button>Hide</button>
+        </div>
+        <div style="padding: 8px 0">
+          <div style="display: flex; flex-direction: column; gap: 10px">
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 160px 1fr 60px;
+                gap: 12px;
+                align-items: center;
+                font-size: 13px;
+              "
+            >
+              <span>Technology</span>
+              <div class="bar" style="width: 100%">
+                <div class="fill" style="--w: 75%"></div>
+              </div>
+              <span class="mono" style="text-align: right">75.4%</span>
+            </div>
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 160px 1fr 60px;
+                gap: 12px;
+                align-items: center;
+                font-size: 13px;
+              "
+            >
+              <span>Digital assets</span>
+              <div class="bar" style="width: 100%">
+                <div class="fill" style="--w: 12%"></div>
+              </div>
+              <span class="mono" style="text-align: right">12.1%</span>
+            </div>
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 160px 1fr 60px;
+                gap: 12px;
+                align-items: center;
+                font-size: 13px;
+              "
+            >
+              <span>Index / ETF</span>
+              <div class="bar" style="width: 100%">
+                <div class="fill" style="--w: 9%"></div>
+              </div>
+              <span class="mono" style="text-align: right">9.2%</span>
+            </div>
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 160px 1fr 60px;
+                gap: 12px;
+                align-items: center;
+                font-size: 13px;
+              "
+            >
+              <span>Consumer cyclical</span>
+              <div class="bar" style="width: 100%">
+                <div class="fill" style="--w: 3%"></div>
+              </div>
+              <span class="mono" style="text-align: right">3.3%</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ 8. Recent research (optional, off by default) ═══ -->
+      <section class="block" id="research" data-active="false">
+        <div class="block-head">
+          <h2>Recent research.</h2>
+          <span class="hint">Last 7 days</span>
+        </div>
+        <div class="block-controls">
+          <button>Move up</button><button>Move down</button
+          ><button>Hide</button>
+        </div>
+        <div class="module">
+          <div class="item">
+            <div class="l">
+              <span class="mono" style="font-weight: 600">NVDA</span> ·
+              <span class="pill hold">HOLD · MED</span>
+            </div>
+            <span class="t">Deep read · 12m ago</span>
+          </div>
+          <div class="item">
+            <div class="l">
+              <span class="mono" style="font-weight: 600">TSLA</span> ·
+              <span class="pill sell">SELL · HIGH</span>
+            </div>
+            <span class="t">Deep read · yesterday</span>
+          </div>
+          <div class="item">
+            <div class="l">
+              <span class="mono" style="font-weight: 600">COIN</span> ·
+              <span class="pill buy">BUY · LOW</span>
+            </div>
+            <span class="t">Quick read · 2d ago</span>
+          </div>
+          <div class="item">
+            <div class="l">
+              <span class="mono" style="font-weight: 600">IONQ</span> ·
+              <span class="pill sell">SELL · MED</span>
+            </div>
+            <span class="t">Deep read · 3d ago</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ 9. Worth reading (optional, off by default) ═══ -->
+      <section class="block" id="reading" data-active="false">
+        <div class="block-head">
+          <h2>Worth reading.</h2>
+          <span class="hint">Long-form · not breaking news</span>
+        </div>
+        <div class="block-controls">
+          <button>Move up</button><button>Move down</button
+          ><button>Hide</button>
+        </div>
+        <div>
+          <div class="news-item">
+            <div class="news-src">Howard Marks · Oaktree · 2 days ago</div>
+            <div class="news-hed">
+              <a href="#"
+                >&ldquo;Sea Change, Still&rdquo; — the memo revisited, three
+                years on.</a
+              >
+            </div>
+          </div>
+          <div class="news-item">
+            <div class="news-src">Aswath Damodaran · blog · yesterday</div>
+            <div class="news-hed">
+              <a href="#"
+                >The cost of capital question: why it matters more in 2026.</a
+              >
+            </div>
+          </div>
+          <div class="news-item">
+            <div class="news-src">Financial Times · Apr 15</div>
+            <div class="news-hed">
+              <a href="#"
+                >Private credit&rsquo;s next test won&rsquo;t be rates.</a
+              >
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ Add-section panel (editing mode) ═══ -->
+      <div class="add-section-wrap">
+        <h4>Add a section to your dashboard</h4>
+        <div class="list">
+          <button>+ Performance chart</button>
+          <button>+ Sector mix</button>
+          <button>+ Watchlist (coming)</button>
+          <button>+ Macro indicators</button>
+          <button>+ Recent research</button>
+          <button>+ Worth reading</button>
+          <button>+ Insider activity</button>
+        </div>
+      </div>
+
+      <footer>
+        <a href="/drafts/index.html">· Compare drafts ·</a>
+        · Informational only · Not investment advice
+      </footer>
+    </main>
+
+    <script>
+      // Simple demo: toggle chips on/off, toggle edit mode
+      const chips = document.querySelectorAll(".chip[data-target]");
+      chips.forEach((chip) => {
+        chip.addEventListener("click", () => {
+          chip.classList.toggle("on");
+          const target = document.getElementById(chip.dataset.target);
+          if (target) {
+            const active = chip.classList.contains("on");
+            target.dataset.active = active ? "true" : "false";
+          }
+        });
+      });
+      const edit = document.getElementById("editToggle");
+      edit.addEventListener("click", () => {
+        document.body.classList.toggle("editing");
+        edit.classList.toggle("editing");
+        edit.textContent = document.body.classList.contains("editing")
+          ? "✓ Done"
+          : "⚙ Customize";
+      });
+    </script>
+  </body>
+</html>
