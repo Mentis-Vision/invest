@@ -199,6 +199,42 @@ async function getCryptoSnapshot(symbol: string): Promise<StockSnapshot> {
   };
 }
 
+/**
+ * Lightweight 30-day price series for inline sparklines on research
+ * cards. Returns just the close prices in chronological order so the
+ * UI can render a tiny chart without paying for a full chart payload.
+ *
+ * Uses the same yahoo-finance2 chart() the warehouse refresh uses, so
+ * Vercel's fetch cache amortizes the call across users — if SPY was
+ * pulled 5 minutes ago for one ticker drill, the next user gets it
+ * from cache.
+ *
+ * For known crypto symbols we don't go through Yahoo (the equity-
+ * namesake bug would return wrong data). Returns empty array — the
+ * caller draws "no chart" rather than a misleading line.
+ */
+export async function getPriceSparkline(
+  symbol: string,
+  days = 30
+): Promise<number[]> {
+  if (symbolToCoinGeckoId(symbol)) return [];
+  try {
+    const hist = (await yahooFinance.chart(symbol, {
+      period1: new Date(Date.now() - days * 86400000),
+      interval: "1d",
+    })) as unknown as {
+      quotes?: Array<{ close?: number | null }>;
+    };
+    return (hist.quotes ?? [])
+      .map((q) => q.close)
+      .filter(
+        (c): c is number => typeof c === "number" && Number.isFinite(c)
+      );
+  } catch {
+    return [];
+  }
+}
+
 export function formatSnapshotForAI(s: StockSnapshot): string {
   const fmt = (n: number | null, opts?: Intl.NumberFormatOptions) =>
     n === null ? "N/A" : new Intl.NumberFormat("en-US", opts).format(n);

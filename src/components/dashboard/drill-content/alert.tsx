@@ -40,10 +40,10 @@ export function DrillAlert({
         )}
         <DrillSection label="What this means">
           <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
-            Alerts are generated overnight from free data sources (Yahoo
-            price, SEC Form 4, portfolio concentration). They cost zero AI
-            spend. Clicking <em>Run research</em> above is a paid AI query
-            that asks the panel to weigh this signal in context.
+            Alerts are surfaced overnight from price moves, SEC filings,
+            and portfolio concentration. Clicking <em>Run research</em>{" "}
+            opens a deeper read on the ticker so you can decide what
+            (if anything) to do.
           </p>
         </DrillSection>
       </DrillBody>

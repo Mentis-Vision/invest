@@ -62,7 +62,7 @@ export default function SignInPage() {
           <em className="italic text-[var(--buy)]">considered</em> brief.
         </h1>
         <p className="mx-auto mt-4 max-w-[280px] text-[13px] leading-relaxed text-muted-foreground">
-          Three independent AI models cross-verify every recommendation. Every
+          Three independent analysts cross-verify every recommendation. Every
           claim traces to a source.
         </p>
       </div>

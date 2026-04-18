@@ -15,6 +15,7 @@ import {
   CalendarClock,
   PieChart,
   History as HistoryIcon,
+  Clock,
 } from "lucide-react";
 import { getHoldings, type Holding } from "@/lib/client/holdings-cache";
 import { WarehouseFreshness } from "@/components/warehouse-freshness";
@@ -246,7 +247,7 @@ export default function StrategyView() {
     <div className="space-y-6">
       <div>
         <h2 className="text-3xl font-semibold tracking-tight text-[var(--foreground)]">
-          AI Strategy
+          Strategy
         </h2>
         <p className="text-sm text-muted-foreground">
           A portfolio-level review across value, growth, and macro lenses —
@@ -262,7 +263,7 @@ export default function StrategyView() {
         <Card className="border-[var(--border)] bg-[var(--secondary)]/30">
           <CardContent className="flex items-center gap-3 py-4 text-sm text-[var(--muted-foreground)]">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Checking for last night&rsquo;s portfolio review…
+            Loading this morning&rsquo;s portfolio review…
           </CardContent>
         </Card>
       ) : review ? null /* a review is loaded — the rendered review block already explains its provenance */ : !error ? (
@@ -277,14 +278,13 @@ export default function StrategyView() {
                 </div>
                 <div>
                   <div className="text-sm font-semibold text-[var(--foreground)]">
-                    First-time portfolio review
+                    Your first portfolio review
                   </div>
                   <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-                    The nightly cron pre-runs your AI review for free
-                    every morning. Since this is your first time (or a
-                    new connection), kick one off now — it&rsquo;ll cost
-                    a few cents from your monthly AI budget. Tomorrow
-                    onward you&rsquo;ll just see the overnight version.
+                    Your portfolio review is refreshed automatically each
+                    morning. Since this is your first time (or a brand-new
+                    connection), kick one off now — from tomorrow onward
+                    a fresh read will be waiting when you sign in.
                   </p>
                 </div>
               </div>
@@ -293,7 +293,7 @@ export default function StrategyView() {
                 disabled={loading || !connected}
               >
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Run AI portfolio review
+                Run portfolio review
               </Button>
             </CardContent>
           </Card>
@@ -311,7 +311,7 @@ export default function StrategyView() {
                 <span className="font-medium text-[var(--foreground)]">
                   No brokerage linked yet.
                 </span>{" "}
-                The AI portfolio review needs your holdings.{" "}
+                A portfolio review needs your holdings to look at.{" "}
                 <Link
                   href="/app?view=portfolio"
                   className="text-[var(--foreground)] underline underline-offset-4 hover:text-[var(--buy)]"
@@ -533,53 +533,36 @@ export default function StrategyView() {
 
       {review && (
         <>
-          {/* Provenance + freshness header. When the review came from
-              the overnight cron we want users to KNOW that — both as a
-              trust cue ("this isn't a flaky one-off") and as a nudge to
-              not waste tokens re-running the same data. */}
-          <Card
-            className={
-              review.cached
-                ? "border-[var(--buy)]/30 bg-[var(--buy)]/5"
-                : "border-[var(--decisive)]/30 bg-[var(--decisive)]/5"
-            }
-          >
+          {/* Provenance + freshness header. Plain English only — no
+              mention of tokens, models, or the nightly job. Users care
+              that it's current, not how it was generated. */}
+          <Card className="border-[var(--border)] bg-[var(--secondary)]/30">
             <CardContent className="flex flex-col items-start justify-between gap-2 py-3 sm:flex-row sm:items-center">
               <div className="flex items-start gap-2.5 text-xs">
-                <span
-                  className={`mt-1 inline-block h-2 w-2 rounded-full ${
-                    review.cached
-                      ? "bg-[var(--buy)]"
-                      : "bg-[var(--decisive)]"
-                  }`}
-                />
+                <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)]" />
                 <div>
                   {review.cached && review.cachedAt ? (
                     <>
                       <span className="font-medium text-[var(--foreground)]">
-                        Refreshed overnight
+                        Refreshed at{" "}
+                        {new Date(review.cachedAt).toLocaleTimeString(
+                          "en-US",
+                          { hour: "numeric", minute: "2-digit" }
+                        )}{" "}
+                        today
                       </span>{" "}
                       <span className="text-[var(--muted-foreground)]">
-                        — auto-generated at{" "}
-                        {new Date(review.cachedAt).toLocaleTimeString("en-US", {
-                          hour: "numeric",
-                          minute: "2-digit",
-                        })}{" "}
-                        today. Re-running spends tokens; the data
-                        won&rsquo;t meaningfully change before tomorrow.
+                        — fresh prices and headlines arrive each morning,
+                        so the read won&rsquo;t change much before tomorrow.
                       </span>
                     </>
                   ) : (
                     <>
                       <span className="font-medium text-[var(--foreground)]">
-                        Fresh AI run
+                        Just generated
                       </span>{" "}
                       <span className="text-[var(--muted-foreground)]">
-                        — used{" "}
-                        {review.tokensUsed
-                          ? `${Math.round(review.tokensUsed / 100) / 10}k tokens`
-                          : "AI tokens"}
-                        . Tomorrow&rsquo;s overnight run will be free.
+                        — your next refreshed read lands tomorrow morning.
                       </span>
                     </>
                   )}
@@ -593,7 +576,7 @@ export default function StrategyView() {
                 className="text-xs"
               >
                 {loading && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}
-                Re-run anyway
+                Refresh now
               </Button>
             </CardContent>
           </Card>
@@ -604,7 +587,7 @@ export default function StrategyView() {
                 <div>
                   <CardTitle className="text-base">Verdict</CardTitle>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {review.holdingsCount} positions · Supervisor: {review.supervisorModel}
+                    Across {review.holdingsCount} positions
                   </p>
                 </div>
               </div>

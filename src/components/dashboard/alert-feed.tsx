@@ -104,8 +104,7 @@ export default function AlertFeed() {
           Overnight activity
         </CardTitle>
         <p className="text-[11px] text-muted-foreground">
-          Things we noticed in your holdings. Free market data; no AI cost to
-          surface these.
+          Things we noticed in your holdings since yesterday.
         </p>
       </CardHeader>
       <CardContent className="pt-0">

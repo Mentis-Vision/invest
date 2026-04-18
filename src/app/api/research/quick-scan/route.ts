@@ -9,7 +9,11 @@ import {
 } from "@/lib/ai/schemas";
 import { checkRateLimit, RULES, getClientIp } from "@/lib/rate-limit";
 import { checkUsageCap, recordUsage, TIER_LIMITS } from "@/lib/usage";
-import { getStockSnapshot, formatWarehouseEnhancedDataBlock } from "@/lib/data/yahoo";
+import {
+  getStockSnapshot,
+  formatWarehouseEnhancedDataBlock,
+  getPriceSparkline,
+} from "@/lib/data/yahoo";
 import { getMacroSnapshot, formatMacroForAI } from "@/lib/data/fred";
 import {
   getCachedRecommendation,
@@ -115,11 +119,13 @@ export async function POST(req: NextRequest) {
       const a = cached.analysisJson as {
         snapshot?: Record<string, unknown>;
         output?: Record<string, unknown>;
+        priceHistory?: number[];
       };
       const ageMs = Date.now() - cached.createdAt.getTime();
       return NextResponse.json({
         ticker,
         snapshot: a.snapshot,
+        priceHistory: a.priceHistory ?? [],
         mode: "quick",
         output: a.output,
         tokensUsed: 0,
@@ -137,9 +143,12 @@ export async function POST(req: NextRequest) {
     // Assemble data block. Same warehouse-enhanced path the Full Panel
     // uses, so Quick Scan sees the same numbers — just asks one model to
     // eyeball it quickly without tool use.
-    const [snapshot, macro] = await Promise.all([
+    // priceHistory is for the inline sparkline on the result card; it
+    // doesn't go to the model, only the UI.
+    const [snapshot, macro, priceHistory] = await Promise.all([
       getStockSnapshot(ticker).catch(() => null),
       getMacroSnapshot().catch(() => []),
+      getPriceSparkline(ticker, 30).catch(() => [] as number[]),
     ]);
 
     if (!snapshot) {
@@ -201,12 +210,13 @@ Rules:
       summary: output.oneLiner.slice(0, 2000),
       priceAtRec: snapshot.price ?? 0,
       dataAsOf: new Date(snapshot.asOf),
-      payload: { snapshot, output },
+      payload: { snapshot, output, priceHistory },
     });
 
     return NextResponse.json({
       ticker,
       snapshot,
+      priceHistory,
       mode: "quick",
       output,
       tokensUsed,

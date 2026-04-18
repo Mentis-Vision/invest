@@ -49,12 +49,12 @@ const COPY: Record<
   period_change: {
     title: "Period change",
     method:
-      "Change in total portfolio value across the chosen window, measured from " +
-      "the daily portfolio_snapshot rows captured by the nightly cron. First " +
-      "snapshot is day 1 of your account — earlier is not reconstructable.",
+      "Change in your total portfolio value across the chosen window, " +
+      "measured from a daily snapshot we take each night. Day one is the " +
+      "first snapshot we have — anything before that isn't reconstructable.",
     depends:
-      "Only appears once you have ≥2 snapshots. After one night of cron, the " +
-      "1D value becomes available.",
+      "Needs at least two daily snapshots. After your first overnight " +
+      "refresh the 1-day view becomes available.",
     action: "Toggle timeframe in the hero strip.",
   },
   hit_rate: {

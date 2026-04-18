@@ -1,22 +1,27 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ShieldCheck, Clock } from "lucide-react";
+import { Clock } from "lucide-react";
 
 /**
- * Small inline tag indicating when the warehouse last refreshed.
+ * Inline freshness indicator.
  *
- * Two visual modes:
- *   - "compact": single line, used in headers/footers
- *       ✓ Refreshed overnight at 6:42 AM today
- *   - "card": padded card with explanation, used near "Run analysis"
- *     buttons to nudge users away from re-running expensive analysis
- *     when last night's data is still fresh
+ * Three visual modes:
+ *   - "compact": one-line tag for use in headers/footers
+ *       Last updated 6:42 AM today
+ *   - "card":    a small soft-tint card with one supporting line — used
+ *                only when the page genuinely benefits from highlighting
+ *                that data is current
+ *   - "pill":    very small rounded pill, intended to sit inline next
+ *                to a card title (e.g. "Quick Read · Updated 11:49 AM")
  *
  * Backed by GET /api/warehouse/freshness — cached at the edge for 60s.
  * Renders nothing until the request completes (no jarring layout shift)
- * and renders nothing if the warehouse hasn't been refreshed in 2 days
- * (we don't want to show "stale: 14 days ago" on a forgotten install).
+ * and renders nothing if the data hasn't been refreshed in 2 days
+ * (we don't want to advertise "stale: 14 days ago").
+ *
+ * Voice rule: NO mentions of cron / models / tokens / AI cost. Investors
+ * shouldn't see infrastructure terms.
  */
 
 type Freshness = {
@@ -28,19 +33,22 @@ type Freshness = {
 
 function formatRefreshTime(iso: string): string {
   const d = new Date(iso);
-  // Always render in the user's local time. The cron is UTC but a 14:00 UTC
-  // refresh is 9:00 EST / 6:00 PST — calling it "overnight" is a fair label
-  // for any US user.
   return d.toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
   });
 }
 
+function buildLabel(data: Freshness): string {
+  if (!data.asOf) return "";
+  const t = formatRefreshTime(data.asOf);
+  return data.isFreshToday ? `Updated ${t} today` : `Updated ${t} yesterday`;
+}
+
 export function WarehouseFreshness({
   variant = "compact",
 }: {
-  variant?: "compact" | "card";
+  variant?: "compact" | "card" | "pill";
 }) {
   const [data, setData] = useState<Freshness | null>(null);
 
@@ -62,40 +70,41 @@ export function WarehouseFreshness({
 
   if (!data || !data.asOf) return null;
 
-  // Don't render at all if the warehouse hasn't refreshed recently — a
-  // "Refreshed 14d ago" tag is worse than no tag.
   const ageHr =
     (Date.now() - new Date(data.asOf).getTime()) / (1000 * 60 * 60);
   if (ageHr > 48) return null;
 
-  const refreshedAt = formatRefreshTime(data.asOf);
-  const label = data.isFreshToday
-    ? `Refreshed overnight at ${refreshedAt} today`
-    : `Last refreshed ${refreshedAt} yesterday`;
+  const label = buildLabel(data);
 
-  if (variant === "compact") {
+  if (variant === "pill") {
     return (
-      <span
-        className="inline-flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)]"
-        title={`Warehouse data covers ${data.rowCount} ticker rows. The nightly cron writes once per day, so re-running analysis won't pick up new prices until tomorrow.`}
-      >
-        <ShieldCheck className="h-3 w-3 text-[var(--buy)]" />
+      <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--background)] px-2 py-0.5 text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
+        <Clock className="h-2.5 w-2.5" />
         {label}
       </span>
     );
   }
 
-  // Card variant — used to nudge users away from spending tokens on a
-  // re-analysis when last night's run is still authoritative.
+  if (variant === "compact") {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)]">
+        <Clock className="h-3 w-3" />
+        {label}
+      </span>
+    );
+  }
+
+  // Card variant — gentle nudge that fresh data is already loaded so
+  // the user doesn't feel they need to keep poking the page.
   return (
-    <div className="flex items-start gap-3 rounded-md border border-[var(--buy)]/30 bg-[var(--buy)]/5 px-3 py-2.5">
-      <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[var(--buy)]" />
+    <div className="flex items-start gap-3 rounded-md border border-[var(--border)] bg-[var(--card)] px-3 py-2.5">
+      <Clock className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted-foreground)]" />
       <div className="text-xs leading-relaxed">
         <p className="font-medium text-[var(--foreground)]">{label}</p>
         <p className="mt-0.5 text-[var(--muted-foreground)]">
           {data.isFreshToday
-            ? "Most analysis won't change meaningfully before tomorrow's refresh — re-running just costs tokens."
-            : "Tomorrow morning's cron will pull fresh prices, fundamentals, and news."}
+            ? "Prices, fundamentals and headlines are already today's."
+            : "Fresh prices and headlines arrive each morning."}
         </p>
       </div>
     </div>
@@ -103,9 +112,8 @@ export function WarehouseFreshness({
 }
 
 /**
- * Server-shaped variant for places where you already have an as_of
- * timestamp from somewhere else (a warehouse row, a dossier, etc.) and
- * want to render the same compact tag without making a separate API call.
+ * Lightweight shape for callers that already have an asOf string from
+ * somewhere else (a warehouse row, a dossier, etc.) — no API call.
  */
 export function FreshnessTag({ asOf }: { asOf: string | null | undefined }) {
   if (!asOf) return null;
@@ -119,7 +127,9 @@ export function FreshnessTag({ asOf }: { asOf: string | null | undefined }) {
   return (
     <span className="inline-flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)]">
       <Clock className="h-3 w-3" />
-      {isToday ? `Updated ${refreshedAt}` : `Updated yesterday ${refreshedAt}`}
+      {isToday
+        ? `Updated ${refreshedAt}`
+        : `Updated ${refreshedAt} yesterday`}
     </span>
   );
 }

@@ -205,7 +205,7 @@ export function DrillTicker({ ticker }: { ticker: string }) {
               )}
             </span>
           ) : (
-            "No warehouse data yet — cron hasn't seen this ticker. Check back tomorrow."
+            "No stored data for this one yet. Fresh data lands tomorrow morning."
           )
         }
         action={
@@ -586,9 +586,9 @@ export function DrillTicker({ ticker }: { ticker: string }) {
 
         {!loading && !m && (
           <div className="rounded-md border border-[var(--border)] bg-[var(--secondary)] px-4 py-5 text-sm text-[var(--muted-foreground)]">
-            The warehouse hasn&rsquo;t captured this ticker yet. The nightly
-            cron populates it from Yahoo the next time it runs. You can
-            still run AI research on it directly.
+            We don&rsquo;t have stored data for this ticker yet — fresh
+            data lands tomorrow morning. You can still run a research
+            read on it directly.
           </div>
         )}
       </DrillBody>

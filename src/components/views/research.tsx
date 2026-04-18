@@ -28,6 +28,7 @@ import { getHoldings } from "@/lib/client/holdings-cache";
 import ResearchStarter from "@/components/research/research-starter";
 import { WarehouseFreshness } from "@/components/warehouse-freshness";
 import { MarketPulse } from "@/components/research/market-pulse";
+import { MiniSparkline } from "@/components/research/mini-sparkline";
 
 type ModelKey = "claude" | "gpt" | "gemini";
 type ToolCallTrace = {
@@ -56,6 +57,8 @@ type QuickScanResponse = {
     primaryRisk: string;
   };
   snapshot: StockSnapshot;
+  /** 30-day close history for the inline sparkline. Empty when unavailable. */
+  priceHistory?: number[];
   tokensUsed: number;
   costCents: number;
   cached?: boolean;
@@ -69,6 +72,8 @@ type StandardResponse = {
   mode: "deep" | "standard";
   lens: "claude" | "gpt" | "gemini";
   snapshot: StockSnapshot;
+  /** 30-day close history for the inline sparkline. Empty when unavailable. */
+  priceHistory?: number[];
   analysis: ModelResult;
   /** Bull/Bear adversarial debate run on the single analyst's output. */
   debate?: DebateResult | null;
@@ -230,55 +235,31 @@ function cachedAgeLabel(sec: number): string {
 }
 
 /**
- * Transparency footer for any AI research card. Tells the user where
- * the result came from and what (if anything) it cost.
+ * Inline freshness chip for the corner of a research card. No mention
+ * of models, tokens, or AI — just when the read was last refreshed and
+ * a soft note that newer data arrives tomorrow.
  *
  * Two states:
- *   - cached: Loaded from earlier today's run — zero tokens, zero $.
- *     Surfaced because users were burning AI dollars re-running the
- *     same ticker on the same calendar day.
- *   - live: Fresh AI run — show the rough token count + which model
- *     family did the work. Demystifies "where does this come from?"
+ *   - cached: shown alongside the title to communicate "this was already
+ *     done earlier today, you're seeing the same result"
+ *   - live:   shown alongside the title to communicate "just-now read"
  */
-function ResearchSourceTag({
-  mode,
+function FreshnessChip({
   cached,
   cachedAgeSec,
-  tokensUsed,
-  modelLabel,
 }: {
-  mode: "quick" | "deep" | "panel";
   cached?: boolean;
   cachedAgeSec?: number | null;
-  tokensUsed?: number;
-  modelLabel?: string;
 }) {
-  if (cached) {
-    return (
-      <div className="flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)]">
-        <span className="inline-flex h-1.5 w-1.5 rounded-full bg-[var(--buy)]" />
-        Loaded from cache (run{" "}
-        {cachedAgeSec != null ? cachedAgeLabel(cachedAgeSec) : "earlier today"}).
-        Same warehouse data → same verdict, no AI tokens spent.
-      </div>
-    );
-  }
-  const label =
-    mode === "quick"
-      ? "Quick read · single fast model (~$0.004)"
-      : mode === "deep"
-        ? `Deep read · ${modelLabel ?? "one analyst"} + bull/bear debate (~$0.06)`
-        : "Full panel · 3 analysts + supervisor (~$0.21)";
-  const approxTokens =
-    typeof tokensUsed === "number" && tokensUsed > 0
-      ? ` · ${Math.round(tokensUsed / 100) / 10}k tokens`
-      : "";
+  const label = cached
+    ? cachedAgeSec != null
+      ? `Updated ${cachedAgeLabel(cachedAgeSec)}`
+      : "Updated earlier today"
+    : "Just now";
   return (
-    <div className="flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)]">
-      <span className="inline-flex h-1.5 w-1.5 rounded-full bg-[var(--decisive)]" />
-      Fresh AI run · {label}
-      {approxTokens}
-    </div>
+    <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--background)] px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
+      {label}
+    </span>
   );
 }
 
@@ -804,11 +785,6 @@ export default function ResearchView({
                   : "Going deeper — full thesis with adversarial debate…"}
             </div>
           )}
-          {!loading && (
-            <div className="mt-3">
-              <WarehouseFreshness variant="card" />
-            </div>
-          )}
         </CardContent>
       </Card>
 
@@ -821,31 +797,80 @@ export default function ResearchView({
         </Card>
       )}
 
-      {/* Quick Scan result — compact, one-liner + signals + primary risk.
-          Ends with an obvious "Run full panel" button for when the scan
-          result is interesting enough to warrant a deeper look. */}
+      {/* Quick Read — denser layout:
+          • Header: TICKER + "Quick read · Updated NN:NNa" inline +
+            top-right verdict badge
+          • Sub-header strip: 30-day sparkline + price + day change.
+            Visual context the previous text-only version lacked.
+          • Body: thesis paragraph spans full width, then two-column
+            "Key signals" / "Primary risk" so vertical scroll stays tight.
+          • Footer: just the "Go deeper" CTA — no tech disclosures. */}
       {quickResult && !loading && (
         <Card>
-          <CardHeader className="pb-2 border-b border-[var(--border)]">
-            <div className="flex items-baseline justify-between">
-              <CardTitle className="text-2xl font-semibold tracking-tight">
-                {quickResult.ticker}
-                <span className="ml-3 text-[11px] font-sans uppercase tracking-widest text-[var(--muted-foreground)]">
-                  Quick read
-                </span>
-              </CardTitle>
-              <Badge
-                className={`${
-                  quickResult.output.recommendation === "BUY"
-                    ? "bg-[var(--buy)]/15 text-[var(--buy)] border-[var(--buy)]/30"
-                    : quickResult.output.recommendation === "SELL"
-                      ? "bg-[var(--sell)]/15 text-[var(--sell)] border-[var(--sell)]/30"
-                      : "bg-[var(--hold)]/15 text-[var(--hold)] border-[var(--hold)]/30"
-                } font-mono tracking-wider`}
-              >
-                {quickResult.output.recommendation} ·{" "}
-                {quickResult.output.confidence}
-              </Badge>
+          <CardHeader className="pb-3 border-b border-[var(--border)]">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <CardTitle className="text-2xl font-semibold tracking-tight">
+                    {quickResult.ticker}
+                  </CardTitle>
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--muted-foreground)]">
+                    Quick read
+                  </span>
+                  <FreshnessChip
+                    cached={quickResult.cached}
+                    cachedAgeSec={quickResult.cachedAgeSec ?? null}
+                  />
+                </div>
+                {quickResult.snapshot.name &&
+                  quickResult.snapshot.name !== quickResult.ticker && (
+                    <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                      {quickResult.snapshot.name}
+                    </p>
+                  )}
+              </div>
+
+              <div className="flex items-center gap-3 shrink-0">
+                {quickResult.priceHistory &&
+                  quickResult.priceHistory.length >= 2 && (
+                    <MiniSparkline
+                      data={quickResult.priceHistory}
+                      width={120}
+                      height={32}
+                    />
+                  )}
+                <div className="text-right">
+                  <div className="font-mono tabular-nums text-base font-medium text-[var(--foreground)]">
+                    ${quickResult.snapshot.price?.toFixed(2) ?? "—"}
+                  </div>
+                  {typeof quickResult.snapshot.changePct === "number" && (
+                    <div
+                      className={`font-mono tabular-nums text-[11px] ${
+                        quickResult.snapshot.changePct > 0
+                          ? "text-[var(--buy)]"
+                          : quickResult.snapshot.changePct < 0
+                            ? "text-[var(--sell)]"
+                            : "text-[var(--muted-foreground)]"
+                      }`}
+                    >
+                      {quickResult.snapshot.changePct > 0 ? "+" : ""}
+                      {quickResult.snapshot.changePct.toFixed(2)}%
+                    </div>
+                  )}
+                </div>
+                <Badge
+                  className={`${
+                    quickResult.output.recommendation === "BUY"
+                      ? "bg-[var(--buy)]/15 text-[var(--buy)] border-[var(--buy)]/30"
+                      : quickResult.output.recommendation === "SELL"
+                        ? "bg-[var(--sell)]/15 text-[var(--sell)] border-[var(--sell)]/30"
+                        : "bg-[var(--hold)]/15 text-[var(--hold)] border-[var(--hold)]/30"
+                  } font-mono tracking-wider shrink-0`}
+                >
+                  {quickResult.output.recommendation} ·{" "}
+                  {quickResult.output.confidence}
+                </Badge>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4 pt-4">
@@ -853,43 +878,39 @@ export default function ResearchView({
               {quickResult.output.oneLiner}
             </p>
 
-            {quickResult.output.signals.length > 0 && (
-              <div>
-                <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
-                  Key signals
+            <div className="grid gap-x-6 gap-y-4 md:grid-cols-2">
+              {quickResult.output.signals.length > 0 && (
+                <div>
+                  <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+                    Key signals
+                  </div>
+                  <ul className="space-y-1.5">
+                    {quickResult.output.signals.map((s, i) => (
+                      <li
+                        key={i}
+                        className="flex gap-2 text-sm leading-relaxed"
+                      >
+                        <span className="mt-1.5 inline-block h-1 w-1 shrink-0 rounded-full bg-[var(--foreground)]/40" />
+                        <span>{s}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <ul className="space-y-1.5">
-                  {quickResult.output.signals.map((s, i) => (
-                    <li
-                      key={i}
-                      className="flex gap-2 text-sm leading-relaxed"
-                    >
-                      <span className="mt-1.5 inline-block h-1 w-1 shrink-0 rounded-full bg-[var(--foreground)]/40" />
-                      <span>{s}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+              )}
 
-            {quickResult.output.primaryRisk && (
-              <div>
-                <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--sell)]/80">
-                  Primary risk
+              {quickResult.output.primaryRisk && (
+                <div>
+                  <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--sell)]/80">
+                    Primary risk
+                  </div>
+                  <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
+                    {quickResult.output.primaryRisk}
+                  </p>
                 </div>
-                <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
-                  {quickResult.output.primaryRisk}
-                </p>
-              </div>
-            )}
+              )}
+            </div>
 
-            <div className="flex flex-col-reverse items-stretch gap-3 border-t border-[var(--border)] pt-3 sm:flex-row sm:items-center sm:justify-between">
-              <ResearchSourceTag
-                mode="quick"
-                cached={quickResult.cached}
-                cachedAgeSec={quickResult.cachedAgeSec ?? null}
-                tokensUsed={quickResult.tokensUsed}
-              />
+            <div className="flex justify-end border-t border-[var(--border)] pt-3">
               <Button
                 size="sm"
                 onClick={() => {
@@ -909,30 +930,77 @@ export default function ResearchView({
           shape from the panel view; one card instead of three. */}
       {standardResult && !loading && (
         <Card>
-          <CardHeader className="pb-2 border-b border-[var(--border)]">
-            <div className="flex items-baseline justify-between">
-              <CardTitle className="font-sans text-2xl font-semibold tracking-tight">
-                {standardResult.ticker}
-                <span className="ml-3 text-[11px] font-sans uppercase tracking-widest text-[var(--muted-foreground)]">
-                  Deep read
-                </span>
-              </CardTitle>
-              {standardResult.analysis.status === "ok" &&
-                standardResult.analysis.output && (
-                  <Badge
-                    className={`${
-                      standardResult.analysis.output.recommendation === "BUY"
-                        ? "bg-[var(--buy)]/15 text-[var(--buy)] border-[var(--buy)]/30"
-                        : standardResult.analysis.output.recommendation ===
-                            "SELL"
-                          ? "bg-[var(--sell)]/15 text-[var(--sell)] border-[var(--sell)]/30"
-                          : "bg-[var(--hold)]/15 text-[var(--hold)] border-[var(--hold)]/30"
-                    } font-mono tracking-wider`}
-                  >
-                    {standardResult.analysis.output.recommendation} ·{" "}
-                    {standardResult.analysis.output.confidence}
-                  </Badge>
-                )}
+          {/* Same header treatment as Quick Read: title row with inline
+              freshness chip, sparkline + price + verdict badge floating
+              right. */}
+          <CardHeader className="pb-3 border-b border-[var(--border)]">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <CardTitle className="font-sans text-2xl font-semibold tracking-tight">
+                    {standardResult.ticker}
+                  </CardTitle>
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--muted-foreground)]">
+                    Deep read
+                  </span>
+                  <FreshnessChip
+                    cached={standardResult.cached}
+                    cachedAgeSec={standardResult.cachedAgeSec ?? null}
+                  />
+                </div>
+                {standardResult.snapshot.name &&
+                  standardResult.snapshot.name !== standardResult.ticker && (
+                    <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                      {standardResult.snapshot.name}
+                    </p>
+                  )}
+              </div>
+
+              <div className="flex items-center gap-3 shrink-0">
+                {standardResult.priceHistory &&
+                  standardResult.priceHistory.length >= 2 && (
+                    <MiniSparkline
+                      data={standardResult.priceHistory}
+                      width={120}
+                      height={32}
+                    />
+                  )}
+                <div className="text-right">
+                  <div className="font-mono tabular-nums text-base font-medium text-[var(--foreground)]">
+                    ${standardResult.snapshot.price?.toFixed(2) ?? "—"}
+                  </div>
+                  {typeof standardResult.snapshot.changePct === "number" && (
+                    <div
+                      className={`font-mono tabular-nums text-[11px] ${
+                        standardResult.snapshot.changePct > 0
+                          ? "text-[var(--buy)]"
+                          : standardResult.snapshot.changePct < 0
+                            ? "text-[var(--sell)]"
+                            : "text-[var(--muted-foreground)]"
+                      }`}
+                    >
+                      {standardResult.snapshot.changePct > 0 ? "+" : ""}
+                      {standardResult.snapshot.changePct.toFixed(2)}%
+                    </div>
+                  )}
+                </div>
+                {standardResult.analysis.status === "ok" &&
+                  standardResult.analysis.output && (
+                    <Badge
+                      className={`${
+                        standardResult.analysis.output.recommendation === "BUY"
+                          ? "bg-[var(--buy)]/15 text-[var(--buy)] border-[var(--buy)]/30"
+                          : standardResult.analysis.output.recommendation ===
+                              "SELL"
+                            ? "bg-[var(--sell)]/15 text-[var(--sell)] border-[var(--sell)]/30"
+                            : "bg-[var(--hold)]/15 text-[var(--hold)] border-[var(--hold)]/30"
+                      } font-mono tracking-wider shrink-0`}
+                    >
+                      {standardResult.analysis.output.recommendation} ·{" "}
+                      {standardResult.analysis.output.confidence}
+                    </Badge>
+                  )}
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4 pt-4">
@@ -988,60 +1056,35 @@ export default function ResearchView({
                 )}
 
                 {/* Verdict reconciliation: when Quick said one thing and
-                    Deep says another, explain WHY rather than leave the
-                    user wondering which one to trust. The deeper read +
-                    bull/bear debate is the more reliable signal because
-                    it actively tests the thesis from both sides. */}
+                    Deep says another, explain WHY in plain language.
+                    The deep read's bull/bear pass tests the thesis from
+                    both sides — that's the more reliable signal. */}
                 {quickResult &&
                   quickResult.ticker === standardResult.ticker &&
                   standardResult.analysis.output.recommendation !==
                     quickResult.output.recommendation && (
                     <div className="rounded-md border border-[var(--decisive)]/30 bg-[var(--decisive)]/5 px-3 py-2.5 text-xs leading-relaxed">
                       <div className="mb-1 font-mono uppercase tracking-wider text-[var(--decisive)]">
-                        Verdicts disagree
+                        Reads disagree
                       </div>
                       <p className="text-[var(--foreground)]/85">
-                        Quick read said{" "}
+                        The quick read suggested{" "}
                         <span className="font-mono">
                           {quickResult.output.recommendation}
-                        </span>{" "}
-                        ·{" "}
-                        <span className="font-mono">
-                          {quickResult.output.confidence}
                         </span>
-                        . Deep read says{" "}
+                        ; the deeper read says{" "}
                         <span className="font-mono">
                           {standardResult.analysis.output.recommendation}
-                        </span>{" "}
-                        ·{" "}
-                        <span className="font-mono">
-                          {standardResult.analysis.output.confidence}
                         </span>
-                        . Trust the deep read — it tested the thesis from
-                        both sides via the bull/bear debate below, where
-                        Quick is a single one-pass triage. Same data,
-                        more rigor.
+                        . The deeper read is the one to trust — it
+                        challenges its own thesis with a bull and bear
+                        argument before settling. The quick read is a
+                        first-glance triage.
                       </p>
                     </div>
                   )}
               </>
             )}
-
-            <div className="border-t border-[var(--border)] pt-3">
-              <ResearchSourceTag
-                mode="deep"
-                cached={standardResult.cached}
-                cachedAgeSec={standardResult.cachedAgeSec ?? null}
-                tokensUsed={standardResult.tokensUsed}
-                modelLabel={
-                  standardResult.lens === "claude"
-                    ? "Value lens"
-                    : standardResult.lens === "gpt"
-                      ? "Growth lens"
-                      : "Macro lens"
-                }
-              />
-            </div>
           </CardContent>
         </Card>
       )}

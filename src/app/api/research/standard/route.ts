@@ -4,7 +4,11 @@ import { auth } from "@/lib/auth";
 import { runSingleAnalyst, runBullBearDebate } from "@/lib/ai/consensus";
 import { checkRateLimit, RULES, getClientIp } from "@/lib/rate-limit";
 import { checkUsageCap, recordUsage, TIER_LIMITS } from "@/lib/usage";
-import { getStockSnapshot, formatWarehouseEnhancedDataBlock } from "@/lib/data/yahoo";
+import {
+  getStockSnapshot,
+  formatWarehouseEnhancedDataBlock,
+  getPriceSparkline,
+} from "@/lib/data/yahoo";
 import { getRecentFilings, formatFilingsForAI } from "@/lib/data/sec";
 import { getMacroSnapshot, formatMacroForAI } from "@/lib/data/fred";
 import { getUserProfile, buildProfileRider } from "@/lib/user-profile";
@@ -114,11 +118,13 @@ export async function POST(req: NextRequest) {
         analysis?: Record<string, unknown>;
         debate?: Record<string, unknown>;
         lens?: string;
+        priceHistory?: number[];
       };
       const ageMs = Date.now() - cached.createdAt.getTime();
       return NextResponse.json({
         ticker,
         snapshot: a.snapshot,
+        priceHistory: a.priceHistory ?? [],
         mode: "deep",
         lens: a.lens ?? "claude",
         analysis: a.analysis,
@@ -136,12 +142,16 @@ export async function POST(req: NextRequest) {
 
     // Same warehouse-enhanced DATA block the Full Panel uses. The analyst
     // sees exactly the same verified context, just with fewer cooks.
-    const [snapshot, filings, macro, profile] = await Promise.all([
-      getStockSnapshot(ticker).catch(() => null),
-      getRecentFilings(ticker, 5).catch(() => []),
-      getMacroSnapshot().catch(() => []),
-      getUserProfile(session.user.id).catch(() => null),
-    ]);
+    // priceHistory is for the inline sparkline on the result card; the
+    // model never sees it.
+    const [snapshot, filings, macro, profile, priceHistory] =
+      await Promise.all([
+        getStockSnapshot(ticker).catch(() => null),
+        getRecentFilings(ticker, 5).catch(() => []),
+        getMacroSnapshot().catch(() => []),
+        getUserProfile(session.user.id).catch(() => null),
+        getPriceSparkline(ticker, 30).catch(() => [] as number[]),
+      ]);
 
     if (!snapshot) {
       return NextResponse.json(
@@ -204,6 +214,7 @@ export async function POST(req: NextRequest) {
           analysis: result,
           debate,
           lens: lensChoice,
+          priceHistory,
         },
       });
     }
@@ -211,6 +222,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ticker,
       snapshot,
+      priceHistory,
       mode: "deep",
       lens: lensChoice,
       analysis: result,
