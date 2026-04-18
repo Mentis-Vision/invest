@@ -6,6 +6,52 @@ Running list of everything that was tabled during the P1–P5 implementation pus
 
 ---
 
+## Data sources we evaluated but DIDN'T wire (2026-04-17)
+
+### TipRanks — no usable RSS
+There's no public per-ticker RSS for TipRanks analyst consensus. What does exist:
+- `https://blog.tipranks.com/feed/` — their general blog. Mostly recycled CNBC / SeekingAlpha content. Low signal, not worth adding.
+- Per-ticker analyst data lives behind their paid TipRanks Premium product (~$30/mo individual, custom for B2B). They explicitly state in their TOS that scraping the analyst pages violates the agreement.
+- **Verdict:** skip. Yahoo's analyst targets + Polygon's news already give us "what analysts think" coverage. If you ever want true multi-house analyst consensus, the cleaner path is **Refinitiv** or **FactSet** at the institutional tier — both expensive. For free, the SEC's `13F` filings give you what big funds *actually own*, which is more useful than what their sell-side analysts publicly say.
+- Open route if you want it later: build a small playwright scraper of TipRanks public ticker pages, stay under 1 req/sec, accept that they may block you. ~half-day. Not recommended.
+
+### Quiver Quantitative — explicitly skipped
+User decision: no. Documenting so it's not re-litigated.
+
+### Morningstar / Schwab-bundled fund ratings + ESG
+Two access paths exist; both require relationship work, not code:
+
+**Path A — Schwab Stock Plans / Schwab Equity Ratings**
+- Free for Schwab brokerage account holders. Available via Schwab.com → Research → Stocks → Schwab Equity Rating.
+- Schwab does NOT publish a developer API for these. The data lives inside the authenticated Schwab.com session.
+- For *your* clients to use it, they need to be Schwab account holders themselves and look it up there. We can't legally surface Schwab's proprietary research inside ClearPath without an institutional licensing deal with them.
+- **What we CAN do:** add a small "Compare with your broker's research" tile in the Research view that links out: "Schwab clients → see Schwab Equity Rating", "Fidelity clients → see Fidelity Equity Summary Score", "Vanguard clients → see Vanguard Research." Users do their own correlation. Effort: ~1hr UI work.
+
+**Path B — Morningstar Direct API**
+- Pricing: enterprise contract, typically starts ~$25K/yr. Their consumer-facing free tier (Morningstar.com) doesn't expose programmatic access.
+- Realistically only worth pursuing once you have institutional users (advisor tier with $100+/mo fees) where the cost amortizes.
+- **What we CAN do for free TODAY:** SEC EDGAR exposes mutual fund and ETF prospectuses, holdings (NPORT-P), and expense ratios. We already use EDGAR. Build a `getFundProfile(ticker)` helper that pulls expense ratio + AUM + top holdings + Morningstar-style category from the latest NPORT-P filing. ~half-day. Not Morningstar's *star ratings*, but the underlying data those ratings are computed from.
+
+### Polygon.io — wired (2026-04-17)
+- `src/lib/data/polygon.ts` ships options chain + per-contract greeks + news + intraday bar helpers.
+- New `/api/options/[ticker]` returns a near-ATM front-month chain (5 calls, 5 puts, with quotes + greeks).
+- Reads `POLYGON_API_KEY` (preferred) or `MASSIVE_API_KEY` (legacy name).
+- **Action item:** confirm the key is set in Vercel prod env. As of this audit it wasn't visible — please add via `printf "<key>" | vercel env add POLYGON_API_KEY production --scope mentisvision`.
+
+### Finnhub earnings transcripts — wired (2026-04-17)
+- `listEarningsTranscripts(ticker)` and `getEarningsTranscript(id)` added to `src/lib/data/finnhub.ts`.
+- Both endpoints are paid-tier on Finnhub. Free tier returns 403; the helpers degrade quietly to empty list. No code change needed when the Finnhub plan upgrades.
+
+### Seeking Alpha RSS — wired (2026-04-17)
+- `src/lib/data/seeking-alpha.ts`: per-ticker + general market commentary feeds. No API key required.
+- Surfaced via `/api/news/[ticker]` as `provider: "seeking_alpha"` items, deduped by URL alongside Finnhub + Polygon.
+- Tagged in the UI as "third-party commentary" so users weigh it as opinion, not breaking news.
+
+### Finnhub env-var typo — fixed (2026-04-17)
+- Production env was `FINHUB_API_KEY` (missing 'n'). Code reads `FINNHUB_API_KEY OR FINHUB_API_KEY` so existing setups work. New deployments should use the correct spelling.
+
+---
+
 ## Alpha Vantage — open items (2026-04-17)
 
 The AV integration shipped (`feat(warehouse): integrate Alpha Vantage end-to-end`), confirmed in production:
