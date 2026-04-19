@@ -1,4 +1,4 @@
-import { Pool } from "@neondatabase/serverless";
+import { Pool, type QueryResult, type QueryResultRow } from "@neondatabase/serverless";
 
 /**
  * Shared Neon pool. Re-used across modules to avoid exhausting connections
@@ -20,9 +20,20 @@ export function getPool(): Pool {
 }
 
 /**
- * Query helper — lazily resolves the pool. Most call sites can just
- * use `pool.query(...)` after importing.
+ * Query helper — lazily resolves the pool. Forwards the generic row
+ * type so callers can do `pool.query<{ foo: string }>(...)` and get
+ * typed `rows` without casting every result.
+ *
+ *   const { rows } = await pool.query<{ userId: string }>(`SELECT ...`)
+ *   //    ^-- rows is { userId: string }[]
+ *
+ * When no type parameter is passed, defaults to `Record<string, unknown>`
+ * — safe default that forces callers to widen explicitly rather than
+ * silently assume a shape.
  */
 export const pool = {
-  query: (text: string, params?: unknown[]) => getPool().query(text, params),
+  query: <R extends QueryResultRow = Record<string, unknown>>(
+    text: string,
+    params?: unknown[]
+  ): Promise<QueryResult<R>> => getPool().query<R>(text, params),
 };
