@@ -75,9 +75,11 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/favicon.ico" },
-      { url: "/icon.svg", type: "image/svg+xml" },
+      // Founder-provided 1024×1014 PNG logomark. Served as-is; browsers
+      // downscale for the 16/32/64px tab contexts.
+      { url: "/logo.png", type: "image/png" },
     ],
+    apple: [{ url: "/logo.png" }],
   },
 };
 

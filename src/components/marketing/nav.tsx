@@ -18,12 +18,12 @@ export default function MarketingNav() {
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
         <Link href="/" className="group flex items-center gap-2">
           <Image
-            src="/logo.svg"
+            src="/logo.png"
             alt=""
-            width={24}
-            height={24}
+            width={1024}
+            height={1014}
             priority
-            className="h-6 w-6"
+            className="h-6 w-6 object-contain"
           />
           <span className="font-heading text-[18px] font-medium tracking-tight">
             ClearPath

@@ -9,11 +9,11 @@ export default function MarketingFooter() {
           <div>
             <div className="flex items-center gap-2">
               <Image
-                src="/logo.svg"
+                src="/logo.png"
                 alt=""
-                width={24}
-                height={24}
-                className="h-6 w-6"
+                width={1024}
+                height={1014}
+                className="h-6 w-6 object-contain"
               />
               <span className="font-heading text-[18px] font-medium">ClearPath</span>
               <span className="ml-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">

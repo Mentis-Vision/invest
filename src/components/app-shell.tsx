@@ -214,18 +214,16 @@ export default function AppShell({
             className="flex items-center gap-2.5 text-foreground"
           >
             {/*
-              Logomark — full-color SVG at /public/logo.svg.
-              If the user prefers the richer PNG reference, drop the
-              file at /public/logo.png and swap `src` to "/logo.png"
-              (next/image handles the sizing identically).
+              Logomark — founder-provided 1024×1014 PNG at /public/logo.png.
+              next/image downscales and emits responsive srcset.
             */}
             <Image
-              src="/logo.svg"
+              src="/logo.png"
               alt=""
-              width={28}
-              height={28}
+              width={1024}
+              height={1014}
               priority
-              className="h-7 w-7"
+              className="h-7 w-7 object-contain"
             />
             <span className="text-[15px] font-semibold tracking-[-0.015em]">
               ClearPath
@@ -266,11 +264,11 @@ export default function AppShell({
               <SheetContent side="left" className="w-64 p-0 bg-card">
                 <div className="flex h-14 items-center gap-2.5 border-b border-border px-5">
                   <Image
-                    src="/logo.svg"
+                    src="/logo.png"
                     alt=""
-                    width={24}
-                    height={24}
-                    className="h-6 w-6"
+                    width={1024}
+                    height={1014}
+                    className="h-6 w-6 object-contain"
                   />
                   <span className="text-[15px] font-semibold tracking-tight">
                     ClearPath

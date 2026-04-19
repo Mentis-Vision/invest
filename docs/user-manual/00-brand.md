@@ -26,16 +26,11 @@ dot backdrop.
 
 | File | Use | Notes |
 |---|---|---|
-| `/public/logo.svg` | Everywhere by default | Full-color blue with colored candlestick accents. Renders sharp at 16px–1024px. |
-| `/public/logo-mono.svg` | Tight palette contexts | Single-color (uses `currentColor`). Tints from the parent text color. |
-| `/public/icon.svg` | Favicon (browser tab) | Blue-bg rounded-rect with the white mark. Also used as the PWA icon. |
-| `/public/logo-full.png` *(optional)* | Marketing hero / social | Drop the full-detail raster here if richer rendering is wanted (will be used verbatim wherever `src="/logo-full.png"` is referenced). |
+| `/public/logo.png` | **Source of truth** — everywhere by default | Founder-provided 1024×1014 RGBA PNG. next/image handles responsive sizing + srcset; browser downscales gracefully at 16/24/28/64px. Favicon also points at this file. |
 
-> **Note:** A detailed reference PNG of the mark was provided by the
-> founder on 2026-04-17. The current `/public/logo.svg` is a clean
-> simplified recreation optimized for the 24-32px header context. If
-> you want the richer version in-app, save the source PNG as
-> `/public/logo-full.png` and swap the `src` in the header.
+Only one logo file is tracked. We dropped the simplified SVG
+recreations on 2026-04-18 when the founder dropped in the full PNG —
+having two sources of truth (SVG vs PNG) was a bug magnet.
 
 ### Where it ships today
 
@@ -92,8 +87,10 @@ Three rules, in order:
 ## What NOT to do
 
 - Don't rotate the logo. The arrow has a specific angle and slope.
-- Don't recolor the primary swoosh away from `#2563EB`. If you need
-  monochrome, use `logo-mono.svg` (which picks up `currentColor`).
+- Don't recolor the primary swoosh away from `#2563EB`.
+- Don't re-introduce an SVG version of the logo unless you also
+  update every call site. Today `/public/logo.png` is the single
+  source of truth.
 - Don't use the diamond/rotate-45 placeholder mark from the earlier
   design — it was removed on 2026-04-17 when the real logo shipped.
 - Don't introduce a new accent color without updating this file.
