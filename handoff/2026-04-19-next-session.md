@@ -122,22 +122,23 @@ Only after the four prereqs above ship.
   SnapTrade (existing) **and** Plaid as options with one-sentence
   positioning for each.
 
-### Plaid Phase B — Cost controls (~2h)
+### Plaid Phase B — Cost controls — **DONE 2026-04-19**
 
-After Phase A is stable.
-
-- [ ] Tier-based item caps enforced at the server:
-  - Beta: 3 items max
-  - Individual ($29): 5 items
-  - Active ($79): 10 items
-  - Advisor ($500): 50 items
-- [ ] Cost-tracking: log per-Item-per-day cost into `user.monthlyCostCents`
-  using existing `recordUsage()` pattern. $0.35/Item/30 ≈ 1.17 cents/day.
-- [ ] Inactive-user item cleanup cron: `itemRemove()` on users who
-  haven't signed in for 90 days. `itemRemove()` itself is free and
-  stops the $0.35 recurring charge.
-- [ ] No "Refresh" button in UI — sync only via nightly cron +
-  webhook. Force-refresh ($0.12/call) is NOT exposed to users.
+- [x] Tier-based item caps in `PLAID_ITEM_CAPS` (beta 3 / individual 5 /
+  active 10 / advisor 50). Enforced at `/api/plaid/link-token` with a
+  402 `item_cap_reached` response that includes tier / used / max /
+  upsellTier for the client to render an upgrade CTA. Reauth bypasses
+  the cap (replaces an existing Item, doesn't add one).
+- [x] `accrueDailyPlaidCost()` — cron step 1c. Aggregates active Item
+  count per user, adds ceil(items × 35/30) cents to
+  `user.monthlyCostCents` nightly. One-query aggregate so scales.
+- [x] `cleanupInactivePlaidItems(90)` — cron step 1d. Finds users with
+  no session row `expiresAt > NOW() - 90 days` AND at least one active
+  Plaid Item, calls `removePlaidItem()` per Item (free), cascades to
+  holdings wipe.
+- [x] No "Refresh" button in UI — confirmed. Manual sync via
+  `/api/plaid/items POST {action: "sync"}` is the only path and is
+  rate-gated to 1/5min per Item.
 
 ---
 

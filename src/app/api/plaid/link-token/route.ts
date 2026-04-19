@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { createLinkToken, plaidConfigured } from "@/lib/plaid";
+import {
+  createLinkToken,
+  plaidConfigured,
+  checkPlaidItemCap,
+  PLAID_ITEM_CAPS,
+} from "@/lib/plaid";
 import { log, errorInfo } from "@/lib/log";
 
 /**
@@ -42,6 +47,40 @@ export async function POST(req: NextRequest) {
       null;
     return base ? `${base.replace(/\/$/, "")}/api/plaid/webhook` : undefined;
   })();
+
+  // Cost-cap gate for NEW Item flows. Reauth is exempt (it replaces
+  // an existing Item, doesn't add one). If a user is at cap, return
+  // 402 with enough info for the client to show an upgrade prompt.
+  if (body.reauth !== true) {
+    const cap = await checkPlaidItemCap(session.user.id);
+    if (!cap.ok) {
+      const nextTier: Record<string, string> = {
+        beta: "Individual ($29/mo)",
+        individual: "Active ($79/mo)",
+        active: "Advisor ($500/mo)",
+      };
+      const upsell = nextTier[cap.tier] ?? null;
+      log.info("plaid.link-token", "cap hit", {
+        userId: session.user.id,
+        tier: cap.tier,
+        used: cap.used,
+        max: cap.max,
+      });
+      return NextResponse.json(
+        {
+          error: "item_cap_reached",
+          message: upsell
+            ? `You've linked ${cap.used} of ${cap.max} brokerages on your ${cap.tier} plan. Upgrade to ${upsell} for ${PLAID_ITEM_CAPS[cap.tier === "beta" ? "individual" : cap.tier === "individual" ? "active" : "advisor"]} connections.`
+            : `You've linked ${cap.used} of ${cap.max} brokerages on your ${cap.tier} plan. Contact support to increase the cap.`,
+          tier: cap.tier,
+          used: cap.used,
+          max: cap.max,
+          upsellTier: upsell,
+        },
+        { status: 402 }
+      );
+    }
+  }
 
   try {
     // Reauth flow: need the existing access_token so Plaid rehydrates

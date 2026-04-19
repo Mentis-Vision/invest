@@ -237,7 +237,16 @@ function PlaidOption({
       const res = await fetch("/api/plaid/link-token", { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Plaid is not available right now.");
+        // 402 item_cap_reached is the cost-gate response. Show the
+        // upsell message rather than a generic "not available."
+        if (res.status === 402 && data.error === "item_cap_reached") {
+          setError(
+            data.message ??
+              `You've linked ${data.used} of ${data.max} brokerages on your ${data.tier} plan.`
+          );
+          return;
+        }
+        setError(data.message ?? data.error ?? "Plaid is not available right now.");
         return;
       }
       setLinkToken(data.linkToken);

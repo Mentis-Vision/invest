@@ -10,6 +10,8 @@ import {
   plaidConfigured,
   syncHoldings as syncPlaidHoldings,
   syncTransactions as syncPlaidTransactions,
+  accrueDailyPlaidCost,
+  cleanupInactivePlaidItems,
 } from "@/lib/plaid";
 import { pool } from "@/lib/db";
 import {
@@ -76,6 +78,26 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     log.error("cron", "plaid sync block failed", errorInfo(err));
     result.plaid = { error: "failed" };
+  }
+
+  // 1c. Plaid daily cost accrual — 1/30 of $0.35 per active Item,
+  // added to user.monthlyCostCents so Plaid spend is visible in the
+  // same counter that already gates AI spend. Runs once per 24h.
+  try {
+    result.plaidCost = await accrueDailyPlaidCost();
+  } catch (err) {
+    log.error("cron", "plaid cost accrual failed", errorInfo(err));
+    result.plaidCost = { error: "failed" };
+  }
+
+  // 1d. Plaid inactive-user cleanup — remove Items for users with no
+  // sessions in the last 90 days. `/item/remove` is free and stops
+  // the $0.35/Item/mo recurring charge. Users can re-link on return.
+  try {
+    result.plaidCleanup = await cleanupInactivePlaidItems(90);
+  } catch (err) {
+    log.error("cron", "plaid cleanup failed", errorInfo(err));
+    result.plaidCleanup = { error: "failed" };
   }
 
   // 2. Link trades → recommendations
