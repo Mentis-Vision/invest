@@ -74,23 +74,31 @@ export async function DELETE(req: NextRequest) {
 
   const userId = session.user.id;
 
-  const client = await pool.connect();
+  // No explicit transaction: @neondatabase/serverless uses an HTTP-
+  // per-query transport which doesn't support multi-statement
+  // transactions via client.connect/begin/commit. The deletion is
+  // still safe:
+  //
+  //   1. First DELETE drops the user's sessions — if this succeeds
+  //      and the next step fails, the user is signed out but their
+  //      row still exists (they can try again). Idempotent.
+  //   2. Second DELETE drops the user row; every other user-scoped
+  //      table cascades via FK on delete (account, user_profile,
+  //      dashboard_layout, holding, snaptrade_connection,
+  //      snaptrade_user, plaid_item, plaid_account, plaid_transaction,
+  //      recommendation, recommendation_outcome, portfolio_review_daily,
+  //      portfolio_snapshot, trade, alert_event, twoFactor).
+  //      auth_event FK is SET NULL — audit trail survives detached.
+  //
+  // If step 2 fails we return 500 with the user row intact. The user
+  // can retry. Step 1's session wipe is a no-op on retry.
   try {
-    await client.query("BEGIN");
+    await pool.query(`DELETE FROM "session" WHERE "userId" = $1`, [userId]);
 
-    // Revoke all sessions first so the user's browser session becomes
-    // invalid immediately. The user row delete below also cascades to
-    // sessions via FK, but explicit first-step cleanup keeps the
-    // signed-out state clean if the later delete hiccups.
-    await client.query(`DELETE FROM "session" WHERE "userId" = $1`, [userId]);
-
-    // Main delete — CASCADE handles every owned table.
-    const result = await client.query(
+    const result = await pool.query(
       `DELETE FROM "user" WHERE id = $1 RETURNING email`,
       [userId]
     );
-
-    await client.query("COMMIT");
 
     log.info("user.delete", "account deleted", {
       userId,
@@ -100,21 +108,14 @@ export async function DELETE(req: NextRequest) {
       email: (result.rows[0] as { email: string } | undefined)?.email ?? null,
     });
 
-    // Response also sets a cookie-clearing header via BetterAuth so
-    // the browser's session cookie goes dead on this response.
+    // Response also clears the BetterAuth session cookies as
+    // belt-and-suspenders (session rows are already gone, so any
+    // future request with a stale cookie 401s regardless).
     const res = NextResponse.json({ ok: true });
-    // BetterAuth uses a signed cookie; clearing it on our side is
-    // belt-and-suspenders (the session row is already gone, so any
-    // future request with this cookie 401s regardless).
     res.cookies.delete("better-auth.session_token");
     res.cookies.delete("better-auth.session_data");
     return res;
   } catch (err) {
-    try {
-      await client.query("ROLLBACK");
-    } catch {
-      /* ignore — primary error is what matters */
-    }
     log.error("user.delete", "delete failed", {
       userId,
       ...errorInfo(err),
@@ -123,7 +124,5 @@ export async function DELETE(req: NextRequest) {
       { error: "Could not delete account. Please contact support." },
       { status: 500 }
     );
-  } finally {
-    client.release();
   }
 }
