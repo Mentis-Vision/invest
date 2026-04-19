@@ -208,14 +208,15 @@ export default function AppShell({
 
       {/* ─── Top nav ─── */}
       <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
-        <div className="mx-auto grid max-w-[1320px] grid-cols-[auto_1fr_auto] items-center gap-5 px-6 py-3 md:px-7">
+        <div className="mx-auto grid max-w-[1760px] grid-cols-[auto_1fr_auto] items-center gap-5 px-6 py-3 md:px-7">
           <Link
             href="/app"
             className="flex items-center gap-2.5 text-foreground"
           >
             {/*
               Logomark — founder-provided 1024×1014 PNG at /public/logo.png.
-              next/image downscales and emits responsive srcset.
+              next/image downscales and emits responsive srcset. Sized up
+              from 28→40 (h-10) on 2026-04-18 for stronger brand presence.
             */}
             <Image
               src="/logo.png"
@@ -223,9 +224,9 @@ export default function AppShell({
               width={1024}
               height={1014}
               priority
-              className="h-7 w-7 object-contain"
+              className="h-10 w-10 object-contain"
             />
-            <span className="text-[15px] font-semibold tracking-[-0.015em]">
+            <span className="text-[16px] font-semibold tracking-[-0.015em]">
               ClearPath
             </span>
           </Link>
@@ -268,7 +269,7 @@ export default function AppShell({
                     alt=""
                     width={1024}
                     height={1014}
-                    className="h-6 w-6 object-contain"
+                    className="h-8 w-8 object-contain"
                   />
                   <span className="text-[15px] font-semibold tracking-tight">
                     ClearPath
@@ -321,7 +322,7 @@ export default function AppShell({
 
       {/* ─── Main content ─── */}
       <main className="flex-1">
-        <div className="mx-auto max-w-[1320px] px-5 py-6 md:px-7 md:py-8">
+        <div className="mx-auto max-w-[1760px] px-5 py-6 md:px-7 md:py-8">
           {children}
         </div>
       </main>

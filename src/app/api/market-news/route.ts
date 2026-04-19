@@ -88,10 +88,16 @@ export async function GET(req: Request) {
     }
 
     if (scope === "thinker") {
+      // 14-day window — earlier we used 60 days on the theory that
+      // Damodaran / Marks pieces are evergreen, but the surface
+      // started feeling stale (users saw 2–3 week old pieces on a
+      // dashboard meant to capture "what changed recently"). Keep
+      // this tight; if there are no recent picks, Worth Reading
+      // hides itself entirely.
       const items = await getRecentMarketNews({
         category: "thinker",
         limit,
-        maxAgeDays: 60,
+        maxAgeDays: 14,
       });
       return NextResponse.json({ scope: "thinker", items });
     }

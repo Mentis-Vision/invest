@@ -129,7 +129,7 @@ export default function Pricing() {
               {
                 label: "Panel",
                 tagline: "Decide with conviction",
-                desc: "Three lenses cross-examine each other — Value, Growth, Macro. Disagreement is surfaced, not hidden. For decisions you'll act on.",
+                desc: "Three lenses cross-examine each other — Quality, Momentum, Context. Disagreement is surfaced, not hidden. For decisions you'll act on.",
               },
             ].map((p) => (
               <div
@@ -210,9 +210,12 @@ export default function Pricing() {
                     {t.ctaLabel}
                   </a>
                 ) : t.ctaKind === "active" ? (
-                  <WaitlistForm source={`pricing-active`} />
+                  <WaitlistForm source="pricing-active" layout="vertical" />
                 ) : (
-                  <WaitlistForm source={`pricing-${t.name.toLowerCase()}`} />
+                  <WaitlistForm
+                    source={`pricing-${t.name.toLowerCase()}`}
+                    layout="vertical"
+                  />
                 )}
               </div>
             ))}

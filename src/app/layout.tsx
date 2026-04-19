@@ -76,10 +76,14 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       // Founder-provided 1024×1014 PNG logomark. Served as-is; browsers
-      // downscale for the 16/32/64px tab contexts.
-      { url: "/logo.png", type: "image/png" },
+      // downscale for the 16/32/64px tab contexts. ?v=2 busts caches
+      // left over from the earlier Vercel default / 404'd /icon.svg
+      // era — some users were still seeing the Vercel triangle in the
+      // browser tab after the logo-png switch on 2026-04-18.
+      { url: "/logo.png?v=2", type: "image/png", sizes: "any" },
     ],
-    apple: [{ url: "/logo.png" }],
+    apple: [{ url: "/logo.png?v=2" }],
+    shortcut: [{ url: "/logo.png?v=2" }],
   },
 };
 

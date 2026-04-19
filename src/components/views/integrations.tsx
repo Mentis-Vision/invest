@@ -193,10 +193,10 @@ export default function IntegrationsView() {
 
           <div className="mt-4 mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
             <Database className="h-3.5 w-3.5" />
-            AI analyst panel
+            Research lenses
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {AI_PROVIDERS.map((s) => (
+            {RESEARCH_LENSES.map((s) => (
               <span
                 key={s.name}
                 className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--background)] px-2 py-0.5 text-[11px] text-[var(--foreground)]/80"
@@ -297,10 +297,26 @@ const ALWAYS_ON_DATA_SOURCES: Array<{ name: string; purpose: string }> = [
   { name: "Resend", purpose: "Transactional email delivery (verification + password reset)" },
 ];
 
-const AI_PROVIDERS: Array<{ name: string; purpose: string }> = [
-  { name: "Anthropic Claude", purpose: "Value-lens analyst, supervisor synthesis, deep-read primary" },
-  { name: "OpenAI GPT", purpose: "Growth-lens analyst, claim verification, quick-scan triage" },
-  { name: "Google Gemini", purpose: "Macro-lens analyst, long-horizon context modeling" },
+// Research lenses — shown to users as opaque specialties, not as
+// specific LLM providers. The actual models behind each lens can
+// change without changing the user-facing surface, and the user
+// doesn't need to audit vendor names to trust the output.
+const RESEARCH_LENSES: Array<{ name: string; purpose: string }> = [
+  {
+    name: "Quality lens",
+    purpose:
+      "Reads balance sheets, cash flow, margins, and valuation. Asks: is this a durable business at a reasonable price?",
+  },
+  {
+    name: "Momentum lens",
+    purpose:
+      "Reads growth rate, market share, adoption curves, and near-term catalysts. Asks: is the story accelerating?",
+  },
+  {
+    name: "Context lens",
+    purpose:
+      "Reads macro regime, sector timing, and cross-market signals. Asks: do the conditions favor this right now?",
+  },
 ];
 
 function Section({

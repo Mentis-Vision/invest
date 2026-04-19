@@ -9,9 +9,10 @@ import { BookOpen, ExternalLink } from "lucide-react";
  *
  * Source: /api/market-news?scope=thinker → items from Aswath
  * Damodaran's blog (valuation commentary) + Howard Marks / Oaktree
- * memos when available. 60-day window because these posts are
- * thoughtful, not timely — a three-week-old Damodaran piece is as
- * relevant as a three-day-old WSJ article.
+ * memos when available. **14-day window** — earlier we kept this at
+ * 60 days on the "evergreen" theory, but a dashboard is about what
+ * changed recently; stale picks eroded the card's signal value. If
+ * the window is empty, the card hides itself.
  *
  * Quiet by design:
  *   - Up to 3 items; empty state hides the card entirely

@@ -722,9 +722,10 @@ export default function ResearchView({
           Research
         </h2>
         <p className="text-sm text-muted-foreground">
-          Three independent investment lenses — Value, Growth, Macro — apply
-          their discipline to the same verified data. Disagreement between
-          them is surfaced, not hidden. Every claim traceable to its source.
+          Three independent investment lenses — Quality, Momentum, Context —
+          apply their discipline to the same verified data. Disagreement
+          between them is surfaced, not hidden. Every claim traceable to its
+          source.
         </p>
       </div>
 
@@ -1808,7 +1809,7 @@ export default function ResearchView({
           {/* Per-model panel */}
           <div>
             <h3 className="mb-3 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
-              <span>Individual Analyses · Value / Growth / Macro lenses</span>
+              <span>Individual Analyses · Quality / Momentum / Context lenses</span>
               {result.toolCalls !== undefined && result.toolCalls > 0 && (
                 <span className="rounded-sm border border-border/60 px-1.5 py-0.5 normal-case tracking-normal text-muted-foreground/80">
                   {result.toolCalls} live tool {result.toolCalls === 1 ? "call" : "calls"}

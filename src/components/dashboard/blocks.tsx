@@ -504,8 +504,10 @@ export function BlockChart() {
           {series.length} days
         </span>
       </div>
-      <div className="h-28">
-        <MiniSparkline data={values} width={520} height={112} />
+      <div className="h-28 w-full">
+        {/* Responsive: viewBox-scaled SVG. Prevents the 520px fixed
+            width from bleeding past narrow (S/M) block sizes. */}
+        <MiniSparkline data={values} width={520} height={112} responsive />
       </div>
       <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
         <span>{series[0].date}</span>

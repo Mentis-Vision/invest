@@ -1,5 +1,7 @@
 "use client";
 
+import { useId } from "react";
+
 /**
  * Inline sparkline used in the corner of research result cards.
  *
@@ -10,19 +12,33 @@
  * The line color tracks first-vs-last direction — visually echoes the
  * verdict pill colors so the chart and the BUY/HOLD/SELL badge agree
  * at a glance even before the user reads any text.
+ *
+ * Responsive: pass `responsive` (or omit width/height) to let the SVG
+ * fill its container via viewBox + width="100%". Fixed-size use still
+ * works by passing explicit width/height.
  */
 
 export function MiniSparkline({
   data,
   width = 140,
   height = 36,
+  responsive = false,
   className = "",
 }: {
   data: number[];
   width?: number;
   height?: number;
+  responsive?: boolean;
   className?: string;
 }) {
+  // IMPORTANT: useId() is stable across SSR + client hydration. Using
+  // Math.random() here — as a previous revision did — generated a
+  // different <linearGradient id> on the server vs the client, which
+  // threw React #418 (hydration mismatch) on every dashboard load and
+  // cascaded into a Base UI error when the account-menu dropdown tried
+  // to render into the corrupted tree.
+  const gradId = useId();
+
   if (!data || data.length < 2) return null;
 
   const min = Math.min(...data);
@@ -50,13 +66,17 @@ export function MiniSparkline({
   const stroke = up ? "var(--buy)" : "var(--sell)";
   const fill = up ? "var(--buy)" : "var(--sell)";
 
-  const id = `spark-${Math.random().toString(36).slice(2, 9)}`;
+  const id = `spark-${gradId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
+
+  const sizeProps = responsive
+    ? { width: "100%" as const, height: "100%" as const }
+    : { width, height };
 
   return (
     <svg
-      width={width}
-      height={height}
+      {...sizeProps}
       viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="none"
       className={className}
       aria-hidden
     >
@@ -74,6 +94,7 @@ export function MiniSparkline({
         strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
       />
     </svg>
   );

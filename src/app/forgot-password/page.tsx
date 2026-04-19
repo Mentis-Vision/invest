@@ -36,7 +36,7 @@ export default function ForgotPasswordPage() {
       <div className="mb-10 text-center">
         <div className="mb-5 inline-flex items-center gap-2 text-[11px] font-mono uppercase tracking-[0.25em] text-[var(--buy)]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="" className="h-4 w-4 object-contain" />
+          <img src="/logo.png" alt="" className="h-6 w-6 object-contain" />
           <span>ClearPath</span>
         </div>
         <h1 className="font-heading text-[36px] leading-[1.1] tracking-tight text-foreground">

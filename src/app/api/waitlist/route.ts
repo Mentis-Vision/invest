@@ -3,6 +3,7 @@ import { pool } from "@/lib/db";
 import { checkRateLimit, RULES, getClientIp } from "@/lib/rate-limit";
 import { log, errorInfo } from "@/lib/log";
 import { notifySlack, slackConfigured } from "@/lib/notify";
+import { sendEmail, renderEmailTemplate } from "@/lib/email";
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
@@ -78,6 +79,51 @@ export async function POST(req: NextRequest) {
         },
         "waitlist"
       ).catch(() => {});
+    }
+
+    // Fire-and-forget confirmation email. The user gets a real receipt
+    // so the form doesn't feel like a black hole ("I requested access
+    // but nothing was sent" was the exact complaint in prod on
+    // 2026-04-18). Send for BOTH new signups and re-submissions — if
+    // someone re-submits they may not have received the first email.
+    if (process.env.RESEND_API_KEY) {
+      sendEmail({
+        to: email,
+        subject: "You're on the ClearPath Invest list",
+        html: renderEmailTemplate({
+          preview: "We received your request for access.",
+          body: `
+            <p>Thanks for requesting access to ClearPath Invest.</p>
+            <p>We're in private beta and admit new investors in small
+            waves so we can pay attention to feedback. When your spot
+            opens, we'll email you with a one-click sign-in link.</p>
+            <p>While you wait: the three things we'd love to know about
+            you if you have a minute — (1) roughly what you invest in
+            (stocks / ETFs / crypto / bonds), (2) what you currently use
+            for research, and (3) what question you most wish you had
+            a better answer to. Just reply to this email; I read every
+            one.</p>
+            <p style="margin-top:28px">— Sang<br/>Founder, ClearPath Invest</p>
+          `,
+          footnote: `You're receiving this because you submitted the waitlist form at clearpathinvest.app. If you didn't, you can safely ignore this email.`,
+        }),
+        text: `Thanks for requesting access to ClearPath Invest.
+
+We're in private beta and admit new investors in small waves. When your
+spot opens, we'll email you with a one-click sign-in link.
+
+While you wait — reply and tell me (1) what you invest in, (2) what you
+use for research today, and (3) the question you most wish you had a
+better answer to. I read every reply.
+
+— Sang, Founder`,
+        tags: [{ name: "category", value: "waitlist-confirmation" }],
+      }).catch((err) => {
+        log.warn("waitlist", "confirmation email failed (non-fatal)", {
+          email,
+          ...errorInfo(err),
+        });
+      });
     }
 
     return NextResponse.json({ status: "ok" });

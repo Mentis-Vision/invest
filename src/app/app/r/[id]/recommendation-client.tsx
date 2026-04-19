@@ -329,7 +329,7 @@ export default function RecommendationClient({
       {analyses.length > 0 && (
         <div>
           <h3 className="mb-3 font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
-            Individual Analyses · Value / Growth / Macro lenses
+            Individual Analyses · Quality / Momentum / Context lenses
           </h3>
           <div className="grid gap-4 lg:grid-cols-3">
             {analyses.map((a, i) => (
