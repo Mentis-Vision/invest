@@ -37,7 +37,26 @@ function DashboardBody({ userName }: { userName: string }) {
   const [dayChangePct, setDayChangePct] = useState<number | null>(null);
   const [connected, setConnected] = useState<boolean | null>(null);
 
+  // ── Hydration-safe time-dependent strings ────────────────────────
+  // Server renders in UTC; the user is in their own timezone. If we
+  // compute greeting/date at render time, SSR and client hydration
+  // produce different text and React throws #418 (hydration mismatch),
+  // which cascades into a Base UI menu error when the dropdown tries
+  // to render into the broken tree. So we start empty (matches SSR
+  // output byte-for-byte) and fill in after mount.
+  const [greeting, setGreeting] = useState("");
+  const [dayString, setDayString] = useState("");
+
   useEffect(() => {
+    setGreeting(timeGreeting());
+    setDayString(
+      new Date().toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "short",
+        day: "numeric",
+      })
+    );
+
     let alive = true;
     Promise.all([
       getHoldings(),
@@ -69,12 +88,6 @@ function DashboardBody({ userName }: { userName: string }) {
   }, []);
 
   const firstName = userName.split(" ")[0];
-  const greeting = timeGreeting();
-  const dayString = new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "short",
-    day: "numeric",
-  });
 
   function handleCustomizeClick() {
     gridRef.current?.toggleEdit();
@@ -85,8 +98,21 @@ function DashboardBody({ userName }: { userName: string }) {
     <div className="space-y-4">
       {/* Header row: greeting (left) · date + Customize (right) */}
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 pb-2">
-        <h1 className="text-[20px] font-semibold tracking-[-0.02em] text-foreground md:text-[22px]">
-          {greeting}, {firstName}.{" "}
+        <h1
+          // Time-dependent text is populated in useEffect; suppress
+          // hydration warnings on this node so React doesn't error if
+          // the server-rendered empty string differs from the client
+          // value between re-render and paint.
+          suppressHydrationWarning
+          className="text-[20px] font-semibold tracking-[-0.02em] text-foreground md:text-[22px]"
+        >
+          {greeting ? (
+            <>
+              {greeting}, {firstName}.{" "}
+            </>
+          ) : (
+            <>Welcome, {firstName}.{" "}</>
+          )}
           {connected === false ? (
             <span className="font-normal text-muted-foreground">
               Link a brokerage to see your portfolio.
@@ -115,7 +141,12 @@ function DashboardBody({ userName }: { userName: string }) {
           )}
         </h1>
         <div className="flex items-center gap-3">
-          <span className="text-[12px] text-muted-foreground">{dayString}</span>
+          <span
+            suppressHydrationWarning
+            className="text-[12px] text-muted-foreground"
+          >
+            {dayString}
+          </span>
           <button
             type="button"
             onClick={handleCustomizeClick}
