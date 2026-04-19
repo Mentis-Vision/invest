@@ -4,7 +4,7 @@ import {
   PlaidApi,
   PlaidEnvironments,
   Products,
-  type AccountBase,
+  type InvestmentAccount,
   type Holding as PlaidHolding,
   type InvestmentTransaction,
   type Security,
@@ -695,7 +695,7 @@ function pickTicker(sec: Security | undefined): string | null {
   );
 }
 
-function formatAccountLabel(acct: AccountBase | undefined): string | null {
+function formatAccountLabel(acct: InvestmentAccount | undefined): string | null {
   if (!acct) return null;
   // "Schwab IRA · *4321" — short, unambiguous, fits table columns.
   const parts: string[] = [];
@@ -882,4 +882,4 @@ function stripLeadingZeros(buf: Buffer): Buffer {
 
 // Keep the Plaid types re-exported so route handlers don't need a
 // second import line.
-export type { PlaidHolding, InvestmentTransaction, AccountBase };
+export type { PlaidHolding, InvestmentTransaction, InvestmentAccount };
