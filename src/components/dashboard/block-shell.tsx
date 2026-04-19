@@ -80,6 +80,13 @@ export function BlockShell({
   onDragEnd?: () => void;
   children: ReactNode;
 }) {
+  // Hook at top-level — React's rules-of-hooks requires a stable
+  // call position. Moved out of the inline style prop where it was
+  // previously, which some React builds treat strictly enough to
+  // surface as an error boundary trip ("This page couldn't load")
+  // when the dropdown portal re-renders a sibling tree.
+  const gridColumn = useDesktopGridSpan(size);
+
   return (
     <section
       data-block-id={id}
@@ -113,14 +120,11 @@ export function BlockShell({
       }`}
       style={{
         // Only apply size-based grid spans on ≥lg screens. On mobile
-        // the parent grid is `grid-cols-1`, so the inline style
-        // previously over-rode the single-column layout and forced
-        // blocks into awkward multi-span widths. Now: span 1 on
-        // mobile (= full row), span N on desktop. Tailwind's JIT
-        // can't reliably pick up dynamic `lg:col-span-N`, so we
-        // still drive via inline style but gated by a matchMedia
-        // breakpoint listener.
-        gridColumn: useDesktopGridSpan(size),
+        // the parent grid is `grid-cols-1`, so without this the
+        // inline style would force blocks into awkward multi-span
+        // widths of a single-column grid. Value produced at the top
+        // of the component via useDesktopGridSpan().
+        gridColumn,
       }}
     >
       {editing && (
