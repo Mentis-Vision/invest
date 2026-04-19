@@ -15,8 +15,16 @@ import {
   AlertOctagon,
   Loader2,
   StickyNote,
+  Download,
+  Target,
+  Flame,
+  TrendingUp,
 } from "lucide-react";
-import type { HistoryItem, UserRecAction } from "@/lib/history";
+import type {
+  HistoryItem,
+  UserRecAction,
+  PatternInsight,
+} from "@/lib/history";
 import Link from "next/link";
 
 type OutcomeFilter = "all" | "losses" | "wins" | "acted" | "no-action";
@@ -132,9 +140,11 @@ function hasVerdictIn(it: HistoryItem, set: Set<string>): boolean {
 export default function HistoryClient({
   items: initialItems,
   trackRecord,
+  patterns,
 }: {
   items: HistoryItem[];
   trackRecord: TrackRecord;
+  patterns: PatternInsight;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -235,13 +245,27 @@ export default function HistoryClient({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold tracking-tight">Track Record</h2>
-        <p className="text-sm text-muted-foreground">
-          Every recommendation we&rsquo;ve made for you — with your own
-          action, your note on why, and how it played out at the 7 / 30 /
-          90 / 365-day check. This is your trading journal.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">Track Record</h2>
+          <p className="text-sm text-muted-foreground">
+            Every recommendation we&rsquo;ve made for you — with your own
+            action, your note on why, and how it played out at the 7 / 30 /
+            90 / 365-day check. This is your trading journal.
+          </p>
+        </div>
+        {/* Full-CSV download — just the user's own data, no PII beyond
+            what they already see. Opens/saves in the browser via the
+            Content-Disposition: attachment response. */}
+        <a
+          href="/api/history/export"
+          download
+          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-card px-3 py-1.5 text-[12px] font-medium text-foreground/80 transition-colors hover:border-primary/50 hover:text-foreground"
+          title="Download your journal as CSV"
+        >
+          <Download className="h-3.5 w-3.5" />
+          Export CSV
+        </a>
       </div>
 
       <Card>
@@ -290,6 +314,9 @@ export default function HistoryClient({
           </p>
         </CardContent>
       </Card>
+
+      {/* Pattern insights — the behavioral lens on top of the journal. */}
+      <PatternCard patterns={patterns} />
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[12rem] max-w-sm">
@@ -581,6 +608,191 @@ export default function HistoryClient({
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+/**
+ * Behavioral pattern card.
+ *
+ * Shows 90-day rolling insights: are you missing calls you shouldn't
+ * miss? Are you taking calls you shouldn't take? How aggressive is
+ * your BUY follow-through? Renders nothing when there isn't enough
+ * evaluated data yet — an insight card that says "not enough data"
+ * three times is worse than not showing one.
+ */
+function PatternCard({ patterns }: { patterns: PatternInsight }) {
+  const { missedOpportunities, overReached, buyFollowThrough, daysWindow } =
+    patterns;
+
+  // Decide which insights to render. Each one has a minimum threshold:
+  //   - missed: need ≥3 ignored total AND ≥1 actual miss
+  //   - overReached: need ≥3 taken AND ≥1 actual over-reach
+  //   - buyFollowThrough: need ≥3 total BUYs
+  const showMissed =
+    missedOpportunities.totalIgnored >= 3 && missedOpportunities.count >= 1;
+  const showOverReached =
+    overReached.totalTaken >= 3 && overReached.count >= 1;
+  const showBuyFT = buyFollowThrough.total >= 3;
+
+  const anyToShow = showMissed || showOverReached || showBuyFT;
+
+  if (!anyToShow) {
+    // Keep the card visible with a friendly empty-state — the user
+    // should see where pattern analysis will appear even before they
+    // have enough history. Prevents "the card is broken" confusion
+    // later when a query unexpectedly returns.
+    return (
+      <Card className="border-dashed border-border/60">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Target className="h-4 w-4 text-muted-foreground" />
+            Behavioral patterns
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-[13px] text-muted-foreground">
+            Once you&rsquo;ve marked actions on a handful of recommendations
+            and the 7/30-day outcome checks have evaluated them, we&rsquo;ll
+            surface patterns here — whether you&rsquo;re skipping the right
+            calls, taking the right ones, and how aggressive your
+            follow-through is on BUYs. Come back after a few evaluated
+            calls.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="border-primary/20 bg-gradient-to-br from-primary/4 to-transparent">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Target className="h-4 w-4 text-primary" />
+            Behavioral patterns
+          </CardTitle>
+          <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
+            Last {daysWindow} days
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          How your actions line up with the outcomes — your journal&rsquo;s
+          second order.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {showMissed && (
+            <PatternTile
+              icon={Flame}
+              iconTone="text-[var(--hold)]"
+              headline={
+                missedOpportunities.pctOfIgnored !== null
+                  ? `${missedOpportunities.count} of ${missedOpportunities.totalIgnored} skipped calls won (${missedOpportunities.pctOfIgnored}%)`
+                  : `${missedOpportunities.count} skipped calls won`
+              }
+              body={
+                missedOpportunities.count >= 3
+                  ? "You may be filtering too tight — the model caught things you missed."
+                  : "A few skipped calls paid off — watch for the pattern."
+              }
+              examples={missedOpportunities.examples}
+              exampleLabel="Examples you skipped:"
+            />
+          )}
+
+          {showOverReached && (
+            <PatternTile
+              icon={AlertOctagon}
+              iconTone="text-[var(--sell)]"
+              headline={
+                overReached.pctOfTaken !== null
+                  ? `${overReached.count} of ${overReached.totalTaken} taken calls lost (${overReached.pctOfTaken}%)`
+                  : `${overReached.count} taken calls lost`
+              }
+              body={
+                overReached.pctOfTaken !== null && overReached.pctOfTaken > 40
+                  ? "Over-eager follow-through — consider narrowing to high-confidence calls."
+                  : "A few of your acted-on calls didn't pay off — review the common thread."
+              }
+              examples={overReached.examples}
+              exampleLabel="Examples you acted on:"
+            />
+          )}
+
+          {showBuyFT && (
+            <PatternTile
+              icon={TrendingUp}
+              iconTone="text-[var(--buy)]"
+              headline={
+                buyFollowThrough.pctTook !== null
+                  ? `You acted on ${buyFollowThrough.took} of ${buyFollowThrough.total} BUYs (${buyFollowThrough.pctTook}%)`
+                  : `${buyFollowThrough.took} of ${buyFollowThrough.total} BUYs acted on`
+              }
+              body={
+                buyFollowThrough.pctTook !== null && buyFollowThrough.pctTook < 30
+                  ? "You're skipping most BUY calls. If your hit rate is high, consider loosening your filter."
+                  : buyFollowThrough.pctTook !== null && buyFollowThrough.pctTook > 70
+                    ? "High follow-through on BUYs — make sure your confidence threshold matches."
+                    : "A balanced BUY follow-through rate."
+              }
+            />
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PatternTile({
+  icon: Icon,
+  iconTone,
+  headline,
+  body,
+  examples,
+  exampleLabel,
+}: {
+  icon: typeof Target;
+  iconTone: string;
+  headline: string;
+  body: string;
+  examples?: Array<{
+    ticker: string;
+    recommendation: string;
+    createdAt: string;
+  }>;
+  exampleLabel?: string;
+}) {
+  return (
+    <div className="space-y-2 rounded-md border border-border bg-card px-3 py-3">
+      <div className={`flex items-center gap-2 ${iconTone}`}>
+        <Icon className="h-4 w-4" />
+        <span className="text-[13px] font-semibold text-foreground">
+          {headline}
+        </span>
+      </div>
+      <p className="text-[12px] leading-relaxed text-muted-foreground">
+        {body}
+      </p>
+      {examples && examples.length > 0 && (
+        <div className="pt-1 text-[11px] text-muted-foreground">
+          <div className="mb-0.5 font-medium text-foreground/70">
+            {exampleLabel}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {examples.map((e) => (
+              <span
+                key={`${e.ticker}-${e.createdAt}`}
+                className="inline-flex items-center gap-1 rounded border border-border bg-secondary/60 px-1.5 py-0.5 font-mono text-[10px]"
+              >
+                {e.ticker}
+                <span className="text-muted-foreground">· {e.recommendation}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

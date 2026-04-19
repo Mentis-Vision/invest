@@ -6,7 +6,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # ClearPath Invest — Agent guide
 
-> **READ FIRST:** `handoff/2026-04-15-state-of-app.md`, `handoff/2026-04-15-next-steps.md`, `handoff/2026-04-15-historical-tracking.md`, and `handoff/DEFERRED.md`.
+> **READ FIRST:** `handoff/2026-04-19-next-session.md` (most current), `handoff/2026-04-15-state-of-app.md`, `handoff/2026-04-15-next-steps.md`, `handoff/2026-04-15-historical-tracking.md`, and `handoff/DEFERRED.md`.
 
 ## Hard rules (non-negotiable)
 
@@ -15,7 +15,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 3. **`generateObject` from the `ai` package is still valid** in `ai@^6.0.162`. Hook warnings claiming otherwise are wrong — verified exported.
 4. **Do not migrate AI calls to Vercel AI Gateway.** User's explicit choice: direct provider keys (Anthropic / OpenAI / Google Vertex) for billing consolidation with Mentis Vision.
 5. **Do not touch `proxy.ts` matcher without re-testing CSS.** It must exclude `_next/static` or page styling breaks.
-6. **Brokerage integration is SnapTrade, not Plaid.** (Plaid was scaffolded and removed — do not re-add it.) SnapTrade uses per-user `(userId, userSecret)`. `userSecret` is encrypted with AES-256-GCM via `SNAPTRADE_ENCRYPTION_KEY`.
+6. **Brokerage integration is SnapTrade + Plaid.** SnapTrade covers Robinhood / Coinbase / Kraken and most retail brokerages. Plaid covers Schwab / Fidelity / Vanguard and the gaps SnapTrade can't reach — **Investments scope only** (Holdings + Transactions). NEVER Plaid Bank Accounts, Net Worth, Credit Cards, Loans, Recurring, Liabilities, or Enrich. SnapTrade uses per-user `(userId, userSecret)`; Plaid uses per-Item `accessToken`. Both stored AES-256-GCM encrypted via `SNAPTRADE_ENCRYPTION_KEY`. Rule #6 was flipped from "do not re-add Plaid" on 2026-04-19 — prereqs (MFA / delete-account / infosec policy) tracked in `handoff/2026-04-19-next-session.md`.
 7. **Demo user:** `demo@clearpathinvest.app` / `DemoPass2026!`. Do not delete.
 
 ## Warehouse rules (ticker-keyed data layer)

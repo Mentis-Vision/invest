@@ -557,3 +557,154 @@ export async function getUserTrackRecord(userId: string, days = 30) {
     },
   };
 }
+
+/**
+ * Behavioral patterns surfaced on top of the user's journal.
+ *
+ * A pattern insight is the answer to one of three questions:
+ *
+ *   1. "Are you skipping the wrong ones?" — calls you marked `ignored`
+ *       or `opposed` that later won. If this count is high, your filter
+ *       may be too tight — the model is catching things you're missing.
+ *
+ *   2. "Are you taking the wrong ones?" — calls you marked `took` that
+ *       later lost. If this is high, your follow-through is over-eager.
+ *
+ *   3. "Which sector shows the biggest gap between calls and actions?"
+ *       — a concrete nudge like "you skipped 8 of 10 tech BUY calls;
+ *       half paid off."
+ *
+ * Only surfaces when there's enough data. Returns `null` rows mean "not
+ * enough evaluated outcomes yet" — the UI shows an empty-state instead
+ * of a misleading number.
+ *
+ * Look-back: 90 days. Shorter would be noisy; longer stops being
+ * representative of the user's current behavior.
+ */
+export type PatternInsight = {
+  /** Recs you ignored/opposed where the call later won (missed opportunities). */
+  missedOpportunities: {
+    count: number;
+    totalIgnored: number;
+    pctOfIgnored: number | null;
+    examples: Array<{ ticker: string; recommendation: string; createdAt: string }>;
+  };
+  /** Recs you took where the call later lost (over-conviction). */
+  overReached: {
+    count: number;
+    totalTaken: number;
+    pctOfTaken: number | null;
+    examples: Array<{ ticker: string; recommendation: string; createdAt: string }>;
+  };
+  /**
+   * Action-type split for BUY calls specifically. Useful because BUYs
+   * are the costliest to miss (upside asymmetry) and most users
+   * under-act on them.
+   */
+  buyFollowThrough: {
+    total: number;
+    took: number;
+    ignored: number;
+    pctTook: number | null;
+  };
+  /** 90-day window these numbers reflect. */
+  daysWindow: number;
+};
+
+export async function getUserPatternInsights(
+  userId: string,
+  days = 90
+): Promise<PatternInsight> {
+  const windowInterval = `${days} days`;
+
+  const { rows: missed } = await pool.query(
+    `SELECT r.ticker, r.recommendation, r."createdAt"
+     FROM "recommendation" r
+     WHERE r."userId" = $1
+       AND r."createdAt" > NOW() - $2::interval
+       AND r."userAction" IN ('ignored','opposed')
+       AND EXISTS (
+         SELECT 1 FROM "recommendation_outcome" o
+         WHERE o."recommendationId" = r.id
+           AND o.status = 'completed'
+           AND o.verdict LIKE '%win%'
+           AND o."window" IN ('7d','30d')
+       )
+     ORDER BY r."createdAt" DESC`,
+    [userId, windowInterval]
+  );
+
+  const { rows: overReachedRows } = await pool.query(
+    `SELECT r.ticker, r.recommendation, r."createdAt"
+     FROM "recommendation" r
+     WHERE r."userId" = $1
+       AND r."createdAt" > NOW() - $2::interval
+       AND r."userAction" IN ('took','partial')
+       AND EXISTS (
+         SELECT 1 FROM "recommendation_outcome" o
+         WHERE o."recommendationId" = r.id
+           AND o.status = 'completed'
+           AND (o.verdict LIKE '%loss%' OR o.verdict LIKE '%regret%')
+           AND o."window" IN ('7d','30d')
+       )
+     ORDER BY r."createdAt" DESC`,
+    [userId, windowInterval]
+  );
+
+  const { rows: denomRows } = await pool.query(
+    `SELECT
+        COUNT(*) FILTER (WHERE "userAction" IN ('ignored','opposed'))::int AS total_ignored,
+        COUNT(*) FILTER (WHERE "userAction" IN ('took','partial'))::int AS total_taken,
+        COUNT(*) FILTER (WHERE recommendation = 'BUY')::int AS total_buys,
+        COUNT(*) FILTER (WHERE recommendation = 'BUY' AND "userAction" IN ('took','partial'))::int AS buys_took,
+        COUNT(*) FILTER (WHERE recommendation = 'BUY' AND "userAction" IN ('ignored','opposed'))::int AS buys_ignored
+     FROM "recommendation"
+     WHERE "userId" = $1 AND "createdAt" > NOW() - $2::interval`,
+    [userId, windowInterval]
+  );
+
+  const d = denomRows[0] ?? {
+    total_ignored: 0,
+    total_taken: 0,
+    total_buys: 0,
+    buys_took: 0,
+    buys_ignored: 0,
+  };
+
+  const toExample = (r: {
+    ticker: string;
+    recommendation: string;
+    createdAt: Date;
+  }) => ({
+    ticker: r.ticker,
+    recommendation: r.recommendation,
+    createdAt: r.createdAt.toISOString(),
+  });
+
+  const missedCount = missed.length;
+  const overReachedCount = overReachedRows.length;
+
+  return {
+    missedOpportunities: {
+      count: missedCount,
+      totalIgnored: d.total_ignored,
+      pctOfIgnored:
+        d.total_ignored > 0 ? Math.round((missedCount / d.total_ignored) * 100) : null,
+      examples: missed.slice(0, 3).map(toExample),
+    },
+    overReached: {
+      count: overReachedCount,
+      totalTaken: d.total_taken,
+      pctOfTaken:
+        d.total_taken > 0 ? Math.round((overReachedCount / d.total_taken) * 100) : null,
+      examples: overReachedRows.slice(0, 3).map(toExample),
+    },
+    buyFollowThrough: {
+      total: d.total_buys,
+      took: d.buys_took,
+      ignored: d.buys_ignored,
+      pctTook: d.total_buys > 0 ? Math.round((d.buys_took / d.total_buys) * 100) : null,
+    },
+    daysWindow: days,
+  };
+}
