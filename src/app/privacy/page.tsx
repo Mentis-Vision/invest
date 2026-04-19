@@ -28,7 +28,7 @@ export default function PrivacyPage() {
           Privacy Policy
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Effective date: 2026-04-15. Last updated: 2026-04-15.
+          Effective date: 2026-04-15. Last updated: 2026-04-19.
         </p>
 
         <div className="prose prose-sm mt-10 max-w-none leading-relaxed dark:prose-invert [&_h2]:mt-10 [&_h2]:font-[family-name:var(--font-display)] [&_h2]:text-2xl [&_h2]:font-medium [&_h3]:mt-6 [&_h3]:text-base [&_h3]:font-semibold [&_p]:mt-3 [&_ul]:mt-2 [&_ul]:list-disc [&_ul]:pl-6 [&_li]:mt-1">
@@ -91,15 +91,34 @@ export default function PrivacyPage() {
             </li>
           </ul>
           <h3>c. From brokerage integrations (if you link)</h3>
+          <p>
+            We offer two brokerage-linking services. Both are <strong>read-only</strong> —
+            we cannot and do not initiate trades or move money. Both
+            require your explicit authorization through the brokerage&rsquo;s
+            own login screen.
+          </p>
           <ul>
             <li>
-              Via SnapTrade: account balances, holdings, positions, and
-              transactions.
+              <strong>Via SnapTrade</strong> — account balances, holdings,
+              positions, and trade activity for Robinhood, Coinbase, Kraken,
+              and most retail brokerages. We never receive your brokerage
+              login credentials. SnapTrade holds the authorization on your
+              behalf; we store an encrypted user secret that lets us query
+              your data.
             </li>
             <li>
-              We never receive your brokerage login credentials. SnapTrade
-              holds the authorization on your behalf; we store an encrypted
-              user secret that lets us query your data.
+              <strong>Via Plaid Investments</strong> — holdings and
+              investment-transaction data for Schwab, Fidelity, Vanguard, and
+              other institutions SnapTrade doesn&rsquo;t cover. We use
+              Plaid&rsquo;s <em>Investments</em> product only.{" "}
+              <strong>
+                We do not use Plaid Bank Accounts, Net Worth, Credit Cards,
+                Loans, Liabilities, Enrich, or Recurring Transactions
+              </strong>
+              {" "}— we never receive your checking, savings, credit card,
+              or loan data. Your brokerage login credentials are exchanged
+              directly between you and Plaid; we receive only an encrypted
+              access token scoped to investment-account data.
             </li>
           </ul>
           <h3>d. From AI providers</h3>
@@ -160,11 +179,17 @@ export default function PrivacyPage() {
               inference.
             </li>
             <li>
-              <strong>SnapTrade</strong> — brokerage account linking and data.
+              <strong>SnapTrade</strong> — brokerage account linking
+              (Robinhood, Coinbase, Kraken, most retail brokerages).
+            </li>
+            <li>
+              <strong>Plaid</strong> — brokerage account linking
+              (Schwab, Fidelity, Vanguard, and institutions SnapTrade
+              doesn&rsquo;t cover). Investments scope only.
             </li>
             <li>
               <strong>Resend</strong> — transactional email (verification,
-              password reset).
+              password reset, waitlist confirmation).
             </li>
             <li>
               <strong>SEC, FRED, Yahoo Finance</strong> — public data sources.
@@ -178,13 +203,18 @@ export default function PrivacyPage() {
 
           <h2>5. Security</h2>
           <ul>
-            <li>Encrypted connections (HTTPS) for all traffic.</li>
+            <li>Encrypted connections (HTTPS / TLS 1.2+) for all traffic.</li>
             <li>
               Passwords are hashed using industry-standard algorithms (Better
               Auth default: scrypt).
             </li>
             <li>
-              Brokerage user secrets are encrypted at rest using AES-256-GCM.
+              Brokerage user secrets and access tokens (SnapTrade, Plaid) are
+              encrypted at rest using AES-256-GCM.
+            </li>
+            <li>
+              Optional two-factor authentication (TOTP) — available in your
+              account settings.
             </li>
             <li>Rate limiting and authentication on all sensitive endpoints.</li>
             <li>
@@ -192,6 +222,15 @@ export default function PrivacyPage() {
               staff.
             </li>
           </ul>
+          <p>
+            Our full information-security program — including access control,
+            encryption practices, sub-processor vetting, and incident response —
+            is documented in our{" "}
+            <Link href="/security" className="underline">
+              Information Security Policy
+            </Link>
+            .
+          </p>
           <p>
             No system is perfectly secure. In the event of a breach that
             affects your information, we will notify you as required by
@@ -254,9 +293,15 @@ export default function PrivacyPage() {
               <strong>Correction</strong> — ask us to correct inaccurate data.
             </li>
             <li>
-              <strong>Deletion</strong> — ask us to delete your account and
-              associated personal data (subject to limited retention for legal
-              or fraud-prevention reasons).
+              <strong>Deletion</strong> — delete your own account directly
+              from{" "}
+              <Link href="/app/settings" className="underline">
+                Account Settings
+              </Link>
+              {" "}at any time. A single-click account deletion cascades to
+              your holdings, brokerage connections, research history, and
+              personal notes. Subject to limited retention for legal or
+              fraud-prevention reasons.
             </li>
             <li>
               <strong>Export</strong> — receive a machine-readable export of
