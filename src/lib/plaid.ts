@@ -791,7 +791,12 @@ export async function verifyPlaidWebhook(
     const sigDer = jwsToDer(sigBytes);
 
     const publicKey = crypto.createPublicKey({
-      key: key,
+      // Plaid returns the key in JWK shape (x, y, kty, crv, kid, …)
+      // but we only stash it as `object` in the cache to avoid
+      // pinning to Node's narrow JsonWebKey type, which doesn't
+      // model all of Plaid's response fields. Cast back for the
+      // createPublicKey call — Node validates the shape at runtime.
+      key: key as import("node:crypto").JsonWebKey,
       format: "jwk",
     });
     const ok = crypto.verify(
