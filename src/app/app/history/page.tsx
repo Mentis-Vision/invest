@@ -5,6 +5,8 @@ import {
   getUserHistory,
   getUserTrackRecord,
   getUserPatternInsights,
+  getActionOutcomeMatrix,
+  getReflectionPrompts,
 } from "@/lib/history";
 import AppShell from "@/components/app-shell";
 import HistoryClient from "./history-client";
@@ -15,14 +17,15 @@ export default async function HistoryPage() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/sign-in");
 
-  // Three parallel reads: journal rows, 30-day aggregate, 90-day
-  // pattern insights. Each query is indexed on (userId, createdAt) or
-  // (userId, userAction) so fan-out is cheap.
-  const [items, trackRecord, patterns] = await Promise.all([
-    getUserHistory(session.user.id, 100),
-    getUserTrackRecord(session.user.id, 30),
-    getUserPatternInsights(session.user.id, 90),
-  ]);
+  // Five parallel reads. All indexed; fan-out is cheap.
+  const [items, trackRecord, patterns, matrix, reflections] =
+    await Promise.all([
+      getUserHistory(session.user.id, 100),
+      getUserTrackRecord(session.user.id, 30),
+      getUserPatternInsights(session.user.id, 90),
+      getActionOutcomeMatrix(session.user.id, 90),
+      getReflectionPrompts(session.user.id, 3),
+    ]);
 
   return (
     <AppShell user={{ name: session.user.name ?? "", email: session.user.email }}>
@@ -30,6 +33,8 @@ export default async function HistoryPage() {
         items={items}
         trackRecord={trackRecord}
         patterns={patterns}
+        matrix={matrix}
+        reflections={reflections}
       />
     </AppShell>
   );

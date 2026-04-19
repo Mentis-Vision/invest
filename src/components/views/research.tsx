@@ -30,6 +30,8 @@ import { WarehouseFreshness } from "@/components/warehouse-freshness";
 import { MarketPulse } from "@/components/research/market-pulse";
 import { MiniSparkline } from "@/components/research/mini-sparkline";
 import { WorthReading } from "@/components/research/worth-reading";
+import { YourBookToday } from "@/components/research/your-book-today";
+import { EventsThisWeek } from "@/components/research/events-this-week";
 
 type ModelKey = "claude" | "gpt" | "gemini";
 type ToolCallTrace = {
@@ -745,11 +747,20 @@ export default function ResearchView({
           so the page has SOMETHING valuable before any user input. */}
       <MarketPulse />
 
-      {/* Long-form investor thinking — quiet, renders nothing when
-          there's no new Damodaran / Oaktree / etc. posts recent
-          enough. Sits between the pulse and the search box so it's
-          there but not demanding. */}
-      <WorthReading />
+      {/* Your book today — top gainer + top loser from the user's own
+          portfolio. Each card is clickable and routes to the research
+          input auto-populated for that ticker. Hides when no holdings
+          or all flat. */}
+      <YourBookToday />
+
+      {/* Two-col strip: events this week + worth-reading. Together they
+          give the user something to click on (events = what's coming,
+          worth reading = what to think about) instead of just a search
+          box. On narrow screens they stack. */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <EventsThisWeek />
+        <WorthReading />
+      </div>
 
       {/* Single-button flow:
           - Click "Analyze" → instant Quick scan (no mode picker)

@@ -611,6 +611,214 @@ export type PatternInsight = {
   daysWindow: number;
 };
 
+/**
+ * A 2×2 crosstab of action × outcome, rolled up over the same 90-day
+ * window PatternInsight uses. Answers "what happens when I act vs
+ * when I don't?" — visually clearer than the text insights.
+ *
+ * Buckets:
+ *   tookWins        — you acted (took/partial) AND the call later won
+ *   tookLosses      — you acted AND it lost
+ *   tookPending     — you acted, outcome still pending
+ *   ignoredWins     — you skipped AND the call later won (missed op)
+ *   ignoredLosses   — you skipped AND it lost (dodged bullet)
+ *   ignoredPending  — you skipped, outcome still pending
+ *
+ * Uses 7d+30d windows as the evaluation horizon (matches the existing
+ * trackRecord hit-rate calculation).
+ */
+export type ActionOutcomeMatrix = {
+  tookWins: number;
+  tookLosses: number;
+  tookPending: number;
+  ignoredWins: number;
+  ignoredLosses: number;
+  ignoredPending: number;
+  /** Total recommendations with an action recorded in the window. */
+  actedTotal: number;
+  /** Total without an action recorded (journal not yet marked). */
+  unmarkedTotal: number;
+  daysWindow: number;
+};
+
+export async function getActionOutcomeMatrix(
+  userId: string,
+  days = 90
+): Promise<ActionOutcomeMatrix> {
+  const windowInterval = `${days} days`;
+
+  // One query: each recommendation classified by (action bucket ×
+  // outcome bucket). CASE expressions collapse the 4 action types
+  // (took/partial/ignored/opposed) into 2 lanes (took/ignored).
+  const { rows } = await pool.query<{
+    took_wins: number;
+    took_losses: number;
+    took_pending: number;
+    ignored_wins: number;
+    ignored_losses: number;
+    ignored_pending: number;
+    acted_total: number;
+    unmarked_total: number;
+  }>(
+    `SELECT
+       COUNT(*) FILTER (
+         WHERE r."userAction" IN ('took','partial')
+           AND o_verdict LIKE '%win%'
+       )::int AS took_wins,
+       COUNT(*) FILTER (
+         WHERE r."userAction" IN ('took','partial')
+           AND (o_verdict LIKE '%loss%' OR o_verdict LIKE '%regret%')
+       )::int AS took_losses,
+       COUNT(*) FILTER (
+         WHERE r."userAction" IN ('took','partial') AND o_verdict IS NULL
+       )::int AS took_pending,
+       COUNT(*) FILTER (
+         WHERE r."userAction" IN ('ignored','opposed')
+           AND o_verdict LIKE '%win%'
+       )::int AS ignored_wins,
+       COUNT(*) FILTER (
+         WHERE r."userAction" IN ('ignored','opposed')
+           AND (o_verdict LIKE '%loss%' OR o_verdict LIKE '%regret%')
+       )::int AS ignored_losses,
+       COUNT(*) FILTER (
+         WHERE r."userAction" IN ('ignored','opposed') AND o_verdict IS NULL
+       )::int AS ignored_pending,
+       COUNT(*) FILTER (WHERE r."userAction" IS NOT NULL)::int AS acted_total,
+       COUNT(*) FILTER (WHERE r."userAction" IS NULL)::int AS unmarked_total
+     FROM "recommendation" r
+     LEFT JOIN LATERAL (
+       SELECT verdict AS o_verdict
+       FROM "recommendation_outcome"
+       WHERE "recommendationId" = r.id
+         AND status = 'completed'
+         AND "window" IN ('7d','30d')
+       ORDER BY "window"
+       LIMIT 1
+     ) o ON TRUE
+     WHERE r."userId" = $1 AND r."createdAt" > NOW() - $2::interval`,
+    [userId, windowInterval]
+  );
+  const r = rows[0] ?? {
+    took_wins: 0,
+    took_losses: 0,
+    took_pending: 0,
+    ignored_wins: 0,
+    ignored_losses: 0,
+    ignored_pending: 0,
+    acted_total: 0,
+    unmarked_total: 0,
+  };
+  return {
+    tookWins: r.took_wins,
+    tookLosses: r.took_losses,
+    tookPending: r.took_pending,
+    ignoredWins: r.ignored_wins,
+    ignoredLosses: r.ignored_losses,
+    ignoredPending: r.ignored_pending,
+    actedTotal: r.acted_total,
+    unmarkedTotal: r.unmarked_total,
+    daysWindow: days,
+  };
+}
+
+/**
+ * Reflection prompts — pulls a handful of recommendations from ~30
+ * days ago where the user recorded a note, and pairs each with its
+ * current outcome + %-move so the user can revisit their thinking
+ * against what actually happened.
+ *
+ * "Here's what you said about LINK 32 days ago, and here's where LINK
+ * is now." Cheap personalized feedback, which is the hardest kind of
+ * feedback to get in this domain.
+ *
+ * Selection:
+ *   - createdAt between (now - 45d) and (now - 21d)
+ *   - userNote IS NOT NULL AND length > 10 (filter out "" / "ok")
+ *   - Order by createdAt DESC, LIMIT 3
+ */
+export type ReflectionItem = {
+  id: string;
+  ticker: string;
+  recommendation: string;
+  priceAtRec: number;
+  userAction: UserRecAction | null;
+  userNote: string;
+  noteDate: string;
+  /** Days between note and now. */
+  daysAgo: number;
+  /** First completed outcome verdict, or null if still pending. */
+  verdict: string | null;
+  /** Best-known percent move at that outcome window. */
+  percentMove: number | null;
+  outcomeWindow: string | null;
+};
+
+export async function getReflectionPrompts(
+  userId: string,
+  limit = 3
+): Promise<ReflectionItem[]> {
+  const { rows } = await pool.query<{
+    id: string;
+    ticker: string;
+    recommendation: string;
+    priceAtRec: string | number;
+    userAction: UserRecAction | null;
+    userNote: string;
+    createdAt: Date;
+    verdict: string | null;
+    percentMove: string | number | null;
+    window: string | null;
+  }>(
+    `SELECT r.id, r.ticker, r.recommendation, r."priceAtRec",
+            r."userAction", r."userNote", r."createdAt",
+            o.verdict, o."percentMove", o."window"
+     FROM "recommendation" r
+     LEFT JOIN LATERAL (
+       SELECT verdict, "percentMove", "window"
+       FROM "recommendation_outcome"
+       WHERE "recommendationId" = r.id
+         AND status = 'completed'
+       ORDER BY
+         CASE "window"
+           WHEN '30d' THEN 1
+           WHEN '90d' THEN 2
+           WHEN '7d' THEN 3
+           ELSE 4
+         END
+       LIMIT 1
+     ) o ON TRUE
+     WHERE r."userId" = $1
+       AND r."createdAt" BETWEEN NOW() - interval '45 days'
+                              AND NOW() - interval '21 days'
+       AND r."userNote" IS NOT NULL
+       AND length(trim(r."userNote")) > 10
+     ORDER BY r."createdAt" DESC
+     LIMIT $2`,
+    [userId, limit]
+  );
+
+  return rows.map((r) => {
+    const noteDate = new Date(r.createdAt);
+    const daysAgo = Math.max(
+      0,
+      Math.floor((Date.now() - noteDate.getTime()) / (24 * 60 * 60 * 1000))
+    );
+    return {
+      id: r.id,
+      ticker: r.ticker,
+      recommendation: r.recommendation,
+      priceAtRec: Number(r.priceAtRec),
+      userAction: r.userAction,
+      userNote: r.userNote,
+      noteDate: noteDate.toISOString(),
+      daysAgo,
+      verdict: r.verdict,
+      percentMove: r.percentMove != null ? Number(r.percentMove) : null,
+      outcomeWindow: r.window,
+    };
+  });
+}
+
 export async function getUserPatternInsights(
   userId: string,
   days = 90

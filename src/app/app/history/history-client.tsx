@@ -24,6 +24,8 @@ import type {
   HistoryItem,
   UserRecAction,
   PatternInsight,
+  ActionOutcomeMatrix,
+  ReflectionItem,
 } from "@/lib/history";
 import Link from "next/link";
 
@@ -141,10 +143,14 @@ export default function HistoryClient({
   items: initialItems,
   trackRecord,
   patterns,
+  matrix,
+  reflections,
 }: {
   items: HistoryItem[];
   trackRecord: TrackRecord;
   patterns: PatternInsight;
+  matrix: ActionOutcomeMatrix;
+  reflections: ReflectionItem[];
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -317,6 +323,14 @@ export default function HistoryClient({
 
       {/* Pattern insights — the behavioral lens on top of the journal. */}
       <PatternCard patterns={patterns} />
+
+      {/* Action × outcome crosstab — the "did acting help?" card. */}
+      <ActionOutcomeCard matrix={matrix} />
+
+      {/* Reflection prompts — show 30-day-old notes against what
+          actually happened. The feedback loop users never naturally
+          run on themselves. */}
+      <ReflectionCard reflections={reflections} />
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[12rem] max-w-sm">
@@ -794,6 +808,256 @@ function PatternTile({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Action × Outcome 2×2 — visual crosstab that answers the big
+ * journal question: "Did acting help?"
+ *
+ * Four tiles:
+ *   Acted + Won  — your wins from follow-through
+ *   Acted + Lost — your losses from follow-through
+ *   Skipped + Won — missed opportunities (worst quadrant if big)
+ *   Skipped + Lost — bullets dodged (best quadrant if big)
+ *
+ * Hides when no evaluated outcomes exist yet (same threshold idea as
+ * PatternCard — don't show a grid of zeros).
+ */
+function ActionOutcomeCard({ matrix }: { matrix: ActionOutcomeMatrix }) {
+  const hasData =
+    matrix.tookWins +
+      matrix.tookLosses +
+      matrix.ignoredWins +
+      matrix.ignoredLosses >
+    0;
+
+  if (!hasData) return null;
+
+  const followThroughRate =
+    matrix.tookWins + matrix.tookLosses > 0
+      ? Math.round(
+          (matrix.tookWins / (matrix.tookWins + matrix.tookLosses)) * 100
+        )
+      : null;
+  const skipAccuracy =
+    matrix.ignoredWins + matrix.ignoredLosses > 0
+      ? Math.round(
+          (matrix.ignoredLosses /
+            (matrix.ignoredWins + matrix.ignoredLosses)) *
+            100
+        )
+      : null;
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base">Did acting help?</CardTitle>
+          <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
+            Last {matrix.daysWindow} days
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Your actions cross-tabbed against the 7 / 30-day outcome
+          check. Bigger numbers in the green quadrants mean your
+          instinct is paying off.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 gap-2">
+          <MatrixTile
+            title="You acted + won"
+            count={matrix.tookWins}
+            pending={matrix.tookPending}
+            tone="good"
+            rate={followThroughRate}
+            rateLabel="follow-through hit rate"
+          />
+          <MatrixTile
+            title="You acted + lost"
+            count={matrix.tookLosses}
+            tone="bad"
+          />
+          <MatrixTile
+            title="You skipped, it won"
+            subtitle="Missed opportunities"
+            count={matrix.ignoredWins}
+            pending={matrix.ignoredPending}
+            tone="bad"
+          />
+          <MatrixTile
+            title="You skipped, it lost"
+            subtitle="Bullets dodged"
+            count={matrix.ignoredLosses}
+            tone="good"
+            rate={skipAccuracy}
+            rateLabel="skip accuracy"
+          />
+        </div>
+
+        {matrix.unmarkedTotal > 0 && (
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            <span className="font-medium text-foreground">
+              {matrix.unmarkedTotal}
+            </span>{" "}
+            recommendations in this window don&rsquo;t have an action
+            marked. A filled-in journal sharpens these numbers.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function MatrixTile({
+  title,
+  subtitle,
+  count,
+  pending,
+  tone,
+  rate,
+  rateLabel,
+}: {
+  title: string;
+  subtitle?: string;
+  count: number;
+  pending?: number;
+  tone: "good" | "bad";
+  rate?: number | null;
+  rateLabel?: string;
+}) {
+  const bg =
+    tone === "good"
+      ? "border-[var(--buy)]/25 bg-[var(--buy)]/5"
+      : "border-[var(--sell)]/25 bg-[var(--sell)]/5";
+  const accent =
+    tone === "good" ? "text-[var(--buy)]" : "text-[var(--sell)]";
+
+  return (
+    <div className={`rounded-md border ${bg} p-3`}>
+      <div className="text-[11px] font-medium text-foreground/80">{title}</div>
+      {subtitle && (
+        <div className="text-[10px] text-muted-foreground">{subtitle}</div>
+      )}
+      <div className={`mt-1 text-[22px] font-semibold tabular-nums ${accent}`}>
+        {count}
+      </div>
+      <div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground">
+        {pending !== undefined && pending > 0 && (
+          <span>+{pending} still pending</span>
+        )}
+        {rate !== null && rate !== undefined && rateLabel && (
+          <span>
+            · {rate}% {rateLabel}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Reflection card — 30-day-old notes alongside the outcome that
+ * followed. "Here's what you said then, here's what happened since."
+ *
+ * Renders nothing when there are no eligible notes (window 21-45 days
+ * + note >10 chars). Each item shows the ticker, the user's original
+ * note, the price at rec vs now (or the outcome verdict if evaluated),
+ * and a link back to the recommendation detail.
+ */
+function ReflectionCard({ reflections }: { reflections: ReflectionItem[] }) {
+  if (reflections.length === 0) return null;
+
+  return (
+    <Card className="border-[var(--hold)]/30 bg-[var(--hold)]/5">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <StickyNote className="h-4 w-4 text-[var(--hold)]" />
+          Your notes, revisited
+        </CardTitle>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Notes you left about 30 days ago — and what happened since.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {reflections.map((r) => {
+            const actionMeta = r.userAction
+              ? ACTION_BY_VALUE.get(r.userAction)
+              : null;
+            const recTone =
+              REC_STYLE[r.recommendation] ?? "bg-muted text-muted-foreground";
+            const moveColor =
+              r.percentMove !== null && r.percentMove > 0
+                ? "text-[var(--buy)]"
+                : r.percentMove !== null && r.percentMove < 0
+                  ? "text-[var(--sell)]"
+                  : "text-muted-foreground";
+
+            return (
+              <div
+                key={r.id}
+                className="rounded-md border border-border bg-background px-3 py-2.5"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono font-semibold">{r.ticker}</span>
+                  <Badge
+                    variant="outline"
+                    className={`${recTone} text-[11px]`}
+                  >
+                    {r.recommendation}
+                  </Badge>
+                  {actionMeta && (
+                    <Badge
+                      variant="outline"
+                      className={`text-[11px] ${actionMeta.chip}`}
+                    >
+                      <actionMeta.icon className="mr-1 h-3 w-3" />
+                      {actionMeta.short}
+                    </Badge>
+                  )}
+                  <span className="ml-auto text-[11px] text-muted-foreground">
+                    {r.daysAgo} days ago
+                  </span>
+                </div>
+
+                <blockquote className="mt-2 border-l-2 border-[var(--hold)] pl-3 text-[13px] italic leading-relaxed text-foreground/85">
+                  &ldquo;{r.userNote}&rdquo;
+                </blockquote>
+
+                <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px]">
+                  {r.verdict ? (
+                    <span className="text-foreground/80">
+                      Since then:{" "}
+                      <span className="font-medium">
+                        {VERDICT_LABEL[r.verdict] ?? r.verdict}
+                      </span>
+                      {r.percentMove !== null && (
+                        <span className={`ml-1 font-mono ${moveColor}`}>
+                          ({r.percentMove >= 0 ? "+" : ""}
+                          {r.percentMove.toFixed(1)}% @ {r.outcomeWindow})
+                        </span>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">
+                      Outcome still pending.
+                    </span>
+                  )}
+                  <Link
+                    href={`/app/r/${r.id}`}
+                    className="ml-auto text-primary underline-offset-4 hover:underline"
+                  >
+                    Open →
+                  </Link>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
