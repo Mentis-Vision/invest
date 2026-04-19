@@ -16,6 +16,9 @@ import {
   PieChart,
   History as HistoryIcon,
   Clock,
+  ChevronDown,
+  ChevronUp,
+  Zap,
 } from "lucide-react";
 import { getHoldings, type Holding } from "@/lib/client/holdings-cache";
 import { WarehouseFreshness } from "@/components/warehouse-freshness";
@@ -98,6 +101,11 @@ function money(n: number): string {
 export default function StrategyView() {
   const [loading, setLoading] = useState(false);
   const [review, setReview] = useState<Review | null>(null);
+  // Default to collapsed: lead with the Next Move hero; "dissertation"
+  // content (where the three lenses disagreed, full red-flag lists, per-
+  // lens panels) lives behind a toggle. Daily flow is: glance, decide,
+  // move on. Power-user deep-read is still one click away.
+  const [showFullBrief, setShowFullBrief] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // True while the initial GET is fetching the cached overnight review
   // — distinct from `loading` (which gates the explicit POST re-run).
@@ -250,8 +258,10 @@ export default function StrategyView() {
           Strategy
         </h2>
         <p className="text-sm text-muted-foreground">
-          A portfolio-level review across value, growth, and macro lenses —
-          synthesized into one verdict.
+          Your daily glance: the single next move worth considering,
+          followed by the evidence behind it. Quality / Momentum / Context
+          lenses cross-examine your whole portfolio and synthesize into
+          one verdict.
         </p>
       </div>
 
@@ -581,18 +591,22 @@ export default function StrategyView() {
             </CardContent>
           </Card>
 
+          {/* ─── NEXT MOVE hero — the single take-away of the day ─── */}
+          <NextMoveHero review={review} />
+
+          {/* ─── Quick glance card — health + one-line summary ─── */}
           <Card>
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-base">Verdict</CardTitle>
+                  <CardTitle className="text-base">Portfolio health</CardTitle>
                   <p className="mt-1 text-xs text-muted-foreground">
                     Across {review.holdingsCount} positions
                   </p>
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-3">
               <div className="flex items-baseline gap-3">
                 <div
                   className={`text-3xl font-semibold tracking-tight ${HEALTH_STYLE[review.supervisor.overallHealth] ?? ""}`}
@@ -605,105 +619,143 @@ export default function StrategyView() {
                 <Badge variant="outline">{review.supervisor.consensus}</Badge>
               </div>
               <p className="text-sm leading-relaxed">{review.supervisor.summary}</p>
-              {review.supervisor.topActions.length > 0 && (
-                <div className="space-y-2">
-                  <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Top actions
-                  </div>
-                  <ul className="space-y-2">
-                    {review.supervisor.topActions.map((a, i) => {
-                      const first = a.action.split(/[:\s]/)[0].toUpperCase();
-                      const Icon = ACTION_ICON[first] ?? Minus;
-                      return (
-                        <li key={i} className="flex items-start gap-2 text-sm">
-                          <Icon className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
-                          <div>
-                            <span className="font-medium">{a.action}</span>{" "}
-                            <span className="text-muted-foreground">— {a.rationale}</span>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              )}
             </CardContent>
           </Card>
 
-          {review.supervisor.agreedPoints.length > 0 && (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Where our lenses agreed</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-2">
-                  {review.supervisor.agreedPoints.map((p, i) => (
-                    <li key={i} className="text-sm leading-relaxed">• {p}</li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          )}
-
-          {review.supervisor.redFlags.length > 0 && (
-            <Card className="border-destructive/40 bg-destructive/5">
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <AlertTriangle className="h-4 w-4" /> Red flags
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-2">
-                  {review.supervisor.redFlags.map((f, i) => (
-                    <li key={i} className="text-sm">• {f}</li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          )}
-
-          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
-            {review.analyses.map((a) => (
-              <Card key={a.model}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">
-                    {a.model.toUpperCase()} — {personaLabel(a.model)}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 text-xs">
-                  {a.status !== "ok" || !a.output ? (
-                    <p className="text-muted-foreground">FAILED: {a.error}</p>
-                  ) : (
-                    <>
-                      <div className="flex gap-2">
-                        <Badge variant="outline" className="text-[10px]">
-                          {a.output.overallHealth.replace("_", " ")}
-                        </Badge>
-                        <Badge variant="outline" className="text-[10px]">
-                          {a.output.confidence}
-                        </Badge>
-                      </div>
-                      <p className="leading-relaxed">{a.output.summary}</p>
-                      {a.output.concentrationRisks.length > 0 && (
-                        <div>
-                          <div className="mt-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                            Concentration
-                          </div>
-                          <ul className="mt-1 space-y-0.5">
-                            {a.output.concentrationRisks.map((c, i) => (
-                              <li key={i}>
-                                {c.ticker} ({c.percentOfPortfolio.toFixed(0)}%) — {c.concern}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </>
+          {/* ─── Full brief toggle ─── */}
+          <div className="flex items-center justify-center">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowFullBrief((v) => !v)}
+              className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              {showFullBrief ? (
+                <>
+                  <ChevronUp className="h-3.5 w-3.5" />
+                  Hide full brief
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="h-3.5 w-3.5" />
+                  See the full brief
+                  {review.supervisor.topActions.length > 1 && (
+                    <span className="ml-1 text-muted-foreground/70">
+                      · {review.supervisor.topActions.length - 1} more{" "}
+                      {review.supervisor.topActions.length - 1 === 1 ? "action" : "actions"}
+                    </span>
                   )}
-                </CardContent>
-              </Card>
-            ))}
+                </>
+              )}
+            </Button>
           </div>
+
+          {showFullBrief && (
+            <div className="space-y-4 border-t border-border/60 pt-5">
+              {review.supervisor.topActions.length > 1 && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Other actions to consider</CardTitle>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Beyond today&rsquo;s top move, here&rsquo;s what else the lenses flagged.
+                    </p>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="space-y-2.5">
+                      {review.supervisor.topActions.slice(1).map((a, i) => {
+                        const first = a.action.split(/[:\s]/)[0].toUpperCase();
+                        const Icon = ACTION_ICON[first] ?? Minus;
+                        return (
+                          <li key={i} className="flex items-start gap-2 text-sm">
+                            <Icon className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                            <div>
+                              <span className="font-medium">{a.action}</span>{" "}
+                              <span className="text-muted-foreground">— {a.rationale}</span>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </CardContent>
+                </Card>
+              )}
+
+              {review.supervisor.agreedPoints.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Where our lenses agreed</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="space-y-2">
+                      {review.supervisor.agreedPoints.map((p, i) => (
+                        <li key={i} className="text-sm leading-relaxed">• {p}</li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              )}
+
+              {review.supervisor.redFlags.length > 0 && (
+                <Card className="border-destructive/40 bg-destructive/5">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <AlertTriangle className="h-4 w-4" /> Red flags
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="space-y-2">
+                      {review.supervisor.redFlags.map((f, i) => (
+                        <li key={i} className="text-sm">• {f}</li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              )}
+
+              <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                {review.analyses.map((a) => (
+                  <Card key={a.model}>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm">
+                        {personaLabel(a.model)} lens
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-xs">
+                      {a.status !== "ok" || !a.output ? (
+                        <p className="text-muted-foreground">FAILED: {a.error}</p>
+                      ) : (
+                        <>
+                          <div className="flex gap-2">
+                            <Badge variant="outline" className="text-[10px]">
+                              {a.output.overallHealth.replace("_", " ")}
+                            </Badge>
+                            <Badge variant="outline" className="text-[10px]">
+                              {a.output.confidence}
+                            </Badge>
+                          </div>
+                          <p className="leading-relaxed">{a.output.summary}</p>
+                          {a.output.concentrationRisks.length > 0 && (
+                            <div>
+                              <div className="mt-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                                Concentration
+                              </div>
+                              <ul className="mt-1 space-y-0.5">
+                                {a.output.concentrationRisks.map((c, i) => (
+                                  <li key={i}>
+                                    {c.ticker} ({c.percentOfPortfolio.toFixed(0)}%) — {c.concern}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
 
           <p className="text-xs text-muted-foreground">
             For informational purposes only. Not investment advice. Not a
@@ -717,14 +769,118 @@ export default function StrategyView() {
 }
 
 function personaLabel(model: string): string {
+  // Renamed from Value/Growth/Macro → Quality/Momentum/Context on
+  // 2026-04-18 to keep user-facing labels more intuitive. The model
+  // IDs themselves (claude/gpt/gemini) still flow through the API
+  // unchanged — this is a display transform only.
   switch (model) {
     case "claude":
-      return "Value";
+      return "Quality";
     case "gpt":
-      return "Growth";
+      return "Momentum";
     case "gemini":
-      return "Macro";
+      return "Context";
     default:
       return model;
   }
+}
+
+/**
+ * Next Move hero — the single most important action surfaced with
+ * maximum prominence. Designed for a 3-second read: priority chip,
+ * the action sentence, one-line rationale.
+ *
+ * Pulls from `review.supervisor.topActions[0]`. If there are no
+ * actions (calm-portfolio outcome), shows a steady-state affirmation
+ * instead of a missing card — the user's daily glance should always
+ * land somewhere meaningful.
+ */
+function NextMoveHero({ review }: { review: Review }) {
+  const top = review.supervisor.topActions[0];
+
+  if (!top) {
+    return (
+      <Card className="border-[var(--buy)]/30 bg-[var(--buy)]/5">
+        <CardHeader className="pb-2">
+          <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--buy)]">
+            <Zap className="h-3 w-3" />
+            Next move · today
+          </div>
+          <CardTitle className="mt-1 text-[20px] leading-tight tracking-tight">
+            Steady as you are — no action needed.
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            The three lenses don&rsquo;t see anything that demands action
+            today. Your portfolio&rsquo;s health reads as{" "}
+            <strong className="text-foreground">
+              {review.supervisor.overallHealth.replace("_", " ").toLowerCase()}
+            </strong>
+            . We&rsquo;ll re-check overnight and ping you if that changes.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Extract verb (INCREASE / REDUCE / REVIEW / etc.) for the icon + tone
+  const firstToken = top.action.split(/[:\s]/)[0].toUpperCase();
+  const Icon = ACTION_ICON[firstToken] ?? Lightbulb;
+  const priority = top.priority?.toUpperCase() ?? "CONSIDER";
+  const priorityTone =
+    priority === "HIGH" || priority === "URGENT"
+      ? "text-[var(--sell)] bg-[var(--sell)]/10 border-[var(--sell)]/20"
+      : priority === "MEDIUM"
+        ? "text-[var(--hold)] bg-[var(--hold)]/10 border-[var(--hold)]/20"
+        : "text-[var(--buy)] bg-[var(--buy)]/10 border-[var(--buy)]/20";
+
+  return (
+    <Card className="border-[var(--buy)]/40 bg-gradient-to-br from-[var(--buy)]/8 to-transparent shadow-sm">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--buy)]">
+            <Zap className="h-3 w-3" />
+            Next move · today
+          </div>
+          <Badge
+            variant="outline"
+            className={`font-mono text-[10px] uppercase tracking-[0.12em] ${priorityTone}`}
+          >
+            {priority}
+          </Badge>
+        </div>
+        <CardTitle className="mt-2 flex items-start gap-2.5 text-[22px] leading-[1.2] tracking-tight">
+          <Icon className="mt-1 h-5 w-5 flex-shrink-0 text-[var(--buy)]" />
+          <span>{top.action}</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-[14px] leading-relaxed text-foreground/85">
+          {top.rationale}
+        </p>
+        <div className="flex items-center gap-2 border-t border-border/60 pt-3 text-[11px] text-muted-foreground">
+          <span>
+            Based on the {personaLabel("claude")} / {personaLabel("gpt")} /{" "}
+            {personaLabel("gemini")} lens panel.
+          </span>
+          {review.supervisor.consensus && (
+            <>
+              <span aria-hidden>·</span>
+              <span>Consensus: {review.supervisor.consensus}</span>
+            </>
+          )}
+          <span aria-hidden className="ml-auto">
+            ·
+          </span>
+          <Link
+            href="/app/history"
+            className="underline-offset-4 hover:text-foreground hover:underline"
+          >
+            Record your action →
+          </Link>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }

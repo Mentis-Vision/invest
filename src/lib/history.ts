@@ -193,6 +193,8 @@ export async function saveCacheableRecommendation(input: {
  * Read the history list for a single user.
  * Returns most recent first. Capped at 200 to keep it UI-friendly.
  */
+export type UserRecAction = "took" | "partial" | "ignored" | "opposed";
+
 export type HistoryItem = {
   id: string;
   ticker: string;
@@ -203,6 +205,17 @@ export type HistoryItem = {
   summary: string;
   dataAsOf: string;
   createdAt: string;
+  /**
+   * User-recorded action on this recommendation. Distinct from the
+   * auto-computed outcome at 7/30/90/365d windows — this captures
+   * what the _user_ actually did in response, not how the market
+   * later scored the call. `null` means no action recorded yet.
+   */
+  userAction: UserRecAction | null;
+  /** Private user note (max 500 chars). Shown only to this user. */
+  userNote: string | null;
+  /** When the user recorded the action. */
+  userActionAt: string | null;
   outcomes: Array<{
     window: string;
     status: string;
@@ -320,7 +333,7 @@ export async function getRecommendationForUser(
   const { rows } = await pool.query(
     `SELECT r.id, r.ticker, r.recommendation, r.confidence, r.consensus,
             r."priceAtRec", r.summary, r."dataAsOf", r."createdAt",
-            r."analysisJson",
+            r."analysisJson", r."userAction", r."userNote", r."userActionAt",
             COALESCE(json_agg(
               json_build_object(
                 'window', o."window",
@@ -359,6 +372,11 @@ export async function getRecommendationForUser(
     summary: r.summary as string,
     dataAsOf: (r.dataAsOf as Date).toISOString(),
     createdAt: (r.createdAt as Date).toISOString(),
+    userAction: (r.userAction as UserRecAction | null) ?? null,
+    userNote: (r.userNote as string | null) ?? null,
+    userActionAt: r.userActionAt
+      ? (r.userActionAt as Date).toISOString()
+      : null,
     outcomes: (r.outcomes as HistoryItem["outcomes"]) ?? [],
     analysisJson,
     supervisorModel,
@@ -369,6 +387,7 @@ export async function getUserHistory(userId: string, limit = 50): Promise<Histor
   const { rows } = await pool.query(
     `SELECT r.id, r.ticker, r.recommendation, r.confidence, r.consensus,
             r."priceAtRec", r.summary, r."dataAsOf", r."createdAt",
+            r."userAction", r."userNote", r."userActionAt",
             COALESCE(json_agg(
               json_build_object(
                 'window', o."window",
@@ -405,6 +424,11 @@ export async function getUserHistory(userId: string, limit = 50): Promise<Histor
     summary: r.summary as string,
     dataAsOf: (r.dataAsOf as Date).toISOString(),
     createdAt: (r.createdAt as Date).toISOString(),
+    userAction: (r.userAction as UserRecAction | null) ?? null,
+    userNote: (r.userNote as string | null) ?? null,
+    userActionAt: r.userActionAt
+      ? (r.userActionAt as Date).toISOString()
+      : null,
     outcomes: (r.outcomes as HistoryItem["outcomes"]) ?? [],
   }));
 }
@@ -482,8 +506,54 @@ export async function getUserTrackRecord(userId: string, days = 30) {
     [userId, `${days} days`]
   );
 
+  // User-recorded actions — distinct from the computed outcomes above.
+  // `acted_total` counts recommendations where the user recorded ANY
+  // action (took / partial / ignored / opposed). `acted_took` is the
+  // subset where they actually followed the call. `acted_took_wins` is
+  // the wins among those — used to compute "your follow-through hit
+  // rate" (did the calls you acted on tend to pay off?).
+  const { rows: actions } = await pool.query(
+    `SELECT
+        COUNT(*) FILTER (WHERE r."userAction" IS NOT NULL)::int AS acted_total,
+        COUNT(*) FILTER (WHERE r."userAction" = 'took')::int AS acted_took,
+        COUNT(*) FILTER (WHERE r."userAction" = 'partial')::int AS acted_partial,
+        COUNT(*) FILTER (WHERE r."userAction" = 'ignored')::int AS acted_ignored,
+        COUNT(*) FILTER (WHERE r."userAction" = 'opposed')::int AS acted_opposed,
+        COUNT(*) FILTER (
+          WHERE r."userAction" IN ('took','partial')
+            AND EXISTS (
+              SELECT 1 FROM "recommendation_outcome" o2
+              WHERE o2."recommendationId" = r.id
+                AND o2.status = 'completed'
+                AND o2.verdict LIKE '%win%'
+                AND o2."window" IN ('7d','30d')
+            )
+        )::int AS acted_took_wins,
+        COUNT(*) FILTER (
+          WHERE r."userAction" IN ('took','partial')
+            AND EXISTS (
+              SELECT 1 FROM "recommendation_outcome" o2
+              WHERE o2."recommendationId" = r.id
+                AND o2.status = 'completed'
+                AND o2."window" IN ('7d','30d')
+            )
+        )::int AS acted_took_evaluated
+     FROM "recommendation" r
+     WHERE r."userId" = $1 AND r."createdAt" > NOW() - $2::interval`,
+    [userId, `${days} days`]
+  );
+
   return {
     totals: totals[0] ?? { total: 0, buys: 0, sells: 0, holds: 0 },
     outcomes: verdicts[0] ?? { evaluated: 0, wins: 0, losses: 0, flats: 0, acted: 0 },
+    actions: actions[0] ?? {
+      acted_total: 0,
+      acted_took: 0,
+      acted_partial: 0,
+      acted_ignored: 0,
+      acted_opposed: 0,
+      acted_took_wins: 0,
+      acted_took_evaluated: 0,
+    },
   };
 }

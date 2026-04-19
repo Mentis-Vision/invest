@@ -1,15 +1,25 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import type { HistoryItem } from "@/lib/history";
+import {
+  Search,
+  X,
+  CheckCircle2,
+  MinusCircle,
+  CircleSlash,
+  AlertOctagon,
+  Loader2,
+  StickyNote,
+} from "lucide-react";
+import type { HistoryItem, UserRecAction } from "@/lib/history";
+import Link from "next/link";
 
-type OutcomeFilter = "all" | "losses" | "wins";
+type OutcomeFilter = "all" | "losses" | "wins" | "acted" | "no-action";
 
 const REC_STYLE: Record<string, string> = {
   BUY: "bg-[var(--buy)]/10 text-[var(--buy)] border-[var(--buy)]/20",
@@ -32,9 +42,76 @@ const VERDICT_LABEL: Record<string, string> = {
   hold_confirmed: "HOLD confirmed",
 };
 
+/**
+ * Four user-recorded-action options.
+ *
+ * Distinct from the auto-computed outcomes (which score the call by
+ * price movement). This is "did YOU act, and how?" — the thing that
+ * turns a track record from a scoreboard into a journal.
+ */
+const ACTION_OPTIONS: Array<{
+  value: UserRecAction;
+  label: string;
+  short: string;
+  icon: typeof CheckCircle2;
+  tone: string;
+  chip: string;
+}> = [
+  {
+    value: "took",
+    label: "Took it",
+    short: "Took it",
+    icon: CheckCircle2,
+    tone: "text-[var(--buy)] border-[var(--buy)]/40 hover:bg-[var(--buy)]/10",
+    chip: "bg-[var(--buy)]/10 text-[var(--buy)] border-[var(--buy)]/25",
+  },
+  {
+    value: "partial",
+    label: "Took some",
+    short: "Partial",
+    icon: MinusCircle,
+    tone: "text-foreground border-border hover:bg-secondary",
+    chip: "bg-secondary text-foreground border-border",
+  },
+  {
+    value: "ignored",
+    label: "Didn't act",
+    short: "Skipped",
+    icon: CircleSlash,
+    tone: "text-muted-foreground border-border hover:bg-secondary/60",
+    chip: "bg-muted/40 text-muted-foreground border-border",
+  },
+  {
+    value: "opposed",
+    label: "Did the opposite",
+    short: "Opposed",
+    icon: AlertOctagon,
+    tone:
+      "text-[var(--sell)] border-[var(--sell)]/40 hover:bg-[var(--sell)]/10",
+    chip: "bg-[var(--sell)]/10 text-[var(--sell)] border-[var(--sell)]/25",
+  },
+];
+
+const ACTION_BY_VALUE = new Map(ACTION_OPTIONS.map((o) => [o.value, o]));
+
 type TrackRecord = {
   totals: { total: number; buys: number; sells: number; holds: number };
-  outcomes: { evaluated: number; wins: number; losses: number; flats: number; acted: number };
+  outcomes: {
+    evaluated: number;
+    wins: number;
+    losses: number;
+    flats: number;
+    acted: number;
+  };
+  actions: {
+    acted_total: number;
+    acted_took: number;
+    acted_partial: number;
+    acted_ignored: number;
+    acted_opposed: number;
+    acted_took_wins: number;
+    acted_took_evaluated: number;
+  };
 };
 
 const LOSS_VERDICTS = new Set([
@@ -53,7 +130,7 @@ function hasVerdictIn(it: HistoryItem, set: Set<string>): boolean {
 }
 
 export default function HistoryClient({
-  items,
+  items: initialItems,
   trackRecord,
 }: {
   items: HistoryItem[];
@@ -63,10 +140,18 @@ export default function HistoryClient({
   const router = useRouter();
   const initialOutcomeFilter = ((): OutcomeFilter => {
     const raw = searchParams.get("filter");
-    if (raw === "losses" || raw === "wins") return raw;
+    if (
+      raw === "losses" ||
+      raw === "wins" ||
+      raw === "acted" ||
+      raw === "no-action"
+    ) {
+      return raw;
+    }
     return "all";
   })();
 
+  const [items, setItems] = useState<HistoryItem[]>(initialItems);
   const [filter, setFilter] = useState("");
   const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>(
     initialOutcomeFilter
@@ -92,8 +177,6 @@ export default function HistoryClient({
       url.searchParams.set("filter", outcomeFilter);
     }
     window.history.replaceState({}, "", url.toString());
-    // Router is imported to ensure RSC revalidation contract; we use
-    // replaceState for cheap same-page updates.
     void router;
   }, [outcomeFilter, router]);
 
@@ -103,6 +186,10 @@ export default function HistoryClient({
       pool = pool.filter((it) => hasVerdictIn(it, LOSS_VERDICTS));
     } else if (outcomeFilter === "wins") {
       pool = pool.filter((it) => hasVerdictIn(it, WIN_VERDICTS));
+    } else if (outcomeFilter === "acted") {
+      pool = pool.filter((it) => it.userAction !== null);
+    } else if (outcomeFilter === "no-action") {
+      pool = pool.filter((it) => it.userAction === null);
     }
     if (!filter.trim()) return pool;
     const q = filter.trim().toUpperCase();
@@ -113,16 +200,47 @@ export default function HistoryClient({
 
   const hitRate =
     trackRecord.outcomes.evaluated > 0
-      ? Math.round((trackRecord.outcomes.wins / trackRecord.outcomes.evaluated) * 100)
+      ? Math.round(
+          (trackRecord.outcomes.wins / trackRecord.outcomes.evaluated) * 100
+        )
       : null;
+
+  const followThroughRate =
+    trackRecord.actions.acted_took_evaluated > 0
+      ? Math.round(
+          (trackRecord.actions.acted_took_wins /
+            trackRecord.actions.acted_took_evaluated) *
+            100
+        )
+      : null;
+
+  // Optimistic in-place update when a row's action is saved.
+  const handleActionSaved = useCallback(
+    (id: string, action: UserRecAction | null, note: string | null) => {
+      setItems((cur) =>
+        cur.map((it) =>
+          it.id === id
+            ? {
+                ...it,
+                userAction: action,
+                userNote: note,
+                userActionAt: action ? new Date().toISOString() : null,
+              }
+            : it
+        )
+      );
+    },
+    []
+  );
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Track Record</h2>
         <p className="text-sm text-muted-foreground">
-          Every recommendation we&rsquo;ve made for you — the wins, the
-          losses, and the flats. We keep a permanent record.
+          Every recommendation we&rsquo;ve made for you — with your own
+          action, your note on why, and how it played out at the 7 / 30 /
+          90 / 365-day check. This is your trading journal.
         </p>
       </div>
 
@@ -131,24 +249,44 @@ export default function HistoryClient({
           <CardTitle className="text-base">Last 30 days</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <Stat label="Recommendations" value={String(trackRecord.totals.total)} />
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+            <Stat
+              label="Recommendations"
+              value={String(trackRecord.totals.total)}
+            />
             <Stat
               label="BUY / HOLD / SELL"
               value={`${trackRecord.totals.buys} / ${trackRecord.totals.holds} / ${trackRecord.totals.sells}`}
             />
             <Stat
-              label="Evaluated outcomes"
-              value={String(trackRecord.outcomes.evaluated)}
-            />
-            <Stat
               label="Hit rate"
               value={hitRate !== null ? `${hitRate}%` : "—"}
+              hint={`${trackRecord.outcomes.wins} of ${trackRecord.outcomes.evaluated} evaluated`}
+            />
+            <Stat
+              label="You acted on"
+              value={String(trackRecord.actions.acted_total)}
+              hint={
+                trackRecord.actions.acted_total > 0
+                  ? `${trackRecord.actions.acted_took} took · ${trackRecord.actions.acted_ignored} skipped`
+                  : "Mark your actions below"
+              }
+            />
+            <Stat
+              label="Your follow-through"
+              value={
+                followThroughRate !== null ? `${followThroughRate}%` : "—"
+              }
+              hint={
+                followThroughRate !== null
+                  ? `Wins among calls you took`
+                  : "Evaluate a few calls first"
+              }
             />
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
-            Past recommendation outcomes are informational only. Not a guarantee
-            of future performance. Not investment advice.
+            Past recommendation outcomes are informational only. Not a
+            guarantee of future performance. Not investment advice.
           </p>
         </CardContent>
       </Card>
@@ -163,8 +301,10 @@ export default function HistoryClient({
             onChange={(e) => setFilter(e.target.value)}
           />
         </div>
-        <div className="flex items-center gap-1 rounded-md border border-border bg-card p-0.5 text-xs">
-          {(["all", "losses", "wins"] as const).map((key) => (
+        <div className="flex flex-wrap items-center gap-1 rounded-md border border-border bg-card p-0.5 text-xs">
+          {(
+            ["all", "wins", "losses", "acted", "no-action"] as const
+          ).map((key) => (
             <button
               key={key}
               type="button"
@@ -175,11 +315,21 @@ export default function HistoryClient({
                     ? "bg-[var(--sell)]/10 text-[var(--sell)]"
                     : key === "wins"
                     ? "bg-[var(--buy)]/10 text-[var(--buy)]"
+                    : key === "acted"
+                    ? "bg-primary/10 text-primary"
                     : "bg-accent text-accent-foreground"
                   : "text-muted-foreground hover:bg-accent/40"
               }`}
             >
-              {key === "all" ? "All" : key === "losses" ? "Losses only" : "Wins only"}
+              {key === "all"
+                ? "All"
+                : key === "losses"
+                ? "Losses"
+                : key === "wins"
+                ? "Wins"
+                : key === "acted"
+                ? "You acted"
+                : "Not marked"}
             </button>
           ))}
         </div>
@@ -220,6 +370,30 @@ export default function HistoryClient({
         </Card>
       )}
 
+      {outcomeFilter === "acted" && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="py-3 text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">Your actions.</span>{" "}
+            Recommendations where you&rsquo;ve recorded what you did. Comparing
+            this pile against the full list answers the important question:{" "}
+            <em>are you picking the right ones to act on?</em>
+          </CardContent>
+        </Card>
+      )}
+
+      {outcomeFilter === "no-action" && (
+        <Card className="border-border bg-secondary/40">
+          <CardContent className="py-3 text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">
+              Unmarked calls.
+            </span>{" "}
+            Recommendations you haven&rsquo;t recorded an action on yet. A
+            healthy journal marks every call — even &ldquo;I decided to
+            ignore this one&rdquo; is worth capturing.
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardContent className="p-0">
           {filtered.length === 0 ? (
@@ -227,113 +401,182 @@ export default function HistoryClient({
               {items.length === 0 ? (
                 <>
                   No recommendations yet.{" "}
-                  <a href="/app?view=research" className="underline">
+                  <Link
+                    href="/app?view=research"
+                    className="underline"
+                  >
                     Run your first research query
-                  </a>
+                  </Link>
                   .
                 </>
               ) : outcomeFilter === "losses" ? (
-                <>No losses to show — nothing has gone against us yet at any check window.</>
+                <>
+                  No losses to show — nothing has gone against us yet at any
+                  check window.
+                </>
               ) : outcomeFilter === "wins" ? (
                 <>No wins to show yet — outcome checks run at 7 / 30 / 90 / 365 days.</>
+              ) : outcomeFilter === "acted" ? (
+                <>
+                  You haven&rsquo;t marked any actions yet. Click{" "}
+                  <strong>Details</strong> on any recommendation and record
+                  what you did.
+                </>
+              ) : outcomeFilter === "no-action" ? (
+                <>All recommendations marked — nice journal discipline.</>
               ) : (
                 <>No matches for &ldquo;{filter}&rdquo;.</>
               )}
             </div>
           ) : (
             <div className="divide-y">
-              {filtered.map((it) => (
-                <div key={it.id} className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="font-mono font-semibold w-16">{it.ticker}</div>
-                    <Badge
-                      variant="outline"
-                      className={`${REC_STYLE[it.recommendation] ?? ""} text-[11px]`}
-                    >
-                      {it.recommendation}
-                    </Badge>
-                    <Badge variant="outline" className="text-[11px]">
-                      {it.confidence}
-                    </Badge>
-                    <div className="flex-1 text-sm text-muted-foreground truncate">
-                      {it.summary}
+              {filtered.map((it) => {
+                const actionMeta = it.userAction
+                  ? ACTION_BY_VALUE.get(it.userAction)
+                  : null;
+                const isExpanded = expanded === it.id;
+                return (
+                  <div key={it.id} className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-16 font-mono font-semibold">
+                        {it.ticker}
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className={`${REC_STYLE[it.recommendation] ?? ""} text-[11px]`}
+                      >
+                        {it.recommendation}
+                      </Badge>
+                      <Badge variant="outline" className="text-[11px]">
+                        {it.confidence}
+                      </Badge>
+                      {actionMeta && (
+                        <Badge
+                          variant="outline"
+                          className={`text-[11px] ${actionMeta.chip}`}
+                        >
+                          <actionMeta.icon className="mr-1 h-3 w-3" />
+                          {actionMeta.short}
+                        </Badge>
+                      )}
+                      {it.userNote && !actionMeta && (
+                        <Badge
+                          variant="outline"
+                          className="text-[11px] bg-secondary text-muted-foreground border-border"
+                        >
+                          <StickyNote className="mr-1 h-3 w-3" />
+                          Note
+                        </Badge>
+                      )}
+                      <div className="flex-1 truncate text-sm text-muted-foreground">
+                        {it.summary}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {new Date(it.createdAt).toLocaleDateString()}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          setExpanded(isExpanded ? null : it.id)
+                        }
+                      >
+                        {isExpanded ? "Hide" : "Details"}
+                      </Button>
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {new Date(it.createdAt).toLocaleDateString()}
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() =>
-                        setExpanded(expanded === it.id ? null : it.id)
-                      }
-                    >
-                      {expanded === it.id ? "Hide" : "Details"}
-                    </Button>
-                  </div>
-                  {expanded === it.id && (
-                    <div className="mt-3 rounded-md border bg-muted/30 p-3 text-xs">
-                      <p className="mb-2">
-                        <span className="font-medium">Price at rec:</span> $
-                        {it.priceAtRec.toFixed(2)} ·{" "}
-                        <span className="font-medium">Consensus:</span> {it.consensus} ·{" "}
-                        <span className="font-medium">Data as of:</span>{" "}
-                        {new Date(it.dataAsOf).toLocaleString()}
-                      </p>
-                      <div className="mt-3">
-                        <div className="font-medium">Outcomes</div>
-                        <div className="mt-1 grid gap-1">
-                          {it.outcomes.length === 0 ? (
-                            <div className="text-muted-foreground">
-                              (no outcome windows scheduled — INSUFFICIENT_DATA
-                              rec)
-                            </div>
-                          ) : (
-                            it.outcomes.map((o, i) => (
-                              <div key={i} className="flex items-center gap-2">
-                                <span className="w-10 font-mono">{o.window}</span>
-                                {o.status === "pending" ? (
-                                  <span className="text-muted-foreground">
-                                    Pending evaluation
-                                  </span>
-                                ) : (
-                                  <>
-                                    <span>
-                                      {o.priceAtCheck !== null
-                                        ? `$${Number(o.priceAtCheck).toFixed(2)}`
-                                        : "—"}
-                                    </span>
-                                    {o.percentMove !== null && (
-                                      <span
-                                        className={
-                                          Number(o.percentMove) > 0
-                                            ? "text-[var(--buy)]"
-                                            : Number(o.percentMove) < 0
-                                            ? "text-[var(--sell)]"
-                                            : "text-muted-foreground"
-                                        }
-                                      >
-                                        ({Number(o.percentMove) >= 0 ? "+" : ""}
-                                        {Number(o.percentMove).toFixed(1)}%)
-                                      </span>
-                                    )}
-                                    <span className="text-muted-foreground">
-                                      —{" "}
-                                      {o.verdict
-                                        ? VERDICT_LABEL[o.verdict] ?? o.verdict
-                                        : "—"}
-                                    </span>
-                                  </>
-                                )}
+                    {isExpanded && (
+                      <div className="mt-3 space-y-4 rounded-md border bg-muted/30 p-3 text-xs">
+                        <p>
+                          <span className="font-medium">Price at rec:</span> $
+                          {it.priceAtRec.toFixed(2)} ·{" "}
+                          <span className="font-medium">Consensus:</span>{" "}
+                          {it.consensus} ·{" "}
+                          <span className="font-medium">Data as of:</span>{" "}
+                          {new Date(it.dataAsOf).toLocaleString()}
+                        </p>
+
+                        {/* ── Action tracker ────────────────────────── */}
+                        <ActionTracker
+                          recommendationId={it.id}
+                          ticker={it.ticker}
+                          currentAction={it.userAction}
+                          currentNote={it.userNote}
+                          actionAt={it.userActionAt}
+                          onSaved={handleActionSaved}
+                        />
+
+                        {/* ── Outcomes ──────────────────────────────── */}
+                        <div>
+                          <div className="mb-1 font-medium">Outcomes</div>
+                          <div className="grid gap-1">
+                            {it.outcomes.length === 0 ? (
+                              <div className="text-muted-foreground">
+                                (no outcome windows scheduled —
+                                INSUFFICIENT_DATA rec)
                               </div>
-                            ))
-                          )}
+                            ) : (
+                              it.outcomes.map((o, i) => (
+                                <div
+                                  key={i}
+                                  className="flex items-center gap-2"
+                                >
+                                  <span className="w-10 font-mono">
+                                    {o.window}
+                                  </span>
+                                  {o.status === "pending" ? (
+                                    <span className="text-muted-foreground">
+                                      Pending evaluation
+                                    </span>
+                                  ) : (
+                                    <>
+                                      <span>
+                                        {o.priceAtCheck !== null
+                                          ? `$${Number(o.priceAtCheck).toFixed(2)}`
+                                          : "—"}
+                                      </span>
+                                      {o.percentMove !== null && (
+                                        <span
+                                          className={
+                                            Number(o.percentMove) > 0
+                                              ? "text-[var(--buy)]"
+                                              : Number(o.percentMove) < 0
+                                              ? "text-[var(--sell)]"
+                                              : "text-muted-foreground"
+                                          }
+                                        >
+                                          (
+                                          {Number(o.percentMove) >= 0 ? "+" : ""}
+                                          {Number(o.percentMove).toFixed(1)}%)
+                                        </span>
+                                      )}
+                                      <span className="text-muted-foreground">
+                                        —{" "}
+                                        {o.verdict
+                                          ? VERDICT_LABEL[o.verdict] ??
+                                            o.verdict
+                                          : "—"}
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end">
+                          <Link
+                            href={`/app/r/${it.id}`}
+                            className="text-[11px] text-primary underline-offset-4 hover:underline"
+                          >
+                            Open full recommendation →
+                          </Link>
                         </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              ))}
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </CardContent>
@@ -342,11 +585,208 @@ export default function HistoryClient({
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
   return (
     <div>
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className="mt-1 text-2xl font-semibold tracking-tight">{value}</div>
+      {hint && (
+        <div className="mt-0.5 text-[11px] text-muted-foreground">{hint}</div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Action tracker — the inline widget on an expanded recommendation.
+ *
+ * Four action buttons + an optional free-text note (max 500 chars).
+ * Saves to /api/history/action on every button click (no submit).
+ * Optimistic update via `onSaved` so the row chip flips instantly.
+ */
+function ActionTracker({
+  recommendationId,
+  ticker,
+  currentAction,
+  currentNote,
+  actionAt,
+  onSaved,
+}: {
+  recommendationId: string;
+  ticker: string;
+  currentAction: UserRecAction | null;
+  currentNote: string | null;
+  actionAt: string | null;
+  onSaved: (
+    id: string,
+    action: UserRecAction | null,
+    note: string | null
+  ) => void;
+}) {
+  const [noteDraft, setNoteDraft] = useState(currentNote ?? "");
+  const [saving, setSaving] = useState<UserRecAction | "note" | "clear" | null>(
+    null
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  // Re-sync draft when the upstream note changes (row collapse/expand).
+  useEffect(() => {
+    setNoteDraft(currentNote ?? "");
+  }, [currentNote]);
+
+  const dirtyNote = noteDraft.trim() !== (currentNote ?? "").trim();
+
+  async function post(
+    action: UserRecAction | null,
+    note: string | null,
+    stateKey: UserRecAction | "note" | "clear"
+  ) {
+    setSaving(stateKey);
+    setError(null);
+    try {
+      const res = await fetch("/api/history/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recommendationId, action, note }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? "Could not save");
+        return;
+      }
+      const data = (await res.json()) as {
+        action: UserRecAction | null;
+        note: string | null;
+      };
+      onSaved(recommendationId, data.action, data.note);
+    } catch {
+      setError("Network error. Try again.");
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  return (
+    <div className="rounded-md border border-border bg-card px-3 py-3">
+      <div className="mb-2 flex items-center justify-between">
+        <div className="font-medium text-foreground">
+          What did you do on {ticker}?
+        </div>
+        {actionAt && (
+          <div className="text-[10px] text-muted-foreground">
+            Last marked{" "}
+            {new Date(actionAt).toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {ACTION_OPTIONS.map((opt) => {
+          const selected = currentAction === opt.value;
+          const isSaving = saving === opt.value;
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              disabled={saving !== null}
+              onClick={() =>
+                post(
+                  selected ? null : opt.value,
+                  noteDraft.trim() || null,
+                  opt.value
+                )
+              }
+              className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11px] font-medium transition-colors disabled:opacity-60 ${
+                selected
+                  ? `${opt.chip} ring-1 ring-current/20`
+                  : `bg-card ${opt.tone}`
+              }`}
+              aria-pressed={selected}
+            >
+              {isSaving ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <opt.icon className="h-3 w-3" />
+              )}
+              {opt.label}
+            </button>
+          );
+        })}
+        {currentAction !== null && (
+          <button
+            type="button"
+            disabled={saving !== null}
+            onClick={() => post(null, noteDraft.trim() || null, "clear")}
+            className="ml-1 inline-flex items-center gap-1 rounded-md border border-dashed border-border px-2 py-1.5 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-60"
+          >
+            {saving === "clear" ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <X className="h-3 w-3" />
+            )}
+            Clear
+          </button>
+        )}
+      </div>
+
+      <div className="mt-3">
+        <label
+          htmlFor={`note-${recommendationId}`}
+          className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground"
+        >
+          Your note — private, for your own journal
+        </label>
+        <textarea
+          id={`note-${recommendationId}`}
+          value={noteDraft}
+          onChange={(e) => setNoteDraft(e.target.value.slice(0, 500))}
+          rows={2}
+          placeholder={
+            currentAction === "opposed"
+              ? "Why you went the other way…"
+              : currentAction === "ignored"
+              ? "Why you held off…"
+              : "Why — your thesis, or what changed…"
+          }
+          className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-[12px] leading-relaxed outline-none focus:border-primary/40"
+          maxLength={500}
+        />
+        <div className="mt-1 flex items-center justify-between text-[10px] text-muted-foreground">
+          <span>{noteDraft.length} / 500</span>
+          {dirtyNote && (
+            <button
+              type="button"
+              disabled={saving !== null}
+              onClick={() =>
+                post(currentAction, noteDraft.trim() || null, "note")
+              }
+              className="inline-flex items-center gap-1 rounded-md bg-foreground px-2 py-1 text-[11px] font-medium text-background hover:bg-foreground/85 disabled:opacity-60"
+            >
+              {saving === "note" ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : null}
+              Save note
+            </button>
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <div className="mt-2 text-[11px] text-[var(--destructive)]">
+          {error}
+        </div>
+      )}
     </div>
   );
 }
