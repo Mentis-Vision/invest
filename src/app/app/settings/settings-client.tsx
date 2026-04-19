@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Check, Info, Trash2, AlertTriangle } from "lucide-react";
+import { Loader2, Check, Info, Trash2, AlertTriangle, Mail } from "lucide-react";
 import TwoFactorSection from "./two-factor-section";
 import type {
   UserProfile,
@@ -49,10 +49,12 @@ const GOAL_OPTIONS: { value: InvestmentGoal; label: string }[] = [
 export default function SettingsClient({
   initialProfile,
   twoFactorEnabled,
+  weeklyDigestOptOut,
   user,
 }: {
   initialProfile: UserProfile;
   twoFactorEnabled: boolean;
+  weeklyDigestOptOut: boolean;
   user: { name: string; email: string };
 }) {
   const [profile, setProfile] = useState<UserProfile>(initialProfile);
@@ -395,12 +397,98 @@ export default function SettingsClient({
         )}
       </div>
 
+      {/* ─── Notifications ──────────────────────────────────────── */}
+      <NotificationsSection initialOptOut={weeklyDigestOptOut} />
+
       {/* ─── Two-factor authentication ──────────────────────────── */}
       <TwoFactorSection initialEnabled={twoFactorEnabled} />
 
       {/* ─── Danger zone ─────────────────────────────────────────── */}
       <DeleteAccountSection userEmail={user.email} />
     </div>
+  );
+}
+
+/**
+ * Notifications section — right now just a single toggle for the
+ * Monday weekly digest. Scales to more prefs as we add them (one
+ * `/api/user/notifications` endpoint handles all of them).
+ */
+function NotificationsSection({
+  initialOptOut,
+}: {
+  initialOptOut: boolean;
+}) {
+  const [optOut, setOptOut] = useState(initialOptOut);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function toggle() {
+    const next = !optOut;
+    setSaving(true);
+    setErr(null);
+    // Optimistic — flip UI first, revert on failure.
+    setOptOut(next);
+    try {
+      const res = await fetch("/api/user/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ weeklyDigestOptOut: next }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setErr(data.error ?? "Could not save. Try again.");
+        setOptOut(!next);
+        return;
+      }
+      const data = (await res.json()) as { weeklyDigestOptOut: boolean };
+      setOptOut(data.weeklyDigestOptOut);
+    } catch {
+      setErr("Network error. Try again.");
+      setOptOut(!next);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card className="mt-6">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Mail className="h-4 w-4 text-primary" />
+          Notifications
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        <label
+          htmlFor="weekly-digest-toggle"
+          className="flex cursor-pointer items-start gap-3 rounded-md border border-border bg-background/60 px-3 py-3 hover:border-primary/40"
+        >
+          <input
+            id="weekly-digest-toggle"
+            type="checkbox"
+            checked={!optOut}
+            onChange={toggle}
+            disabled={saving}
+            className="mt-0.5 h-4 w-4 cursor-pointer accent-primary"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="font-medium text-foreground">
+              Monday weekly digest
+            </div>
+            <div className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">
+              A short recap every Monday morning: your week&rsquo;s
+              portfolio change, biggest movers, new alerts, research
+              you ran, and upcoming earnings. Skippable anytime.
+            </div>
+          </div>
+          {saving && (
+            <Loader2 className="mt-0.5 h-4 w-4 flex-shrink-0 animate-spin text-muted-foreground" />
+          )}
+        </label>
+        {err && <p className="text-xs text-destructive">{err}</p>}
+      </CardContent>
+    </Card>
   );
 }
 
