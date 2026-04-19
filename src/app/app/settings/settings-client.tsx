@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Check, Info } from "lucide-react";
+import { Loader2, Check, Info, Trash2, AlertTriangle } from "lucide-react";
 import type {
   UserProfile,
   RiskTolerance,
@@ -391,6 +391,142 @@ export default function SettingsClient({
           </Badge>
         )}
       </div>
+
+      {/* ─── Danger zone ─────────────────────────────────────────── */}
+      <DeleteAccountSection userEmail={user.email} />
     </div>
+  );
+}
+
+/**
+ * Account deletion with a "type DELETE to confirm" guard.
+ *
+ * We purposefully render this inline in the Settings flow rather than
+ * buried under a submenu — the whole point of the right-to-delete is
+ * that it's self-service, one click away, and doesn't require an
+ * email or a support ticket. The two-step confirmation (toggle +
+ * literal text match) is the only safeguard against accidental
+ * destruction.
+ */
+function DeleteAccountSection({ userEmail }: { userEmail: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [typed, setTyped] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const confirmed = typed === "DELETE";
+  const isDemo = userEmail.toLowerCase() === "demo@clearpathinvest.app";
+
+  async function doDelete() {
+    setLoading(true);
+    setErr(null);
+    try {
+      const res = await fetch("/api/user/me", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: "DELETE" }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setErr(data.error ?? "Could not delete account. Try again.");
+        setLoading(false);
+        return;
+      }
+      // Full page reload clears any cached state + lands on sign-in.
+      window.location.href = "/sign-in?deleted=1";
+    } catch {
+      setErr("Network error. Try again.");
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Card className="mt-8 border-destructive/30 bg-destructive/5">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-base text-destructive">
+          <AlertTriangle className="h-4 w-4" />
+          Danger zone
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        <p className="leading-relaxed text-foreground/85">
+          Deleting your account wipes your holdings, brokerage
+          connections, research history, journal notes, and every other
+          piece of data we hold tied to you. This is immediate and can
+          not be undone.
+        </p>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Some backup copies may persist up to 7 days in Neon&rsquo;s
+          point-in-time recovery window. Past that, your data is gone
+          for good.
+        </p>
+
+        {isDemo && (
+          <p className="rounded-md border border-[var(--hold)]/30 bg-[var(--hold)]/10 px-3 py-2 text-xs text-[var(--hold)]">
+            The shared demo account can&rsquo;t be deleted. Sign up for
+            your own account to get a deletable profile.
+          </p>
+        )}
+
+        {!expanded ? (
+          <Button
+            variant="outline"
+            onClick={() => setExpanded(true)}
+            disabled={isDemo}
+            className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete my account
+          </Button>
+        ) : (
+          <div className="space-y-3 rounded-md border border-destructive/30 bg-background/60 p-3">
+            <div>
+              <label
+                htmlFor="delete-confirm"
+                className="mb-1.5 block text-xs font-medium"
+              >
+                Type{" "}
+                <span className="font-mono font-semibold text-destructive">
+                  DELETE
+                </span>{" "}
+                (all caps) to confirm:
+              </label>
+              <Input
+                id="delete-confirm"
+                value={typed}
+                onChange={(e) => setTyped(e.target.value)}
+                placeholder="DELETE"
+                autoComplete="off"
+                className="font-mono"
+                disabled={loading}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setExpanded(false);
+                  setTyped("");
+                  setErr(null);
+                }}
+                disabled={loading}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={doDelete}
+                disabled={!confirmed || loading}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
+              >
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete my account permanently
+              </Button>
+            </div>
+            {err && <p className="text-xs text-destructive">{err}</p>}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
