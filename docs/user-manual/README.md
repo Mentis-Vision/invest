@@ -16,6 +16,7 @@ When a feature changes, the doc changes.
 ```
 docs/user-manual/
 ├── README.md              ← this file (index + conventions)
+├── 00-brand.md            ← logo, colors, typography, voice rules
 ├── 01-getting-started.md  ← account creation, first connection, first look
 ├── 02-overview.md         ← the /app dashboard (portfolio hero, KPIs, alerts, news)
 ├── 03-portfolio.md        ← /app?view=portfolio (holdings table, allocation)

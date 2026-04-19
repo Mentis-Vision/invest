@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 
 const navItems = [
@@ -16,9 +17,14 @@ export default function MarketingNav() {
     <header className="sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
         <Link href="/" className="group flex items-center gap-2">
-          <svg viewBox="0 0 24 24" className="h-4 w-4 text-[var(--buy)]" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d="M2 20 L8 10 L14 15 L22 4" />
-          </svg>
+          <Image
+            src="/logo.svg"
+            alt=""
+            width={24}
+            height={24}
+            priority
+            className="h-6 w-6"
+          />
           <span className="font-heading text-[18px] font-medium tracking-tight">
             ClearPath
           </span>

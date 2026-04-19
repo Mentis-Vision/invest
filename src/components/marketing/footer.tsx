@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 
 export default function MarketingFooter() {
   return (
@@ -7,9 +8,13 @@ export default function MarketingFooter() {
         <div className="flex flex-col gap-8 md:flex-row md:items-start md:justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <svg viewBox="0 0 24 24" className="h-4 w-4 text-[var(--buy)]" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M2 20 L8 10 L14 15 L22 4" />
-              </svg>
+              <Image
+                src="/logo.svg"
+                alt=""
+                width={24}
+                height={24}
+                className="h-6 w-6"
+              />
               <span className="font-heading text-[18px] font-medium">ClearPath</span>
               <span className="ml-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
                 Invest

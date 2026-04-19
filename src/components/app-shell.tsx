@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { authClient } from "@/lib/auth-client";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import ThemeToggle from "@/components/theme-toggle";
@@ -147,15 +148,30 @@ export default function AppShell({
           <DropdownMenuLabel className="px-2 pt-2 pb-1 text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground">
             Account
           </DropdownMenuLabel>
+          {/*
+            Intentional full-page nav via `window.location.href` instead
+            of `router.push`. The prior `router.push("/app/settings")`
+            raced with Base UI's menu-close focus return and with
+            BetterAuth's 5-minute `cookieCache` refresh — on a stale
+            cache, the RSC prefetch for /app/settings could resolve to
+            a /sign-in redirect, which the navigation then followed,
+            effectively logging the user out. Full reload sends fresh
+            cookies and bypasses the prefetch cache. Matches the
+            Sign Out pattern already in use below.
+          */}
           <DropdownMenuItem
-            onClick={() => router.push("/app/settings")}
+            onClick={() => {
+              window.location.href = "/app/settings";
+            }}
             className="cursor-pointer"
           >
             <SettingsIcon className="mr-2.5 h-3.5 w-3.5" />
             Settings &amp; preferences
           </DropdownMenuItem>
           <DropdownMenuItem
-            onClick={() => router.push("/forgot-password")}
+            onClick={() => {
+              window.location.href = "/forgot-password";
+            }}
             className="cursor-pointer"
           >
             <KeyRound className="mr-2.5 h-3.5 w-3.5" />
@@ -197,12 +213,20 @@ export default function AppShell({
             href="/app"
             className="flex items-center gap-2.5 text-foreground"
           >
-            <span
-              aria-hidden
-              className="flex h-7 w-7 items-center justify-center rounded-md bg-primary"
-            >
-              <span className="block h-2.5 w-2.5 rotate-45 bg-primary-foreground" />
-            </span>
+            {/*
+              Logomark — full-color SVG at /public/logo.svg.
+              If the user prefers the richer PNG reference, drop the
+              file at /public/logo.png and swap `src` to "/logo.png"
+              (next/image handles the sizing identically).
+            */}
+            <Image
+              src="/logo.svg"
+              alt=""
+              width={28}
+              height={28}
+              priority
+              className="h-7 w-7"
+            />
             <span className="text-[15px] font-semibold tracking-[-0.015em]">
               ClearPath
             </span>
@@ -241,9 +265,13 @@ export default function AppShell({
               </SheetTrigger>
               <SheetContent side="left" className="w-64 p-0 bg-card">
                 <div className="flex h-14 items-center gap-2.5 border-b border-border px-5">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-md bg-primary">
-                    <span className="block h-2 w-2 rotate-45 bg-primary-foreground" />
-                  </span>
+                  <Image
+                    src="/logo.svg"
+                    alt=""
+                    width={24}
+                    height={24}
+                    className="h-6 w-6"
+                  />
                   <span className="text-[15px] font-semibold tracking-tight">
                     ClearPath
                   </span>

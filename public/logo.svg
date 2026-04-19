@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ClearPath Invest logomark.
+
+  Based on the user-provided reference (Apr 17 2026): blue infinity/CP
+  swoosh with candlestick chart inside the left loop and an upward
+  arrow rising from the right loop. This SVG is a simplified header
+  variant that reads at 24-32px. For marketing/full-color use, drop
+  the PNG at /public/logo-full.png and swap the src in app-shell.
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 64 64"
+  fill="none"
+  role="img"
+  aria-label="ClearPath Invest"
+>
+  <!-- Network dots backdrop (desaturated) -->
+  <g opacity="0.25" fill="#94a3b8">
+    <circle cx="8"  cy="14" r="1.2" />
+    <circle cx="18" cy="8"  r="1.2" />
+    <circle cx="32" cy="4"  r="1.2" />
+    <circle cx="54" cy="12" r="1.2" />
+    <circle cx="8"  cy="52" r="1.2" />
+    <circle cx="28" cy="60" r="1.2" />
+    <circle cx="52" cy="56" r="1.2" />
+  </g>
+
+  <!-- Left loop (C) -->
+  <path
+    d="M24 16
+       C12 16, 8 24, 8 32
+       C8 40, 12 48, 24 48
+       C32 48, 34 44, 34 40
+       C34 36, 30 34, 24 34
+       C18 34, 16 36, 16 32
+       C16 28, 18 26, 24 26
+       C30 26, 34 28, 34 32"
+    stroke="#2563eb"
+    stroke-width="4"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+  />
+
+  <!-- Candlesticks inside C -->
+  <g>
+    <rect x="13" y="30" width="2" height="6" fill="#0f1e4a" />
+    <line x1="14" y1="27" x2="14" y2="30" stroke="#0f1e4a" stroke-width="0.8" />
+    <rect x="17" y="27" width="2" height="9" fill="#15803d" />
+    <line x1="18" y1="24" x2="18" y2="27" stroke="#15803d" stroke-width="0.8" />
+    <rect x="21" y="25" width="2" height="11" fill="#15803d" />
+    <line x1="22" y1="22" x2="22" y2="25" stroke="#15803d" stroke-width="0.8" />
+    <rect x="25" y="28" width="2" height="9" fill="#dc2626" />
+    <line x1="26" y1="25" x2="26" y2="28" stroke="#dc2626" stroke-width="0.8" />
+  </g>
+
+  <!-- Right loop (P) + rising arrow -->
+  <path
+    d="M34 32
+       C34 24, 38 16, 48 16
+       C58 16, 62 24, 54 30
+       C48 34, 42 32, 42 28"
+    stroke="#2563eb"
+    stroke-width="4"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+  />
+
+  <!-- Arrow stem -->
+  <path
+    d="M44 50 L44 22 L58 8"
+    stroke="#2563eb"
+    stroke-width="4"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+  />
+
+  <!-- Arrow head -->
+  <path
+    d="M52 8 L60 8 L60 16"
+    stroke="#2563eb"
+    stroke-width="4"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+  />
+</svg>

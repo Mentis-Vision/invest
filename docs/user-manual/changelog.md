@@ -3,6 +3,21 @@
 Reverse-chronological feature ship log. Pulls from git history;
 we'll keep this current as we ship.
 
+## 2026-04-17 — Logo identity landed
+
+- Founder-provided logomark (infinity CP swoosh + candlesticks +
+  upward arrow + network dots) replaces the placeholder rotate-45
+  diamond mark across every surface.
+- **New files:** `/public/logo.svg` (full color, 28×28 header
+  variant), `/public/logo-mono.svg` (single-color currentColor
+  variant for tight palettes), `/public/icon.svg` (favicon / PWA).
+- **Swapped in:** app header, mobile drawer, marketing nav,
+  marketing footer, sign-in / sign-up / forgot-password / reset-
+  password pages.
+- **New doc:** `00-brand.md` — logo meaning, files, colors,
+  typography, voice, dos/don'ts.
+- Marketing site `var(--buy)`-tinted SVG zigzag mark retired.
+
 ## 2026-04-18 — Hybrid v2 redesign (complete overhaul)
 
 ### Phase 2: Customizable block-based dashboard

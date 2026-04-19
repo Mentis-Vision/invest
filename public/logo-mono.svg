@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Monochrome header variant — uses currentColor so it tints from the
+  CSS color context (foreground on light, background on dark). Use
+  this wherever the logo must adapt to text color (e.g. favicon-like
+  contexts, tight-palette surfaces, email signatures).
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 64 64"
+  fill="none"
+  role="img"
+  aria-label="ClearPath Invest"
+>
+  <path
+    d="M24 16 C12 16, 8 24, 8 32 C8 40, 12 48, 24 48 C32 48, 34 44, 34 40 C34 36, 30 34, 24 34 C18 34, 16 36, 16 32 C16 28, 18 26, 24 26 C30 26, 34 28, 34 32"
+    stroke="currentColor"
+    stroke-width="4"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+  />
+  <path
+    d="M34 32 C34 24, 38 16, 48 16 C58 16, 62 24, 54 30 C48 34, 42 32, 42 28"
+    stroke="currentColor"
+    stroke-width="4"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+  />
+  <path
+    d="M44 50 L44 22 L58 8 M52 8 L60 8 L60 16"
+    stroke="currentColor"
+    stroke-width="4"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+  />
+</svg>
