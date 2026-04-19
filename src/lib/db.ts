@@ -1,4 +1,4 @@
-import { Pool, type QueryResult, type QueryResultRow } from "@neondatabase/serverless";
+import { Pool } from "@neondatabase/serverless";
 
 /**
  * Shared Neon pool. Re-used across modules to avoid exhausting connections
@@ -20,20 +20,25 @@ export function getPool(): Pool {
 }
 
 /**
- * Query helper — lazily resolves the pool. Forwards the generic row
- * type so callers can do `pool.query<{ foo: string }>(...)` and get
- * typed `rows` without casting every result.
+ * Lazy proxy over the underlying Neon Pool. Every property access
+ * resolves the pool on first use (so we don't need DATABASE_URL at
+ * module-import time) and binds any function methods so they stay
+ * bound to the pool instance.
  *
- *   const { rows } = await pool.query<{ userId: string }>(`SELECT ...`)
- *   //    ^-- rows is { userId: string }[]
+ * Typed as `Pool` so every overload — `pool.query(text)`,
+ * `pool.query<T>(text, params)`, `pool.connect()`, `pool.on(...)` —
+ * is visible to callers without wrapping each one. Using `Pool`
+ * directly means no custom signatures to keep in sync with pg
+ * type evolution.
  *
- * When no type parameter is passed, defaults to `Record<string, unknown>`
- * — safe default that forces callers to widen explicitly rather than
- * silently assume a shape.
+ * Prior iterations used a hand-written `{ query: ... }` object, but
+ * that hid the generic overloads and caused "Expected 0 type
+ * arguments" build failures for callers that wanted typed rows.
  */
-export const pool = {
-  query: <R extends QueryResultRow = Record<string, unknown>>(
-    text: string,
-    params?: unknown[]
-  ): Promise<QueryResult<R>> => getPool().query<R>(text, params),
-};
+export const pool: Pool = new Proxy({} as Pool, {
+  get(_, prop, receiver) {
+    const p = getPool();
+    const value = Reflect.get(p, prop, receiver);
+    return typeof value === "function" ? value.bind(p) : value;
+  },
+});
