@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Check, Info, Trash2, AlertTriangle } from "lucide-react";
+import TwoFactorSection from "./two-factor-section";
 import type {
   UserProfile,
   RiskTolerance,
@@ -47,9 +48,11 @@ const GOAL_OPTIONS: { value: InvestmentGoal; label: string }[] = [
 
 export default function SettingsClient({
   initialProfile,
+  twoFactorEnabled,
   user,
 }: {
   initialProfile: UserProfile;
+  twoFactorEnabled: boolean;
   user: { name: string; email: string };
 }) {
   const [profile, setProfile] = useState<UserProfile>(initialProfile);
@@ -391,6 +394,9 @@ export default function SettingsClient({
           </Badge>
         )}
       </div>
+
+      {/* ─── Two-factor authentication ──────────────────────────── */}
+      <TwoFactorSection initialEnabled={twoFactorEnabled} />
 
       {/* ─── Danger zone ─────────────────────────────────────────── */}
       <DeleteAccountSection userEmail={user.email} />

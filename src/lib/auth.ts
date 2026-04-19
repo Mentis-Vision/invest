@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { twoFactor } from "better-auth/plugins/two-factor";
 import { Pool } from "@neondatabase/serverless";
 import { sendEmail, renderEmailTemplate } from "./email";
 
@@ -100,6 +101,16 @@ export const auth = betterAuth({
     },
   },
   trustedOrigins: [baseUrl],
+  plugins: [
+    // TOTP-based optional second factor. Schema migrated 2026-04-19:
+    //   - user.twoFactorEnabled: boolean flag
+    //   - twoFactor: (userId, secret, backupCodes, verified) table
+    //     with CASCADE on user delete
+    // Backup codes default to 10 single-use strings on enroll.
+    twoFactor({
+      issuer: "ClearPath Invest",
+    }),
+  ],
 });
 
 export type Auth = typeof auth;

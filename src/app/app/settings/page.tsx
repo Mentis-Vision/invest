@@ -2,16 +2,35 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getUserProfile } from "@/lib/user-profile";
+import { pool } from "@/lib/db";
 import AppShell from "@/components/app-shell";
 import SettingsClient from "./settings-client";
 
 export const dynamic = "force-dynamic";
 
+async function getTwoFactorEnabled(userId: string): Promise<boolean> {
+  try {
+    const { rows } = await pool.query<{ twoFactorEnabled: boolean | null }>(
+      `SELECT "twoFactorEnabled" FROM "user" WHERE id = $1 LIMIT 1`,
+      [userId]
+    );
+    return Boolean(rows[0]?.twoFactorEnabled);
+  } catch {
+    // If the column doesn't exist yet (pre-migration) or the read
+    // fails, default to "not enabled" — the Settings page still
+    // renders; user just sees the enrollment CTA.
+    return false;
+  }
+}
+
 export default async function SettingsPage() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/sign-in");
 
-  const profile = await getUserProfile(session.user.id);
+  const [profile, twoFactorEnabled] = await Promise.all([
+    getUserProfile(session.user.id),
+    getTwoFactorEnabled(session.user.id),
+  ]);
 
   return (
     <AppShell
@@ -19,6 +38,7 @@ export default async function SettingsPage() {
     >
       <SettingsClient
         initialProfile={profile}
+        twoFactorEnabled={twoFactorEnabled}
         user={{ name: session.user.name ?? "", email: session.user.email }}
       />
     </AppShell>
