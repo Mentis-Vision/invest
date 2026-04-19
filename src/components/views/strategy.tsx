@@ -19,9 +19,15 @@ import {
   ChevronDown,
   ChevronUp,
   Zap,
+  Check,
+  AlarmClock,
+  X,
+  Undo2,
 } from "lucide-react";
 import { getHoldings, type Holding } from "@/lib/client/holdings-cache";
 import { WarehouseFreshness } from "@/components/warehouse-freshness";
+
+type NextMoveState = "active" | "done" | "snoozed" | "dismissed";
 
 type Review = {
   holdingsCount: number;
@@ -54,6 +60,8 @@ type Review = {
   cached?: boolean;
   cachedAt?: string;
   tokensUsed?: number;
+  nextMoveState?: NextMoveState | null;
+  nextMoveStateAt?: string | null;
 };
 
 const HEALTH_STYLE: Record<string, string> = {
@@ -592,7 +600,14 @@ export default function StrategyView() {
           </Card>
 
           {/* ─── NEXT MOVE hero — the single take-away of the day ─── */}
-          <NextMoveHero review={review} />
+          <NextMoveHero
+            review={review}
+            onStateChange={(s) =>
+              setReview((cur) =>
+                cur ? { ...cur, nextMoveState: s } : cur
+              )
+            }
+          />
 
           {/* ─── Quick glance card — health + one-line summary ─── */}
           <Card>
@@ -788,16 +803,53 @@ function personaLabel(model: string): string {
 /**
  * Next Move hero — the single most important action surfaced with
  * maximum prominence. Designed for a 3-second read: priority chip,
- * the action sentence, one-line rationale.
+ * the action sentence, one-line rationale, and three state chips:
  *
- * Pulls from `review.supervisor.topActions[0]`. If there are no
- * actions (calm-portfolio outcome), shows a steady-state affirmation
- * instead of a missing card — the user's daily glance should always
- * land somewhere meaningful.
+ *   - **I did this** → hero collapses into a "done" confirmation
+ *     with an Undo button that flips it back to active
+ *   - **Snooze today** → hero collapses into a compact "see you
+ *     tomorrow" tile; full hero re-appears on next day's cron row
+ *   - **Dismiss** → hero hides entirely for the rest of the day
+ *
+ * Pulls from `review.supervisor.topActions[0]`. If no actions
+ * exist (calm-portfolio outcome), shows a steady-state affirmation
+ * with no chips — nothing to act on.
  */
-function NextMoveHero({ review }: { review: Review }) {
+function NextMoveHero({
+  review,
+  onStateChange,
+}: {
+  review: Review;
+  onStateChange?: (s: NextMoveState | null) => void;
+}) {
   const top = review.supervisor.topActions[0];
+  const state = (review.nextMoveState ?? "active") as NextMoveState;
+  const [saving, setSaving] = useState<NextMoveState | "undo" | null>(null);
 
+  async function setState(next: NextMoveState | null, key: NextMoveState | "undo") {
+    setSaving(key);
+    try {
+      const res = await fetch("/api/portfolio-review/next-move-state", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ state: next }),
+      });
+      if (!res.ok) {
+        // Non-blocking — if persistence fails, keep the UI optimistic
+        // but don't leave the user with nothing. Surface via console
+        // and continue.
+        console.warn("next-move-state save failed");
+      }
+      onStateChange?.(next);
+    } catch {
+      // Same — swallow to avoid breaking the hero on a transient
+      // network error.
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  // Empty-state (no actions in the review) — nothing to act on, no chips.
   if (!top) {
     return (
       <Card className="border-[var(--buy)]/30 bg-[var(--buy)]/5">
@@ -824,7 +876,69 @@ function NextMoveHero({ review }: { review: Review }) {
     );
   }
 
-  // Extract verb (INCREASE / REDUCE / REVIEW / etc.) for the icon + tone
+  // Dismissed — render nothing. Full hero returns on tomorrow's
+  // review row.
+  if (state === "dismissed") return null;
+
+  // Done — compact confirmation with an Undo escape hatch.
+  if (state === "done") {
+    return (
+      <Card className="border-[var(--buy)]/30 bg-[var(--buy)]/8">
+        <CardContent className="flex items-center justify-between gap-3 py-3">
+          <div className="flex items-center gap-2.5 text-sm">
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--buy)] text-white">
+              <Check className="h-3.5 w-3.5" />
+            </div>
+            <span className="font-medium text-foreground">
+              Done — you marked today&rsquo;s next move complete.
+            </span>
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setState("active", "undo")}
+            disabled={saving !== null}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            {saving === "undo" ? (
+              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+            ) : (
+              <Undo2 className="mr-1 h-3 w-3" />
+            )}
+            Undo
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Snoozed — even more compact. Reappears on tomorrow's hero.
+  if (state === "snoozed") {
+    return (
+      <Card className="border-border bg-secondary/40">
+        <CardContent className="flex items-center justify-between gap-3 py-2.5 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <AlarmClock className="h-3.5 w-3.5" />
+            <span>Snoozed. A fresh read lands in the morning.</span>
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setState("active", "undo")}
+            disabled={saving !== null}
+            className="text-[11px]"
+          >
+            {saving === "undo" ? (
+              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+            ) : null}
+            Bring back
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Active — the full hero with chips.
   const firstToken = top.action.split(/[:\s]/)[0].toUpperCase();
   const Icon = ACTION_ICON[firstToken] ?? Lightbulb;
   const priority = top.priority?.toUpperCase() ?? "CONSIDER";
@@ -859,6 +973,51 @@ function NextMoveHero({ review }: { review: Review }) {
         <p className="text-[14px] leading-relaxed text-foreground/85">
           {top.rationale}
         </p>
+
+        {/* Action chips */}
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            onClick={() => setState("done", "done")}
+            disabled={saving !== null}
+            className="bg-[var(--buy)] text-white hover:bg-[var(--buy)]/90"
+          >
+            {saving === "done" ? (
+              <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+            ) : (
+              <Check className="mr-1.5 h-3 w-3" />
+            )}
+            I did this
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setState("snoozed", "snoozed")}
+            disabled={saving !== null}
+          >
+            {saving === "snoozed" ? (
+              <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+            ) : (
+              <AlarmClock className="mr-1.5 h-3 w-3" />
+            )}
+            Snooze today
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setState("dismissed", "dismissed")}
+            disabled={saving !== null}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            {saving === "dismissed" ? (
+              <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+            ) : (
+              <X className="mr-1.5 h-3 w-3" />
+            )}
+            Dismiss
+          </Button>
+        </div>
+
         <div className="flex items-center gap-2 border-t border-border/60 pt-3 text-[11px] text-muted-foreground">
           <span>
             Based on the {personaLabel("claude")} / {personaLabel("gpt")} /{" "}

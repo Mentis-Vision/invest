@@ -25,6 +25,8 @@ import { recordBatchUsage, recordUsage } from "./usage";
  * route so existing UI consumers don't need to branch.
  */
 
+export type NextMoveState = "active" | "done" | "snoozed" | "dismissed";
+
 export type PortfolioReviewResult = {
   holdingsCount: number;
   totalValue: number;
@@ -35,6 +37,9 @@ export type PortfolioReviewResult = {
   tokensUsed: number;
   cached?: boolean;
   cachedAt?: string;
+  /** User's action on today's Next Move hero — null when untouched. */
+  nextMoveState?: NextMoveState | null;
+  nextMoveStateAt?: string | null;
 };
 
 type HoldingRow = {
@@ -60,7 +65,8 @@ export async function getCachedPortfolioReview(
 ): Promise<PortfolioReviewResult | null> {
   try {
     const { rows } = await pool.query(
-      `SELECT payload, "createdAt", "totalValueAtRun", "holdingsCount"
+      `SELECT payload, "createdAt", "totalValueAtRun", "holdingsCount",
+              "nextMoveState", "nextMoveStateAt"
          FROM "portfolio_review_daily"
         WHERE "userId" = $1 AND "capturedAt" = CURRENT_DATE
         LIMIT 1`,
@@ -72,6 +78,8 @@ export async function getCachedPortfolioReview(
       createdAt: Date;
       totalValueAtRun: string;
       holdingsCount: number;
+      nextMoveState: NextMoveState | null;
+      nextMoveStateAt: Date | null;
     };
     const payload = r.payload as Partial<PortfolioReviewResult>;
     return {
@@ -84,6 +92,8 @@ export async function getCachedPortfolioReview(
       tokensUsed: payload.tokensUsed ?? 0,
       cached: true,
       cachedAt: r.createdAt.toISOString(),
+      nextMoveState: r.nextMoveState ?? null,
+      nextMoveStateAt: r.nextMoveStateAt?.toISOString() ?? null,
     };
   } catch (err) {
     log.warn("portfolio-review", "cache lookup failed", {
