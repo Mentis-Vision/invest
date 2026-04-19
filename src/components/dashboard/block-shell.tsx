@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { GripVertical, X } from "lucide-react";
 import type { BlockSize } from "@/lib/dashboard-layout";
 
@@ -28,6 +28,30 @@ const SIZES: Array<{ v: BlockSize; label: string }> = [
   { v: 8, label: "XL" },
   { v: 12, label: "Full" },
 ];
+
+/**
+ * Returns the `gridColumn` value to apply. On viewports <1024px (lg
+ * breakpoint in Tailwind), returns `span 1 / span 1` so the block
+ * takes the full width of the 1-column mobile grid. On ≥1024px,
+ * returns `span N / span N` based on the block's configured size.
+ *
+ * Uses matchMedia + a useEffect listener so resize between mobile
+ * and desktop layouts takes effect immediately. Initial server
+ * render uses the mobile fallback; client hydrates into whichever
+ * matches the current viewport.
+ */
+function useDesktopGridSpan(size: BlockSize): string {
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const update = () => setIsDesktop(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  return isDesktop ? `span ${size} / span ${size}` : "span 1 / span 1";
+}
 
 export function BlockShell({
   id,
@@ -82,18 +106,22 @@ export function BlockShell({
         if (!editing) return;
         onDragEnd?.();
       }}
-      className={`col-span-12 lg:col-span-${size} relative rounded-[10px] border bg-card p-4 transition-all ${
+      className={`relative rounded-[10px] border bg-card p-4 transition-all ${
         editing
           ? "border-dashed border-primary/60 cursor-move"
           : "border-border"
       }`}
-      style={
-        {
-          // Tailwind's JIT doesn't always pick up dynamic col-span-N values.
-          // Use CSS vars to force the grid-column-end to work.
-          gridColumn: `span ${size} / span ${size}`,
-        } as React.CSSProperties
-      }
+      style={{
+        // Only apply size-based grid spans on ≥lg screens. On mobile
+        // the parent grid is `grid-cols-1`, so the inline style
+        // previously over-rode the single-column layout and forced
+        // blocks into awkward multi-span widths. Now: span 1 on
+        // mobile (= full row), span N on desktop. Tailwind's JIT
+        // can't reliably pick up dynamic `lg:col-span-N`, so we
+        // still drive via inline style but gated by a matchMedia
+        // breakpoint listener.
+        gridColumn: useDesktopGridSpan(size),
+      }}
     >
       {editing && (
         <div className="absolute -top-3 right-3 z-[2] inline-flex items-center gap-0.5 rounded-md border border-border bg-popover p-0.5 shadow-sm">
