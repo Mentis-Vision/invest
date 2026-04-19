@@ -6,6 +6,11 @@ import {
 import { log, errorInfo } from "@/lib/log";
 import { snaptradeConfigured, decryptSecret } from "@/lib/snaptrade";
 import { syncUserActivities } from "@/app/api/snaptrade/sync/route";
+import {
+  plaidConfigured,
+  syncHoldings as syncPlaidHoldings,
+  syncTransactions as syncPlaidTransactions,
+} from "@/lib/plaid";
 import { pool } from "@/lib/db";
 import {
   scanPriceMoves,
@@ -58,6 +63,19 @@ export async function GET(req: NextRequest) {
     }
   } else {
     result.snaptrade = { skipped: "not_configured" };
+  }
+
+  // 1b. Plaid sync — holdings + transactions for every active Item.
+  // Plaid auto-refreshes holdings throughout the day via its own
+  // fetchers (included in the $0.35/Item/mo subscription), and
+  // webhooks tell us when new transactions arrive; this nightly pass
+  // is a belt-and-suspenders reconciliation. No /investments/refresh
+  // calls — that would be the $0.12/each charge.
+  try {
+    result.plaid = await syncAllPlaidItems();
+  } catch (err) {
+    log.error("cron", "plaid sync block failed", errorInfo(err));
+    result.plaid = { error: "failed" };
   }
 
   // 2. Link trades → recommendations
@@ -304,6 +322,50 @@ async function runNightlyPortfolioReviews(): Promise<{
     }
   }
   return { users: userIds.length, generated, skipped, failed };
+}
+
+/**
+ * Sync every active Plaid Item. Pulls holdings (authoritative
+ * snapshot) and the last 7 days of investment transactions. Any Item
+ * that's been marked `login_required` is skipped — the user needs to
+ * reauth via Link before we can talk to it. `itemRemove()` is free
+ * and already invoked when a user clicks Disconnect — so `removed`
+ * Items are filtered at the SQL level.
+ */
+async function syncAllPlaidItems(): Promise<{
+  items: number;
+  holdings: number;
+  transactions: number;
+  errors: number;
+}> {
+  if (!plaidConfigured()) {
+    return { items: 0, holdings: 0, transactions: 0, errors: 0 };
+  }
+  const { rows } = await pool.query(
+    `SELECT "userId", "itemId"
+     FROM "plaid_item"
+     WHERE "status" = 'active'`
+  );
+  let holdings = 0;
+  let transactions = 0;
+  let errors = 0;
+  for (const r of rows as Array<{ userId: string; itemId: string }>) {
+    try {
+      const hres = await syncPlaidHoldings(r.userId, r.itemId);
+      holdings += hres.holdings;
+      errors += hres.errors.length;
+      const tres = await syncPlaidTransactions(r.userId, r.itemId, 7);
+      transactions += tres.inserted;
+      errors += tres.errors.length;
+    } catch (err) {
+      log.warn("cron.plaid", "item sync failed", {
+        itemId: r.itemId,
+        ...errorInfo(err),
+      });
+      errors++;
+    }
+  }
+  return { items: rows.length, holdings, transactions, errors };
 }
 
 async function syncAllSnaptradeUsers(): Promise<{

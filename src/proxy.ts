@@ -27,6 +27,11 @@ function requiresAuth(pathname: string): boolean {
   // cleanly to /sign-in instead of leaving a signed-out user stuck on
   // blank app views.
   if (pathname.startsWith("/api/snaptrade")) return true;
+  if (pathname.startsWith("/api/plaid/link-token")) return true;
+  if (pathname.startsWith("/api/plaid/exchange-public-token")) return true;
+  if (pathname.startsWith("/api/plaid/items")) return true;
+  // NOTE: /api/plaid/webhook is NOT auth-gated — Plaid signs it
+  // with its own key and we verify that via Plaid-Verification JWT.
   if (pathname.startsWith("/api/alerts")) return true;
   if (pathname.startsWith("/api/user/")) return true;
   if (pathname.startsWith("/api/history/")) return true;

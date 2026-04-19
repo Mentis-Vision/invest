@@ -70,3 +70,15 @@ vercel --prod --scope mentisvision   # deploy
 printf "VALUE" | vercel env add NAME production --scope mentisvision
 vercel env pull /tmp/env.production --environment=production --scope mentisvision --yes
 ```
+
+## Plaid env vars
+
+```
+PLAID_CLIENT_ID             # from Plaid dashboard
+PLAID_SECRET                # sandbox or production, matches PLAID_ENV
+PLAID_ENV                   # sandbox | development | production
+PLAID_WEBHOOK_URL           # optional; defaults to {BETTER_AUTH_URL}/api/plaid/webhook
+PLAID_WEBHOOK_ALLOW_UNVERIFIED=1   # sandbox-only; NEVER set in production
+```
+
+Same `SNAPTRADE_ENCRYPTION_KEY` is reused to encrypt Plaid access tokens (AES-256-GCM). Plaid products scope is locked at Link time to `investments` — see `src/lib/plaid.ts` `createLinkToken`.

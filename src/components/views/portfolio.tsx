@@ -21,6 +21,7 @@ import {
   Drillable,
 } from "@/components/dashboard/drill-context";
 import DrillPanel from "@/components/dashboard/drill-panel";
+import { ConnectPicker } from "@/components/brokerage/connect-picker";
 
 /**
  * Portfolio — redesigned as a grouped drill-down view.
@@ -218,7 +219,13 @@ function PortfolioBody() {
     return () => window.removeEventListener("message", onMessage);
   }, [loadHoldings]);
 
-  const startLinking = useCallback(async () => {
+  // ConnectPicker modal state — the first step of linking is now
+  // picking between Plaid (traditional brokerage) and SnapTrade (retail
+  // / crypto). The actual SnapTrade or Plaid flow starts inside the
+  // picker option.
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const startSnaptradeLink = useCallback(async () => {
     setError(null);
     setLoadingToken(true);
     try {
@@ -261,6 +268,24 @@ function PortfolioBody() {
       setLoadingToken(false);
     }
   }, [loadHoldings]);
+
+  const startLinking = useCallback(() => {
+    setError(null);
+    setPickerOpen(true);
+  }, []);
+
+  const handlePlaidSuccess = useCallback(
+    async (_: {
+      itemId: string;
+      institutionName: string | null;
+      holdings: number;
+    }) => {
+      // Holdings are already synced on the server by /api/plaid/exchange-
+      // public-token. Just refresh the client cache to render them.
+      await loadHoldings(true);
+    },
+    [loadHoldings]
+  );
 
   const handleRefresh = useCallback(async () => {
     setSyncing(true);
@@ -324,6 +349,12 @@ function PortfolioBody() {
   // ─────────────────────────────────────────────────────────────
   return (
     <div className="space-y-5">
+      <ConnectPicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onStartSnaptrade={startSnaptradeLink}
+        onPlaidSuccess={handlePlaidSuccess}
+      />
       {/* Header */}
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
         <div className="min-w-0">
