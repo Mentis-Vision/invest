@@ -11,7 +11,9 @@ import IntegrationsView from "@/components/views/integrations";
 
 type View = "dashboard" | "portfolio" | "research" | "strategy" | "integrations";
 
-const VALID: View[] = ["dashboard", "portfolio", "research", "strategy", "integrations"];
+// "strategy" is no longer in the nav (Phase 2) but kept in the type
+// so StrategyView can be inlined under the Next Move hero in Phase 4.
+const VALID: View[] = ["dashboard", "portfolio", "research", "integrations"];
 
 export default function DashboardClient({
   user,
@@ -31,7 +33,10 @@ function DashboardClientInner({
   user: { name: string; email: string };
 }) {
   const searchParams = useSearchParams();
-  const initial = (searchParams.get("view") as View) ?? "dashboard";
+  const rawView = (searchParams.get("view") as View) ?? "dashboard";
+  // ?view=strategy is no longer a nav destination — alias to dashboard so
+  // existing deep-links land on the briefing rather than a blank view.
+  const initial: View = rawView === "strategy" ? "dashboard" : rawView;
   const [currentView, setCurrentView] = useState<View>(
     VALID.includes(initial) ? initial : "dashboard"
   );
