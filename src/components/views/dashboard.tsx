@@ -9,6 +9,7 @@ import DrillPanel from "@/components/dashboard/drill-panel";
 import { Button } from "@/components/ui/button";
 import { NextMoveHero, type Review } from "@/components/dashboard/next-move-hero";
 import { StrategyFullBrief } from "@/components/views/strategy";
+import { CompactCounterfactual } from "@/components/dashboard/compact-counterfactual";
 
 /**
  * Dashboard (hybrid-v2 redesign).
@@ -47,6 +48,9 @@ function DashboardBody({ userName }: { userName: string }) {
   const [reviewLoading, setReviewLoading] = useState(true);
   const [showFullBrief, setShowFullBrief] = useState(false);
 
+  // ── Latest strategy action (for compact counterfactual strip) ────
+  const [latestStrategyRecId, setLatestStrategyRecId] = useState<string | null>(null);
+
   // ── Hydration-safe time-dependent strings ────────────────────────
   // Server renders in UTC; the user is in their own timezone. If we
   // compute greeting/date at render time, SSR and client hydration
@@ -71,6 +75,19 @@ function DashboardBody({ userName }: { userName: string }) {
       .finally(() => {
         if (alive) setReviewLoading(false);
       });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Fetch most recent Strategy-sourced rec (last 48 h) for the
+  // compact counterfactual strip below the hero.
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/journal/latest-strategy-action")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && alive && setLatestStrategyRecId(d.id))
+      .catch(() => {});
     return () => {
       alive = false;
     };
@@ -159,6 +176,11 @@ function DashboardBody({ userName }: { userName: string }) {
           </Button>
         </div>
       )}
+
+      {/* Compact counterfactual strip — shown when user acted on a
+          recent Strategy rec in the last 48 h. Null-renders silently
+          when no qualifying action exists. */}
+      {latestStrategyRecId && <CompactCounterfactual recId={latestStrategyRecId} />}
 
       {/* Header row: greeting (left) · date + Customize (right) */}
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 pb-2">
