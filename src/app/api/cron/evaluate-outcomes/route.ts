@@ -4,6 +4,7 @@ import {
   linkTradesToRecommendations,
 } from "@/lib/outcomes";
 import { log, errorInfo } from "@/lib/log";
+import { reconcileAllUsers } from "@/lib/reconciliation";
 import { snaptradeConfigured, decryptSecret } from "@/lib/snaptrade";
 import { syncUserActivities } from "@/app/api/snaptrade/sync/route";
 import {
@@ -98,6 +99,14 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     log.error("cron", "plaid cleanup failed", errorInfo(err));
     result.plaidCleanup = { error: "failed" };
+  }
+
+  // 1e. Reconcile broker trades vs self-reported journal entries
+  try {
+    result.reconciliation = await reconcileAllUsers();
+  } catch (err) {
+    log.error("cron", "reconciliation failed", errorInfo(err));
+    result.reconciliation = { error: "failed" };
   }
 
   // 2. Link trades → recommendations
