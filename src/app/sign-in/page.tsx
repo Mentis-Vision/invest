@@ -26,10 +26,30 @@ export default function SignInPage() {
       /* no-op */
     }
 
-    const { error } = await authClient.signIn.email({ email, password });
+    const { data, error } = await authClient.signIn.email({ email, password });
     if (error) {
       setError(error.message ?? "Sign in failed");
       setLoading(false);
+      return;
+    }
+    // If the account has 2FA enabled, BetterAuth's server returns
+    //   data: { twoFactorRedirect: true, twoFactorMethods: [...] }
+    // and the twoFactorClient plugin (wired in auth-client.ts) fires
+    // onTwoFactorRedirect, which sets window.location.href to
+    // /verify-2fa. If we follow up with window.location.href = "/app"
+    // here, we override the plugin's redirect and land on /app WITHOUT
+    // a fully-established session — proxy.ts bounces the user back to
+    // /sign-in, producing the "login recycles" loop.
+    //
+    // Detect the 2FA-required response and bail out; the plugin's
+    // redirect will carry the browser to /verify-2fa.
+    if (
+      data &&
+      typeof data === "object" &&
+      "twoFactorRedirect" in data &&
+      (data as { twoFactorRedirect?: unknown }).twoFactorRedirect
+    ) {
+      // Keep loading=true — the page is already navigating away.
       return;
     }
     // Full page reload ensures the Set-Cookie from sign-in is sent with the next request.
