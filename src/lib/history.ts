@@ -412,7 +412,12 @@ export async function getRecommendationForUser(
   };
 }
 
-export async function getUserHistory(userId: string, limit = 50): Promise<HistoryItem[]> {
+export async function getUserHistory(
+  userId: string,
+  opts: { limit?: number; onlyActioned?: boolean } = {}
+): Promise<HistoryItem[]> {
+  const { limit = 50, onlyActioned = false } = opts;
+  const actionFilter = onlyActioned ? `AND r."userAction" IS NOT NULL` : "";
   const { rows } = await pool.query(
     `SELECT r.id, r.ticker, r.recommendation, r.confidence, r.consensus,
             r."priceAtRec", r.summary, r."dataAsOf", r."createdAt",
@@ -440,6 +445,7 @@ export async function getUserHistory(userId: string, limit = 50): Promise<Histor
        -- Exclude quick scans from formal history. Quick is triage; users
        -- shouldn't see it in their track record alongside conviction calls.
        AND ("analysisJson"->>'mode' IS NULL OR "analysisJson"->>'mode' <> 'quick')
+       ${actionFilter}
      GROUP BY r.id
      ORDER BY r."createdAt" DESC
      LIMIT $2`,

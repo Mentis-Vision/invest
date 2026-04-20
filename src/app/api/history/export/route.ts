@@ -38,7 +38,7 @@ export async function GET() {
   try {
     // Pull the full history (cap at 500 rows — a pragmatic ceiling so
     // this route stays cheap; if a user hits it we add pagination).
-    const items = await getUserHistory(session.user.id, 500);
+    const items = await getUserHistory(session.user.id, { limit: 500 });
 
     const header = [
       "date",

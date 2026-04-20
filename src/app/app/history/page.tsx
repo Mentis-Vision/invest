@@ -20,7 +20,7 @@ export default async function HistoryPage() {
   // Five parallel reads. All indexed; fan-out is cheap.
   const [items, trackRecord, patterns, matrix, reflections] =
     await Promise.all([
-      getUserHistory(session.user.id, 100),
+      getUserHistory(session.user.id, { limit: 100, onlyActioned: true }),
       getUserTrackRecord(session.user.id, 30),
       getUserPatternInsights(session.user.id, 90),
       getActionOutcomeMatrix(session.user.id, 90),
