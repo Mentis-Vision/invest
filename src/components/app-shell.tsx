@@ -67,6 +67,107 @@ const navItems: NavItem[] = [
   },
 ];
 
+/**
+ * Account dropdown — extracted as a module-level component so its
+ * identity is stable across AppShell re-renders.
+ *
+ * ROOT CAUSE OF THE "PAGE COULDN'T LOAD" REGRESSION:
+ * When AccountMenu was defined as an inner function inside AppShell,
+ * every AppShell re-render (triggered by child state changes — e.g.
+ * the Dashboard fetching portfolio-review, latest-strategy-action,
+ * track-record, holdings) created a NEW AccountMenu function reference.
+ * React treats a changed component-type as a full subtree remount, so
+ * it unmounted the old DropdownMenu (from @base-ui/react/menu) and
+ * mounted a fresh one. Base UI's portal-based Menu throws error #31
+ * when the trigger element is unmounted mid-reconciliation — exactly
+ * the "page couldn't load" symptom seen when clicking the name chip.
+ *
+ * Extracting AccountMenu to module scope gives it a constant identity.
+ * AppShell re-renders now propagate to AccountMenu as a prop update
+ * (stable component type, new prop values) instead of an unmount/remount.
+ */
+function AccountMenu({
+  initials,
+  firstName,
+  onSignOut,
+}: {
+  initials: string;
+  firstName: string;
+  onSignOut: () => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label="Account menu"
+        className="inline-flex items-center gap-2 rounded-full border border-border bg-card pl-1 pr-3 py-1 transition-colors hover:border-muted-foreground/40"
+      >
+        <Avatar className="h-7 w-7 border border-border/60">
+          <AvatarFallback className="bg-foreground text-[11px] font-semibold text-background">
+            {initials}
+          </AvatarFallback>
+        </Avatar>
+        <span className="hidden text-[13px] text-foreground/80 sm:inline">
+          {firstName}
+        </span>
+        <ChevronDown className="h-3 w-3 text-muted-foreground" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56" sideOffset={8}>
+        <DropdownMenuLabel className="px-2 pt-2 pb-1 text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground">
+          Account
+        </DropdownMenuLabel>
+        {/*
+          Intentional full-page nav via `window.location.href` instead
+          of `router.push`. The prior `router.push("/app/settings")`
+          raced with Base UI's menu-close focus return and with
+          BetterAuth's 5-minute `cookieCache` refresh — on a stale
+          cache, the RSC prefetch for /app/settings could resolve to
+          a /sign-in redirect, which the navigation then followed,
+          effectively logging the user out. Full reload sends fresh
+          cookies and bypasses the prefetch cache. Matches the
+          Sign Out pattern already in use below.
+        */}
+        <DropdownMenuItem
+          onClick={() => {
+            window.location.href = "/app/settings";
+          }}
+          className="cursor-pointer"
+        >
+          <SettingsIcon className="mr-2.5 h-3.5 w-3.5" />
+          Settings &amp; preferences
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => {
+            window.location.href = "/forgot-password";
+          }}
+          className="cursor-pointer"
+        >
+          <KeyRound className="mr-2.5 h-3.5 w-3.5" />
+          Change password
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => {
+            window.location.href = "mailto:support@clearpathinvest.app";
+          }}
+          className="cursor-pointer"
+        >
+          <HelpCircle className="mr-2.5 h-3.5 w-3.5" />
+          Contact support
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={onSignOut}
+          variant="destructive"
+          className="cursor-pointer"
+        >
+          <LogOut className="mr-2.5 h-3.5 w-3.5" />
+          Sign out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export default function AppShell({
   user,
   children,
@@ -118,85 +219,6 @@ export default function AppShell({
       return pathname === item.href || pathname.startsWith(item.href + "/");
     }
     return onDashboard && currentView === item.id;
-  }
-
-  /**
-   * Account dropdown — unchanged shape from previous round: Settings,
-   * Change password, Contact support, Sign out. Triggers from the
-   * name-chip in the top-right.
-   */
-  function AccountMenu() {
-    return (
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          aria-label="Account menu"
-          className="inline-flex items-center gap-2 rounded-full border border-border bg-card pl-1 pr-3 py-1 transition-colors hover:border-muted-foreground/40"
-        >
-          <Avatar className="h-7 w-7 border border-border/60">
-            <AvatarFallback className="bg-foreground text-[11px] font-semibold text-background">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
-          <span className="hidden text-[13px] text-foreground/80 sm:inline">
-            {firstName}
-          </span>
-          <ChevronDown className="h-3 w-3 text-muted-foreground" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56" sideOffset={8}>
-          <DropdownMenuLabel className="px-2 pt-2 pb-1 text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground">
-            Account
-          </DropdownMenuLabel>
-          {/*
-            Intentional full-page nav via `window.location.href` instead
-            of `router.push`. The prior `router.push("/app/settings")`
-            raced with Base UI's menu-close focus return and with
-            BetterAuth's 5-minute `cookieCache` refresh — on a stale
-            cache, the RSC prefetch for /app/settings could resolve to
-            a /sign-in redirect, which the navigation then followed,
-            effectively logging the user out. Full reload sends fresh
-            cookies and bypasses the prefetch cache. Matches the
-            Sign Out pattern already in use below.
-          */}
-          <DropdownMenuItem
-            onClick={() => {
-              window.location.href = "/app/settings";
-            }}
-            className="cursor-pointer"
-          >
-            <SettingsIcon className="mr-2.5 h-3.5 w-3.5" />
-            Settings &amp; preferences
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => {
-              window.location.href = "/forgot-password";
-            }}
-            className="cursor-pointer"
-          >
-            <KeyRound className="mr-2.5 h-3.5 w-3.5" />
-            Change password
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() => {
-              window.location.href = "mailto:support@clearpathinvest.app";
-            }}
-            className="cursor-pointer"
-          >
-            <HelpCircle className="mr-2.5 h-3.5 w-3.5" />
-            Contact support
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={handleSignOut}
-            variant="destructive"
-            className="cursor-pointer"
-          >
-            <LogOut className="mr-2.5 h-3.5 w-3.5" />
-            Sign out
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    );
   }
 
   return (
@@ -313,7 +335,11 @@ export default function AppShell({
             <div className="hidden md:block">
               <ThemeToggle />
             </div>
-            <AccountMenu />
+            <AccountMenu
+              initials={initials}
+              firstName={firstName}
+              onSignOut={handleSignOut}
+            />
           </div>
         </div>
       </header>

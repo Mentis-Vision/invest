@@ -79,7 +79,7 @@ export function StrategyFullBrief({ review }: { review: Review }) {
             <ul className="space-y-2.5">
               {review.supervisor.topActions.slice(1).map((a, i) => {
                 const first = a.action.split(/[:\s]/)[0].toUpperCase();
-                const Icon = ACTION_ICON[first] ?? (() => null);
+                const Icon = ACTION_ICON[first] ?? Lightbulb;
                 return (
                   <li key={i} className="flex items-start gap-2 text-sm">
                     <Icon className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
