@@ -195,6 +195,15 @@ export async function saveCacheableRecommendation(input: {
  */
 export type UserRecAction = "took" | "partial" | "ignored" | "opposed";
 
+export type RecSource = "research" | "strategy" | "ad_hoc";
+
+export type ReconciliationStatus =
+  | "verified"
+  | "mismatch_more"
+  | "mismatch_less"
+  | "self_reported_only"
+  | "actual_only";
+
 export type HistoryItem = {
   id: string;
   ticker: string;
@@ -216,6 +225,12 @@ export type HistoryItem = {
   userNote: string | null;
   /** When the user recorded the action. */
   userActionAt: string | null;
+  source: RecSource;
+  sourcePortfolioReviewDate: string | null;
+  selfReportedAmount: string | null;
+  actualAmount: number | null;
+  reconciliationStatus: ReconciliationStatus | null;
+  reconciledAt: string | null;
   outcomes: Array<{
     window: string;
     status: string;
@@ -334,6 +349,9 @@ export async function getRecommendationForUser(
     `SELECT r.id, r.ticker, r.recommendation, r.confidence, r.consensus,
             r."priceAtRec", r.summary, r."dataAsOf", r."createdAt",
             r."analysisJson", r."userAction", r."userNote", r."userActionAt",
+            r."source", r."sourcePortfolioReviewDate",
+            r."selfReportedAmount", r."actualAmount",
+            r."reconciliationStatus", r."reconciledAt",
             COALESCE(json_agg(
               json_build_object(
                 'window', o."window",
@@ -377,6 +395,17 @@ export async function getRecommendationForUser(
     userActionAt: r.userActionAt
       ? (r.userActionAt as Date).toISOString()
       : null,
+    source: (r.source as RecSource) ?? "research",
+    sourcePortfolioReviewDate: r.sourcePortfolioReviewDate
+      ? (r.sourcePortfolioReviewDate as Date).toISOString().slice(0, 10)
+      : null,
+    selfReportedAmount: (r.selfReportedAmount as string | null) ?? null,
+    actualAmount: r.actualAmount != null ? Number(r.actualAmount) : null,
+    reconciliationStatus:
+      (r.reconciliationStatus as ReconciliationStatus | null) ?? null,
+    reconciledAt: r.reconciledAt
+      ? (r.reconciledAt as Date).toISOString()
+      : null,
     outcomes: (r.outcomes as HistoryItem["outcomes"]) ?? [],
     analysisJson,
     supervisorModel,
@@ -388,6 +417,9 @@ export async function getUserHistory(userId: string, limit = 50): Promise<Histor
     `SELECT r.id, r.ticker, r.recommendation, r.confidence, r.consensus,
             r."priceAtRec", r.summary, r."dataAsOf", r."createdAt",
             r."userAction", r."userNote", r."userActionAt",
+            r."source", r."sourcePortfolioReviewDate",
+            r."selfReportedAmount", r."actualAmount",
+            r."reconciliationStatus", r."reconciledAt",
             COALESCE(json_agg(
               json_build_object(
                 'window', o."window",
@@ -428,6 +460,17 @@ export async function getUserHistory(userId: string, limit = 50): Promise<Histor
     userNote: (r.userNote as string | null) ?? null,
     userActionAt: r.userActionAt
       ? (r.userActionAt as Date).toISOString()
+      : null,
+    source: (r.source as RecSource) ?? "research",
+    sourcePortfolioReviewDate: r.sourcePortfolioReviewDate
+      ? (r.sourcePortfolioReviewDate as Date).toISOString().slice(0, 10)
+      : null,
+    selfReportedAmount: (r.selfReportedAmount as string | null) ?? null,
+    actualAmount: r.actualAmount != null ? Number(r.actualAmount) : null,
+    reconciliationStatus:
+      (r.reconciliationStatus as ReconciliationStatus | null) ?? null,
+    reconciledAt: r.reconciledAt
+      ? (r.reconciledAt as Date).toISOString()
       : null,
     outcomes: (r.outcomes as HistoryItem["outcomes"]) ?? [],
   }));
