@@ -89,10 +89,10 @@ export async function computeCounterfactual(
 
     // Daily closes from rec day through today
     const { rows: closes } = await pool.query(
-      `SELECT "asOfDate"::text AS date, close
+      `SELECT captured_at::text AS date, close
        FROM "ticker_market_daily"
-       WHERE ticker = $1 AND "asOfDate" >= $2::date
-       ORDER BY "asOfDate" ASC`,
+       WHERE ticker = $1 AND captured_at >= $2::date
+       ORDER BY captured_at ASC`,
       [rec.ticker, recDay]
     );
     if (closes.length < 2) return null; // not enough data yet

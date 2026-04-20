@@ -185,8 +185,8 @@ async function buildDigestData(user: DigestUser): Promise<WeeklyDigestData> {
   const { rows: moverRows } = await pool.query(
     `SELECT h.ticker, h."lastPrice",
             (SELECT close FROM "ticker_market_daily"
-             WHERE ticker = h.ticker AND "asOfDate" <= NOW()::date - 7
-             ORDER BY "asOfDate" DESC LIMIT 1) AS "priorClose"
+             WHERE ticker = h.ticker AND captured_at <= NOW()::date - 7
+             ORDER BY captured_at DESC LIMIT 1) AS "priorClose"
      FROM "holding" h
      WHERE h."userId" = $1 AND h."lastPrice" IS NOT NULL`,
     [user.userId]

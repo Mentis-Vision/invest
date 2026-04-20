@@ -417,7 +417,9 @@ export async function getUserHistory(
   opts: { limit?: number; onlyActioned?: boolean } = {}
 ): Promise<HistoryItem[]> {
   const { limit = 50, onlyActioned = false } = opts;
-  const actionFilter = onlyActioned ? `AND r."userAction" IS NOT NULL` : "";
+  const actionFilter = onlyActioned
+    ? `AND (r."userAction" IS NOT NULL OR r."source" = 'ad_hoc')`
+    : "";
   const { rows } = await pool.query(
     `SELECT r.id, r.ticker, r.recommendation, r.confidence, r.consensus,
             r."priceAtRec", r.summary, r."dataAsOf", r."createdAt",

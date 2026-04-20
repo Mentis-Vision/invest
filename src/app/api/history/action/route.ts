@@ -102,6 +102,8 @@ export async function POST(
              "selfReportedAmount" = COALESCE($5, "selfReportedAmount"),
              "reconciliationStatus" = CASE
                WHEN $6::bool THEN 'verified'
+               WHEN $1::text IS NOT NULL AND "reconciliationStatus" IS NULL
+                 THEN 'self_reported_only'
                ELSE "reconciliationStatus"
              END,
              "reconciledAt" = CASE
