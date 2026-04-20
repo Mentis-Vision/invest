@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { QuickScanStrip } from "@/components/dashboard/quick-scan-strip";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -87,6 +88,11 @@ export function personaLabel(model: string): string {
     default:
       return model;
   }
+}
+
+function extractTicker(action: string): string | null {
+  const m = action.match(/\b\$?([A-Z]{1,5})\b/);
+  return m ? m[1] : null;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -230,6 +236,7 @@ export function NextMoveHero({
   }
 
   // Active — the full hero with chips.
+  const targetTicker = extractTicker(top.action);
   const firstToken = top.action.split(/[:\s]/)[0].toUpperCase();
   const Icon = ACTION_ICON[firstToken] ?? Lightbulb;
   const priority = top.priority?.toUpperCase() ?? "CONSIDER";
@@ -264,6 +271,13 @@ export function NextMoveHero({
         <p className="text-[14px] leading-relaxed text-foreground/85">
           {top.rationale}
         </p>
+
+        {targetTicker && (
+          <QuickScanStrip
+            ticker={targetTicker}
+            apiPath="/api/dashboard/quick-scan"
+          />
+        )}
 
         {/* Action chips */}
         <div className="flex flex-wrap gap-2">
