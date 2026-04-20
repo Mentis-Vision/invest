@@ -55,11 +55,75 @@ export async function GET(_req: NextRequest) {
       id?: string;
       name?: string;
       institution_name?: string;
+      brokerage_authorization?: string;
       balance?: { total?: { amount?: number; currency?: string } };
     }>;
 
+    // 1b. Fetch brokerage authorization details so we can record connection metadata.
+    // We build a Map<authId, auth> for O(1) lookup below.
+    type AuthDetail = {
+      id?: string;
+      type?: string;
+      disabled?: boolean;
+      brokerage?: { name?: string; slug?: string };
+    };
+    const authMap = new Map<string, AuthDetail>();
+    try {
+      const authsResp = await client.connections.listBrokerageAuthorizations({
+        userId: snaptradeUserId,
+        userSecret,
+      });
+      for (const auth of (authsResp.data ?? []) as AuthDetail[]) {
+        if (auth.id) authMap.set(auth.id, auth);
+      }
+    } catch (err) {
+      log.warn("snaptrade.holdings", "listBrokerageAuthorizations failed", errorInfo(err));
+    }
+
     if (accounts.length === 0) {
       return NextResponse.json({ connected: true, holdings: [], totalValue: 0 });
+    }
+
+    // 1c. Upsert one snaptrade_connection row per unique brokerage_authorization.
+    // Dedupe by authId so multi-account brokerages only write one row.
+    const seenAuthIds = new Set<string>();
+    for (const acct of accounts) {
+      const authId = acct.brokerage_authorization;
+      if (!authId || seenAuthIds.has(authId)) continue;
+      seenAuthIds.add(authId);
+
+      const auth = authMap.get(authId);
+      const brokerageName = auth?.brokerage?.name ?? acct.institution_name ?? null;
+      const brokerageSlug = auth?.brokerage?.slug ?? null;
+      const connectionType = auth?.type ?? null;
+
+      try {
+        await pool.query(
+          `INSERT INTO "snaptrade_connection"
+             (id, "userId", "brokerageAuthorizationId", "brokerageName", "brokerageSlug",
+              "connectionType", disabled, "createdAt", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, false, NOW(), NOW())
+           ON CONFLICT ("userId", "brokerageAuthorizationId") DO UPDATE SET
+             "brokerageName"    = COALESCE(EXCLUDED."brokerageName",    "snaptrade_connection"."brokerageName"),
+             "brokerageSlug"    = COALESCE(EXCLUDED."brokerageSlug",    "snaptrade_connection"."brokerageSlug"),
+             "connectionType"   = COALESCE(EXCLUDED."connectionType",   "snaptrade_connection"."connectionType"),
+             disabled           = false,
+             "updatedAt"        = NOW()`,
+          [
+            crypto.randomUUID(),
+            session.user.id,
+            authId,
+            brokerageName,
+            brokerageSlug,
+            connectionType,
+          ]
+        );
+      } catch (err) {
+        log.warn("snaptrade.holdings", "snaptrade_connection upsert failed", {
+          authId,
+          ...errorInfo(err),
+        });
+      }
     }
 
     type Holding = {
