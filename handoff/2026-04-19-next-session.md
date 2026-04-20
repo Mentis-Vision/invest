@@ -180,3 +180,11 @@ action-chips (Snooze / Dismiss on the Next Move hero). Dashboard
 mobile-responsive pass. Emailed weekly digest (Monday AM recap).
 
 None of these are blockers. Pick based on what the user hits next.
+
+---
+
+## Migration executed 2026-04-19 (app-flow redesign)
+- ALTER TABLE "recommendation": added source, sourcePortfolioReviewDate,
+  selfReportedAmount, actualAmount, reconciliationStatus, reconciledAt.
+- New index: recommendation_user_source_idx.
+- Backfill: existing rows default to source='research'.
