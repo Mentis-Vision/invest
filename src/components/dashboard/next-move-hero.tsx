@@ -12,12 +12,14 @@ import {
   TrendingUp,
   TrendingDown,
   Minus,
+  MinusCircle,
   Zap,
   Check,
   AlarmClock,
   X,
   Undo2,
 } from "lucide-react";
+import { ActionModal, type ActionModalPayload } from "@/components/dashboard/action-modal";
 
 // ── Shared types ─────────────────────────────────────────────────────────────
 
@@ -122,6 +124,7 @@ export function NextMoveHero({
   const top = review.supervisor.topActions[0];
   const state = (review.nextMoveState ?? "active") as NextMoveState;
   const [saving, setSaving] = useState<NextMoveState | "undo" | null>(null);
+  const [modalAction, setModalAction] = useState<"took" | "partial" | "ignored" | null>(null);
 
   async function setState(next: NextMoveState | null, key: NextMoveState | "undo") {
     setSaving(key);
@@ -283,16 +286,21 @@ export function NextMoveHero({
         <div className="flex flex-wrap gap-2">
           <Button
             size="sm"
-            onClick={() => setState("done", "done")}
+            onClick={() => setModalAction("took")}
             disabled={saving !== null}
             className="bg-[var(--buy)] text-white hover:bg-[var(--buy)]/90"
           >
-            {saving === "done" ? (
-              <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
-            ) : (
-              <Check className="mr-1.5 h-3 w-3" />
-            )}
+            <Check className="mr-1.5 h-3 w-3" />
             I did this
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setModalAction("partial")}
+            disabled={saving !== null}
+          >
+            <MinusCircle className="mr-1.5 h-3 w-3" />
+            I did some
           </Button>
           <Button
             size="sm"
@@ -310,18 +318,47 @@ export function NextMoveHero({
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => setState("dismissed", "dismissed")}
+            onClick={() => setModalAction("ignored")}
             disabled={saving !== null}
             className="text-muted-foreground hover:text-foreground"
           >
-            {saving === "dismissed" ? (
-              <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
-            ) : (
-              <X className="mr-1.5 h-3 w-3" />
-            )}
+            <X className="mr-1.5 h-3 w-3" />
             Dismiss
           </Button>
         </div>
+
+        <ActionModal
+          open={modalAction !== null}
+          action={modalAction ?? "took"}
+          recommendation={top.action}
+          ticker={targetTicker}
+          onClose={() => setModalAction(null)}
+          onSave={async (payload: ActionModalPayload) => {
+            try {
+              await fetch("/api/journal/strategy-action", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  action: payload.action,
+                  note: payload.note,
+                  selfReportedAmount: payload.selfReportedAmount,
+                  actionText: top.action,
+                  rationale: top.rationale,
+                  ticker: targetTicker,
+                  consensus: review.supervisor.consensus,
+                }),
+              });
+            } catch {
+              /* non-fatal — hero state still flips */
+            }
+            if (payload.action === "ignored") {
+              await setState("dismissed", "dismissed");
+            } else {
+              await setState("done", "done");
+            }
+            setModalAction(null);
+          }}
+        />
 
         <div className="flex items-center gap-2 border-t border-border/60 pt-3 text-[11px] text-muted-foreground">
           <span>
