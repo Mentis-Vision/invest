@@ -32,6 +32,8 @@ import { MiniSparkline } from "@/components/research/mini-sparkline";
 import { WorthReading } from "@/components/research/worth-reading";
 import { YourBookToday } from "@/components/research/your-book-today";
 import { EventsThisWeek } from "@/components/research/events-this-week";
+import { PastCallsStrip } from "@/components/research/past-calls-strip";
+import { RecentSearchesStrip } from "@/components/research/recent-searches-strip";
 
 type ModelKey = "claude" | "gpt" | "gemini";
 type ToolCallTrace = {
@@ -762,6 +764,11 @@ export default function ResearchView({
         <WorthReading />
       </div>
 
+      {/* Recent searches — only on landing (no active result / loading). */}
+      {!result && !quickResult && !standardResult && !loading && (
+        <RecentSearchesStrip />
+      )}
+
       {/* Single-button flow:
           - Click "Analyze" → instant Quick scan (no mode picker)
           - On the Quick result card → "Go deeper" runs the Deep read
@@ -825,7 +832,9 @@ export default function ResearchView({
             "Key signals" / "Primary risk" so vertical scroll stays tight.
           • Footer: just the "Go deeper" CTA — no tech disclosures. */}
       {quickResult && !loading && (
-        <Card>
+        <>
+          <PastCallsStrip ticker={quickResult.ticker} />
+          <Card>
           <CardHeader className="pb-3 border-b border-[var(--border)]">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0 flex-1">
@@ -943,12 +952,15 @@ export default function ResearchView({
             </div>
           </CardContent>
         </Card>
+        </>
       )}
 
       {/* Standard result — single-lens full thesis. Reuses the analyst-card
           shape from the panel view; one card instead of three. */}
       {standardResult && !loading && (
-        <Card>
+        <>
+          <PastCallsStrip ticker={standardResult.ticker} />
+          <Card>
           {/* Same header treatment as Quick Read: title row with inline
               freshness chip, sparkline + price + verdict badge floating
               right. */}
@@ -1106,6 +1118,7 @@ export default function ResearchView({
             )}
           </CardContent>
         </Card>
+        </>
       )}
 
       {/* Adversarial debate cards on the Deep read result. The bull/bear
