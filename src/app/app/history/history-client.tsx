@@ -253,11 +253,10 @@ export default function HistoryClient({
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight">Track Record</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">Journal</h2>
           <p className="text-sm text-muted-foreground">
-            Every recommendation we&rsquo;ve made for you — with your own
-            action, your note on why, and how it played out at the 7 / 30 /
-            90 / 365-day check. This is your trading journal.
+            Every recommendation you&apos;ve acted on — with your own note,
+            the outcome, and how your decision compares to alternatives.
           </p>
         </div>
         {/* Full-CSV download — just the user's own data, no PII beyond
