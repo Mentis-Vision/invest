@@ -1,16 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Settings, Check } from "lucide-react";
+import { Settings, Check, ChevronDown, ChevronUp } from "lucide-react";
 import { getHoldings } from "@/lib/client/holdings-cache";
 import BlockGrid, { type BlockGridHandle } from "@/components/dashboard/block-grid";
 import { DrillProvider } from "@/components/dashboard/drill-context";
 import DrillPanel from "@/components/dashboard/drill-panel";
+import { Button } from "@/components/ui/button";
+import { NextMoveHero, type Review } from "@/components/dashboard/next-move-hero";
+import { StrategyFullBrief } from "@/components/views/strategy";
 
 /**
  * Dashboard (hybrid-v2 redesign).
  *
  * Layout:
+ *   [Next Move hero (if review loaded)]
+ *   [See the full brief toggle]
  *   [greeting] ———————————— [date] [⚙ Customize]
  *   [BlockGrid — customizable]
  *
@@ -37,6 +42,11 @@ function DashboardBody({ userName }: { userName: string }) {
   const [dayChangePct, setDayChangePct] = useState<number | null>(null);
   const [connected, setConnected] = useState<boolean | null>(null);
 
+  // ── Review state (for Next Move hero) ────────────────────────────
+  const [review, setReview] = useState<Review | null>(null);
+  const [reviewLoading, setReviewLoading] = useState(true);
+  const [showFullBrief, setShowFullBrief] = useState(false);
+
   // ── Hydration-safe time-dependent strings ────────────────────────
   // Server renders in UTC; the user is in their own timezone. If we
   // compute greeting/date at render time, SSR and client hydration
@@ -46,6 +56,25 @@ function DashboardBody({ userName }: { userName: string }) {
   // output byte-for-byte) and fill in after mount.
   const [greeting, setGreeting] = useState("");
   const [dayString, setDayString] = useState("");
+
+  // Fetch the cached portfolio review (same endpoint Strategy used).
+  // GET hits the nightly cache — $0 AI spend on page load.
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/portfolio-review")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!alive || !d || d.error) return;
+        setReview(d as Review);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (alive) setReviewLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     setGreeting(timeGreeting());
@@ -96,6 +125,41 @@ function DashboardBody({ userName }: { userName: string }) {
 
   return (
     <div className="space-y-4">
+      {/* ── Next Move hero — above the greeting, below nothing ── */}
+      {review && (
+        <NextMoveHero
+          review={review}
+          onStateChange={(s) =>
+            setReview((cur) => (cur ? { ...cur, nextMoveState: s } : cur))
+          }
+        />
+      )}
+
+      {/* Full brief — inline expand under the hero */}
+      {review && showFullBrief && <StrategyFullBrief review={review} />}
+
+      {/* Toggle — only shown when a review is available */}
+      {review && (
+        <div className="flex items-center justify-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowFullBrief((v) => !v)}
+            className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+          >
+            {showFullBrief ? (
+              <>
+                <ChevronUp className="h-3.5 w-3.5" /> Hide full brief
+              </>
+            ) : (
+              <>
+                <ChevronDown className="h-3.5 w-3.5" /> See the full brief
+              </>
+            )}
+          </Button>
+        </div>
+      )}
+
       {/* Header row: greeting (left) · date + Customize (right) */}
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 pb-2">
         <h1
