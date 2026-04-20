@@ -42,7 +42,13 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { recommendationId?: unknown; action?: unknown; note?: unknown };
+  let body: {
+    recommendationId?: unknown;
+    action?: unknown;
+    note?: unknown;
+    selfReportedAmount?: unknown;
+    reconciledConfirm?: unknown;
+  };
   try {
     body = await req.json();
   } catch {
@@ -77,6 +83,13 @@ export async function POST(
 
   const finalAction = action === "" ? null : action;
 
+  const selfReportedAmount =
+    typeof body.selfReportedAmount === "string" &&
+    body.selfReportedAmount.trim() !== ""
+      ? body.selfReportedAmount.trim().slice(0, 200)
+      : null;
+  const reconciledConfirm = body.reconciledConfirm === true;
+
   try {
     const result = await pool.query(
       `UPDATE "recommendation"
@@ -85,10 +98,19 @@ export async function POST(
              "userActionAt" = CASE
                WHEN $1::text IS NULL THEN NULL
                ELSE NOW()
+             END,
+             "selfReportedAmount" = COALESCE($5, "selfReportedAmount"),
+             "reconciliationStatus" = CASE
+               WHEN $6::bool THEN 'verified'
+               ELSE "reconciliationStatus"
+             END,
+             "reconciledAt" = CASE
+               WHEN $6::bool THEN NOW()
+               ELSE "reconciledAt"
              END
        WHERE id = $3 AND "userId" = $4
        RETURNING id, "userAction", "userNote", "userActionAt"`,
-      [finalAction, note, recommendationId, session.user.id]
+      [finalAction, note, recommendationId, session.user.id, selfReportedAmount, reconciledConfirm]
     );
 
     if (result.rowCount === 0) {
