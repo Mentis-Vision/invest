@@ -15,6 +15,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -112,57 +113,69 @@ function AccountMenu({
         <ChevronDown className="h-3 w-3 text-muted-foreground" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56" sideOffset={8}>
-        <DropdownMenuLabel className="px-2 pt-2 pb-1 text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground">
-          Account
-        </DropdownMenuLabel>
         {/*
-          Intentional full-page nav via `window.location.href` instead
-          of `router.push`. The prior `router.push("/app/settings")`
-          raced with Base UI's menu-close focus return and with
-          BetterAuth's 5-minute `cookieCache` refresh — on a stale
-          cache, the RSC prefetch for /app/settings could resolve to
-          a /sign-in redirect, which the navigation then followed,
-          effectively logging the user out. Full reload sends fresh
-          cookies and bypasses the prefetch cache. Matches the
-          Sign Out pattern already in use below.
+          Base UI requires Menu.GroupLabel (our DropdownMenuLabel) to be
+          a descendant of a Menu.Group (DropdownMenuGroup). Without the
+          wrapper, MenuGroupLabel's useMenuGroupRootContext() throws
+          Base UI error #31 — "MenuGroupRootContext is missing. Menu
+          group parts must be used within <Menu.Group>." — on every menu
+          open, which surfaces in production as the error-boundary
+          "page couldn't load" screen. The wrapper is cheap + semantic
+          (these four items really are one "Account" group).
         */}
-        <DropdownMenuItem
-          onClick={() => {
-            window.location.href = "/app/settings";
-          }}
-          className="cursor-pointer"
-        >
-          <SettingsIcon className="mr-2.5 h-3.5 w-3.5" />
-          Settings &amp; preferences
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => {
-            window.location.href = "/forgot-password";
-          }}
-          className="cursor-pointer"
-        >
-          <KeyRound className="mr-2.5 h-3.5 w-3.5" />
-          Change password
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={() => {
-            window.location.href = "mailto:support@clearpathinvest.app";
-          }}
-          className="cursor-pointer"
-        >
-          <HelpCircle className="mr-2.5 h-3.5 w-3.5" />
-          Contact support
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={onSignOut}
-          variant="destructive"
-          className="cursor-pointer"
-        >
-          <LogOut className="mr-2.5 h-3.5 w-3.5" />
-          Sign out
-        </DropdownMenuItem>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="px-2 pt-2 pb-1 text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground">
+            Account
+          </DropdownMenuLabel>
+          {/*
+            Intentional full-page nav via `window.location.href` instead
+            of `router.push`. The prior `router.push("/app/settings")`
+            raced with Base UI's menu-close focus return and with
+            BetterAuth's 5-minute `cookieCache` refresh — on a stale
+            cache, the RSC prefetch for /app/settings could resolve to
+            a /sign-in redirect, which the navigation then followed,
+            effectively logging the user out. Full reload sends fresh
+            cookies and bypasses the prefetch cache. Matches the
+            Sign Out pattern already in use below.
+          */}
+          <DropdownMenuItem
+            onClick={() => {
+              window.location.href = "/app/settings";
+            }}
+            className="cursor-pointer"
+          >
+            <SettingsIcon className="mr-2.5 h-3.5 w-3.5" />
+            Settings &amp; preferences
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => {
+              window.location.href = "/forgot-password";
+            }}
+            className="cursor-pointer"
+          >
+            <KeyRound className="mr-2.5 h-3.5 w-3.5" />
+            Change password
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={() => {
+              window.location.href = "mailto:support@clearpathinvest.app";
+            }}
+            className="cursor-pointer"
+          >
+            <HelpCircle className="mr-2.5 h-3.5 w-3.5" />
+            Contact support
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={onSignOut}
+            variant="destructive"
+            className="cursor-pointer"
+          >
+            <LogOut className="mr-2.5 h-3.5 w-3.5" />
+            Sign out
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );
