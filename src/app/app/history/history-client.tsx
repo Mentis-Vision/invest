@@ -28,6 +28,7 @@ import type {
   ReflectionItem,
 } from "@/lib/history";
 import Link from "next/link";
+import { CounterfactualChart } from "@/components/journal/counterfactual-chart";
 
 type OutcomeFilter = "all" | "losses" | "wins";
 
@@ -542,6 +543,8 @@ export default function HistoryClient({
                             )}
                           </div>
                         </div>
+
+                        <CounterfactualChart recId={it.id} />
 
                         <div className="flex justify-end">
                           <Link
