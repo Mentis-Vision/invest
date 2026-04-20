@@ -29,7 +29,7 @@ import type {
 } from "@/lib/history";
 import Link from "next/link";
 
-type OutcomeFilter = "all" | "losses" | "wins" | "acted" | "no-action";
+type OutcomeFilter = "all" | "losses" | "wins";
 
 const REC_STYLE: Record<string, string> = {
   BUY: "bg-[var(--buy)]/10 text-[var(--buy)] border-[var(--buy)]/20",
@@ -156,14 +156,7 @@ export default function HistoryClient({
   const router = useRouter();
   const initialOutcomeFilter = ((): OutcomeFilter => {
     const raw = searchParams.get("filter");
-    if (
-      raw === "losses" ||
-      raw === "wins" ||
-      raw === "acted" ||
-      raw === "no-action"
-    ) {
-      return raw;
-    }
+    if (raw === "losses" || raw === "wins") return raw;
     return "all";
   })();
 
@@ -202,10 +195,6 @@ export default function HistoryClient({
       pool = pool.filter((it) => hasVerdictIn(it, LOSS_VERDICTS));
     } else if (outcomeFilter === "wins") {
       pool = pool.filter((it) => hasVerdictIn(it, WIN_VERDICTS));
-    } else if (outcomeFilter === "acted") {
-      pool = pool.filter((it) => it.userAction !== null);
-    } else if (outcomeFilter === "no-action") {
-      pool = pool.filter((it) => it.userAction === null);
     }
     if (!filter.trim()) return pool;
     const q = filter.trim().toUpperCase();
@@ -343,7 +332,7 @@ export default function HistoryClient({
         </div>
         <div className="flex flex-wrap items-center gap-1 rounded-md border border-border bg-card p-0.5 text-xs">
           {(
-            ["all", "wins", "losses", "acted", "no-action"] as const
+            ["all", "wins", "losses"] as const
           ).map((key) => (
             <button
               key={key}
@@ -355,21 +344,11 @@ export default function HistoryClient({
                     ? "bg-[var(--sell)]/10 text-[var(--sell)]"
                     : key === "wins"
                     ? "bg-[var(--buy)]/10 text-[var(--buy)]"
-                    : key === "acted"
-                    ? "bg-primary/10 text-primary"
                     : "bg-accent text-accent-foreground"
                   : "text-muted-foreground hover:bg-accent/40"
               }`}
             >
-              {key === "all"
-                ? "All"
-                : key === "losses"
-                ? "Losses"
-                : key === "wins"
-                ? "Wins"
-                : key === "acted"
-                ? "You acted"
-                : "Not marked"}
+              {key === "all" ? "All" : key === "losses" ? "Losses" : "Wins"}
             </button>
           ))}
         </div>
@@ -410,60 +389,20 @@ export default function HistoryClient({
         </Card>
       )}
 
-      {outcomeFilter === "acted" && (
-        <Card className="border-primary/30 bg-primary/5">
-          <CardContent className="py-3 text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">Your actions.</span>{" "}
-            Recommendations where you&rsquo;ve recorded what you did. Comparing
-            this pile against the full list answers the important question:{" "}
-            <em>are you picking the right ones to act on?</em>
-          </CardContent>
-        </Card>
-      )}
-
-      {outcomeFilter === "no-action" && (
-        <Card className="border-border bg-secondary/40">
-          <CardContent className="py-3 text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">
-              Unmarked calls.
-            </span>{" "}
-            Recommendations you haven&rsquo;t recorded an action on yet. A
-            healthy journal marks every call — even &ldquo;I decided to
-            ignore this one&rdquo; is worth capturing.
-          </CardContent>
-        </Card>
-      )}
-
       <Card>
         <CardContent className="p-0">
           {filtered.length === 0 ? (
             <div className="py-12 text-center text-sm text-muted-foreground">
               {items.length === 0 ? (
                 <>
-                  No recommendations yet.{" "}
-                  <Link
-                    href="/app?view=research"
-                    className="underline"
-                  >
-                    Run your first research query
-                  </Link>
-                  .
+                  Nothing to journal yet. When you act on a recommendation —
+                  from the Dashboard or Research — it shows up here.{" "}
+                  <Link href="/app" className="underline">Start at the Dashboard →</Link>
                 </>
               ) : outcomeFilter === "losses" ? (
-                <>
-                  No losses to show — nothing has gone against us yet at any
-                  check window.
-                </>
+                <>No losses yet — nothing has gone against you at any check window.</>
               ) : outcomeFilter === "wins" ? (
-                <>No wins to show yet — outcome checks run at 7 / 30 / 90 / 365 days.</>
-              ) : outcomeFilter === "acted" ? (
-                <>
-                  You haven&rsquo;t marked any actions yet. Click{" "}
-                  <strong>Details</strong> on any recommendation and record
-                  what you did.
-                </>
-              ) : outcomeFilter === "no-action" ? (
-                <>All recommendations marked — nice journal discipline.</>
+                <>No wins yet — outcome checks run at 7 / 30 / 90 / 365 days.</>
               ) : (
                 <>No matches for &ldquo;{filter}&rdquo;.</>
               )}
