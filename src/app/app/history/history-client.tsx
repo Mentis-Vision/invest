@@ -167,6 +167,7 @@ export default function HistoryClient({
     initialOutcomeFilter
   );
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [reconcileModalFor, setReconcileModalFor] = useState<HistoryItem | null>(null);
 
   // Auto-expand the first match on "losses" so the user lands on the detail.
   useEffect(() => {
@@ -448,6 +449,30 @@ export default function HistoryClient({
                           Note
                         </Badge>
                       )}
+                      {it.reconciliationStatus === "verified" && (
+                        <Badge variant="outline" className="border-[var(--buy)]/30 bg-[var(--buy)]/10 text-[var(--buy)] text-[10px]">
+                          ✓ Verified
+                        </Badge>
+                      )}
+                      {(it.reconciliationStatus === "mismatch_more" || it.reconciliationStatus === "mismatch_less") && (
+                        <Badge
+                          variant="outline"
+                          className="border-[var(--hold)]/40 bg-[var(--hold)]/10 text-[var(--hold)] text-[10px] cursor-pointer"
+                          onClick={(e) => { e.stopPropagation(); setReconcileModalFor(it); }}
+                        >
+                          ⚠ Mismatch
+                        </Badge>
+                      )}
+                      {it.reconciliationStatus === "self_reported_only" && (
+                        <Badge variant="outline" className="text-muted-foreground text-[10px]">
+                          🕐 Awaiting trade
+                        </Badge>
+                      )}
+                      {it.source === "ad_hoc" && (
+                        <Badge variant="outline" className="border-border text-[10px]">
+                          Ad-hoc
+                        </Badge>
+                      )}
                       <div className="flex-1 truncate text-sm text-muted-foreground">
                         {it.summary}
                       </div>
@@ -563,6 +588,52 @@ export default function HistoryClient({
           )}
         </CardContent>
       </Card>
+
+      {reconcileModalFor && (
+        <div
+          role="dialog"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
+          onClick={(e) => e.target === e.currentTarget && setReconcileModalFor(null)}
+        >
+          <div className="max-w-md rounded-xl border border-border bg-card p-5">
+            <h3 className="text-base font-semibold">Broker shows a different amount</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Your broker shows{" "}
+              <strong className="font-mono">{reconcileModalFor.actualAmount ?? "?"} shares</strong>{" "}
+              on {reconcileModalFor.ticker}, but your journal entry said{" "}
+              <strong>&ldquo;{reconcileModalFor.selfReportedAmount ?? "—"}&rdquo;</strong>. Update?
+            </p>
+            <div className="mt-4 flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setReconcileModalFor(null)}
+              >
+                Different trade · keep as is
+              </Button>
+              <Button
+                size="sm"
+                onClick={async () => {
+                  await fetch(`/api/history/action`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      recommendationId: reconcileModalFor.id,
+                      action: reconcileModalFor.userAction,
+                      selfReportedAmount: `${reconcileModalFor.actualAmount} shares`,
+                      reconciledConfirm: true,
+                    }),
+                  });
+                  setReconcileModalFor(null);
+                  window.location.reload();
+                }}
+              >
+                Update journal to match broker
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
