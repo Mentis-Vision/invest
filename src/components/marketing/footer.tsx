@@ -13,7 +13,7 @@ export default function MarketingFooter() {
                 alt=""
                 width={1024}
                 height={1014}
-                className="h-8 w-8 object-contain"
+                className="h-10 w-10 object-contain"
               />
               <span className="font-heading text-[18px] font-medium">ClearPath</span>
               <span className="ml-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">

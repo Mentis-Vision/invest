@@ -249,7 +249,8 @@ export default function AppShell({
             {/*
               Logomark — founder-provided 1024×1014 PNG at /public/logo.png.
               next/image downscales and emits responsive srcset. Sized up
-              from 28→40 (h-10) on 2026-04-18 for stronger brand presence.
+              from 28→40→48 (h-12) on 2026-04-20 for stronger brand
+              presence per founder feedback.
             */}
             <Image
               src="/logo.png"
@@ -257,9 +258,9 @@ export default function AppShell({
               width={1024}
               height={1014}
               priority
-              className="h-10 w-10 object-contain"
+              className="h-12 w-12 object-contain"
             />
-            <span className="text-[16px] font-semibold tracking-[-0.015em]">
+            <span className="text-[18px] font-semibold tracking-[-0.015em]">
               ClearPath
             </span>
           </Link>
@@ -302,7 +303,7 @@ export default function AppShell({
                     alt=""
                     width={1024}
                     height={1014}
-                    className="h-8 w-8 object-contain"
+                    className="h-10 w-10 object-contain"
                   />
                   <span className="text-[15px] font-semibold tracking-tight">
                     ClearPath

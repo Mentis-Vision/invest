@@ -1,0 +1,78 @@
+<h2>What is "History" actually for?</h2>
+<p class="subtitle">
+  Today it's a mashup: every research query + every recommendation + the few
+  actions you've marked. That's why you got a "recommendation on a stock you
+  don't own" — Research on NVDA-out-of-curiosity landed in the same pile as
+  "LINK is 51% of your portfolio." Three ways to untangle it:
+</p>
+
+<div class="options">
+  <div class="option" data-choice="journal" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Rename to "Journal" — actions only</h3>
+      <p style="margin-bottom:8px">
+        The page shows <strong>only rows you've taken an action on</strong>
+        (Took / Partial / Ignored / Opposed). If you dismissed the Strategy
+        move on LINK, it shows up here. If you researched NVDA for fun and
+        never acted, it does NOT show up here — it lives on the Research
+        page as a small "Recent searches" strip.
+      </p>
+      <p style="font-size:12px;color:#15803d;margin:0">
+        Pros: Crystal-clear purpose. Everything in the journal is signal.
+        Pattern insights + reflection prompts get sharper.
+        Cons: "Where did that NVDA research go?" → answer: Research page's
+        Recent strip. Need a quick link to find it.
+      </p>
+    </div>
+  </div>
+  <div class="option" data-choice="split" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Two tabs on the same page: "Actions" and "Research log"</h3>
+      <p style="margin-bottom:8px">
+        Keep the page named "Track Record" or similar. Two tabs inside:
+        one for actions (journal), one for every ticker you've researched
+        whether you acted on it or not. User chooses the lens.
+      </p>
+      <p style="font-size:12px;color:#15803d;margin:0">
+        Pros: Everything in one place. Power users like the tab separation.
+        Cons: Two mental models under one label. Default tab becomes a
+        bikeshed.
+      </p>
+    </div>
+  </div>
+  <div class="option" data-choice="mixed" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Keep everything mixed, fix labels per-row</h3>
+      <p style="margin-bottom:8px">
+        One flat list, every row clearly marked — "Research (unacted)",
+        "Action: Took", "Strategy move: Dismissed". User filters with the
+        existing chip bar.
+      </p>
+      <p style="font-size:12px;color:#15803d;margin:0">
+        Pros: Minimum churn to the data model.
+        Cons: Same fundamental confusion as today — page still has no
+        single purpose.
+      </p>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top:24px;padding:12px;background:rgba(37,99,235,0.05);border:1px solid rgba(37,99,235,0.2);border-radius:8px;font-size:13px">
+  <strong style="color:#2563eb">My recommendation: A (Journal).</strong>
+  Your concern was "a recommendation on a stock I don't own showed up" —
+  that's because Research queries and Actions share a surface. Splitting
+  them cleanly fixes the "this shouldn't be here" feeling AND gives us
+  sharper pattern insights (we stop averaging "things you looked at" with
+  "things you actually did").
+</div>
+
+<div style="margin-top:16px;padding:12px;background:#f4f7fb;border-radius:8px;font-size:12px;color:#6b7684">
+  <strong style="color:#0b1220">Side note — the IONQ verdict mismatch:</strong>
+  Independent of what we pick above, the fix is freshness badges and a
+  "Run fresh" link on journal rows, plus a "Your past calls on this ticker"
+  strip on every Research result. I'll fold that into the design regardless
+  — happy to tackle it as a separate question after this one if you want.
+</div>

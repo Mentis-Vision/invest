@@ -23,7 +23,7 @@ export default function MarketingNav() {
             width={1024}
             height={1014}
             priority
-            className="h-9 w-9 object-contain"
+            className="h-11 w-11 object-contain"
           />
           <span className="font-heading text-[18px] font-medium tracking-tight">
             ClearPath

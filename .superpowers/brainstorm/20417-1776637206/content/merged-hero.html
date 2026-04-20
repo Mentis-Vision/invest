@@ -1,0 +1,114 @@
+<h2>Merged Next Move hero + counterfactual placement</h2>
+<p class="subtitle">
+  Quick-scan data pre-populated — no click, no AI cost (Yahoo + warehouse
+  data). Everything you need to decide is visible on landing. Then one
+  question about where the counterfactual visualization lives.
+</p>
+
+<div class="section">
+  <div class="label">The merged hero — all on Dashboard, above the fold</div>
+  <div class="mockup">
+    <div class="mockup-header">Dashboard · top card</div>
+    <div class="mockup-body" style="padding:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-family:ui-monospace,monospace;font-size:10px;letter-spacing:.2em;color:#15803d;text-transform:uppercase">⚡ Next move · today</div>
+        <span style="padding:2px 8px;border-radius:12px;background:#fee2e2;color:#dc2626;font-size:10px;font-family:ui-monospace,monospace;text-transform:uppercase;letter-spacing:.1em">HIGH</span>
+      </div>
+      <div style="font-size:20px;font-weight:600;margin-bottom:4px;line-height:1.2">↘ Reduce LINK to 25% of portfolio</div>
+      <div style="font-size:13px;color:#6b7684;margin-bottom:14px;line-height:1.5">Concentration at 51% creates material single-position risk. Quality lens flagged it first, Momentum + Context agreed.</div>
+
+      <!-- Pre-populated quick-scan strip -->
+      <div style="background:#f4f7fb;border-radius:6px;padding:12px;margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+          <div style="font-size:13px"><strong style="font-family:ui-monospace,monospace">LINK</strong> · Chainlink · <strong>$12.48</strong> <span style="color:#dc2626">-2.4% today</span></div>
+          <a style="font-size:11px;color:#2563eb;text-decoration:none" href="#">Full research →</a>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:10px">
+          <div><div class="label" style="margin-bottom:2px">52w range</div><div style="font-family:ui-monospace,monospace;font-size:12px">$8.40 – $22.10</div></div>
+          <div><div class="label" style="margin-bottom:2px">Your avg</div><div style="font-family:ui-monospace,monospace;font-size:12px">$14.22</div></div>
+          <div><div class="label" style="margin-bottom:2px">Unrealized</div><div style="font-family:ui-monospace,monospace;font-size:12px;color:#dc2626">-12%</div></div>
+          <div><div class="label" style="margin-bottom:2px">30d move</div><div style="font-family:ui-monospace,monospace;font-size:12px;color:#dc2626">-8.7%</div></div>
+          <div><div class="label" style="margin-bottom:2px">RSI(14)</div><div style="font-family:ui-monospace,monospace;font-size:12px">32 <span style="color:#ca8a04">oversold</span></div></div>
+        </div>
+        <div style="font-size:11px;color:#6b7684;padding-top:8px;border-top:1px solid #e4e9f1">
+          📰 "Chainlink Labs expands CCIP integrations with major banks…" (IBD · 2h ago)
+        </div>
+      </div>
+
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="mock-button" style="background:#15803d;color:#fff;border:none;font-size:12px">✓ I did this</button>
+        <button class="mock-button" style="background:#fff;border:1px solid #e4e9f1;font-size:12px">~ I did some</button>
+        <button class="mock-button" style="background:#fff;border:1px solid #e4e9f1;font-size:12px">⏰ Snooze today</button>
+        <button class="mock-button" style="background:#fff;border:1px solid #e4e9f1;font-size:12px">× Dismiss</button>
+      </div>
+    </div>
+  </div>
+  <p style="font-size:12px;color:#6b7684;margin-top:6px">
+    Five data points + headline + day move + rationale, all above the action chips.
+    Data sources: warehouse (free), Yahoo quote (free). <strong>$0 AI cost per render.</strong>
+    On mobile the data grid collapses to 2 columns; rest stays.
+  </p>
+</div>
+
+<h3 style="margin-top:30px">Where does the counterfactual live?</h3>
+
+<div class="options">
+  <div class="option" data-choice="dashboard-compact" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Compact on Dashboard, full on Journal</h3>
+      <p style="margin-bottom:6px">
+        On the Dashboard, AFTER you've acted on a Next Move, a small strip
+        appears: <em>"You trimmed LINK 4 days ago → +$180 vs counterfactual.
+        See details →"</em> Full three-bar comparison lives on the Journal.
+      </p>
+      <p style="font-size:12px;color:#15803d;margin:0">
+        Pros: Dashboard gets a little reward, not overwhelming.<br/>
+        Cons: Two places to maintain the component.
+      </p>
+    </div>
+  </div>
+  <div class="option" data-choice="journal-only" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Journal only — clean separation</h3>
+      <p style="margin-bottom:6px">
+        Dashboard stays "today-focused." Full three-bar counterfactual only on
+        the Journal page. You go there when you want to reflect (weekly, not daily).
+      </p>
+      <p style="font-size:12px;color:#15803d;margin:0">
+        Pros: Single source of truth. Dashboard never feels retrospective.<br/>
+        Cons: Might forget it exists; less dopamine for the "I acted" moment.
+      </p>
+    </div>
+  </div>
+  <div class="option" data-choice="both-full" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Full bar chart on both Dashboard AND Journal</h3>
+      <p style="margin-bottom:6px">
+        Same three-bar widget everywhere. Dashboard shows it under the hero
+        when an action has been logged. Journal shows it as the primary card.
+      </p>
+      <p style="font-size:12px;color:#15803d;margin:0">
+        Pros: Strongest reinforcement loop.<br/>
+        Cons: Dashboard density keeps climbing.
+      </p>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top:20px;padding:12px;background:rgba(37,99,235,0.05);border:1px solid rgba(37,99,235,0.2);border-radius:8px;font-size:13px">
+  <strong style="color:#2563eb">My recommendation: A.</strong>
+  You get the reward on Dashboard ("my action is paying off"), but the
+  deeper analysis is in the Journal where it belongs. Dashboard stays
+  forward-looking ("what's next"); Journal is backward-looking ("what did
+  I do"). Splitting the two keeps each coherent.
+</div>
+
+<div style="margin-top:16px;padding:12px;background:#f4f7fb;border-radius:8px;font-size:12px;color:#6b7684">
+  <strong style="color:#0b1220">Quick confirm — sticking with A (Journal = actions only)?</strong>
+  You leaned B earlier ("convenience") but the walkthrough naturally used A
+  because Recent Searches moved to Research. Want to confirm A, or should I
+  add a Research-log tab alongside Actions?
+</div>

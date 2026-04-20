@@ -34,15 +34,26 @@ having two sources of truth (SVG vs PNG) was a bug magnet.
 
 ### Where it ships today
 
-- **App header** (`src/components/app-shell.tsx`) — 28×28 next to
-  "ClearPath" wordmark.
-- **Mobile drawer** (`src/components/app-shell.tsx`) — 24×24 in the
-  sheet header.
-- **Marketing top nav** (`src/components/marketing/nav.tsx`).
-- **Marketing footer** (`src/components/marketing/footer.tsx`).
-- **Sign in / Sign up / Forgot password / Reset password** — all
-  auth pages render the mark at 16×16 above the title.
-- **Browser tab + bookmarks** — via `/public/icon.svg`.
+- **App header** (`src/components/app-shell.tsx`) — **48×48** next to
+  "ClearPath" wordmark (18px).
+- **Mobile drawer** (`src/components/app-shell.tsx`) — **40×40** in
+  the sheet header.
+- **Marketing top nav** (`src/components/marketing/nav.tsx`) — **44×44**.
+- **Marketing footer** (`src/components/marketing/footer.tsx`) — **40×40**.
+- **Auth pages** (Sign in / Sign up / Forgot password / Reset password
+  / Verify / Verify-2FA) — **64×64** stacked above a spaced
+  "ClearPath Invest" uppercase wordmark label. Consistent masthead
+  across every auth surface.
+- **Browser tab + bookmarks** — Next.js file-based icon convention
+  via `src/app/icon.png` + `src/app/apple-icon.png` (copies of
+  `/public/logo.png`). The file-based route takes precedence over
+  metadata config and ships cache-friendly responses automatically.
+
+**Sizing rule of thumb:** 48px in the app header (anchor the brand
+alongside content), 64px on auth pages (brand-first surfaces),
+40-44px in marketing chrome. Never smaller than 40px in any
+user-facing surface; never larger than 64px except inside a
+marketing hero.
 
 ## Color palette (hybrid-v2, April 2026)
 
