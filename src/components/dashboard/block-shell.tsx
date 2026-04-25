@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { GripVertical, X } from "lucide-react";
 import type { BlockSize } from "@/lib/dashboard-layout";
+import { WidgetBoundary } from "./widget-boundary";
 
 /**
  * Shared chrome for every dashboard block.
@@ -173,7 +174,7 @@ export function BlockShell({
         </h2>
         {hint && <span className="text-[11px] text-muted-foreground">{hint}</span>}
       </div>
-      {children}
+      <WidgetBoundary name={title}>{children}</WidgetBoundary>
     </section>
   );
 }

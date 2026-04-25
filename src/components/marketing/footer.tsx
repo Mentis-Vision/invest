@@ -32,6 +32,10 @@ export default function MarketingFooter() {
               </h4>
               <ul className="space-y-2">
                 <li><Link href="/how-it-works" className="text-foreground/80 hover:text-foreground">How It Works</Link></li>
+                <li><Link href="/research" className="text-foreground/80 hover:text-foreground">Weekly brief</Link></li>
+                <li><Link href="/alternatives" className="text-foreground/80 hover:text-foreground">Compare</Link></li>
+                <li><Link href="/stocks" className="text-foreground/80 hover:text-foreground">Stocks</Link></li>
+                <li><Link href="/track-record" className="text-foreground/80 hover:text-foreground">Track record</Link></li>
                 <li><Link href="/pricing" className="text-foreground/80 hover:text-foreground">Pricing</Link></li>
                 <li><Link href="/sign-in" className="text-foreground/80 hover:text-foreground">Sign in</Link></li>
               </ul>
@@ -42,7 +46,7 @@ export default function MarketingFooter() {
               </h4>
               <ul className="space-y-2">
                 <li><Link href="/manifesto" className="text-foreground/80 hover:text-foreground">Manifesto</Link></li>
-                <li><a href="mailto:hello@clearpath-invest.com" className="text-foreground/80 hover:text-foreground">Contact</a></li>
+                <li><a href="mailto:hello@clearpathinvest.app" className="text-foreground/80 hover:text-foreground">Contact</a></li>
               </ul>
             </div>
             <div>
@@ -90,6 +94,11 @@ export default function MarketingFooter() {
               Data sources: <span className="text-foreground/70">SEC · FRED · Yahoo Finance · + 9 more</span>
             </p>
           </div>
+          <p className="mt-3 text-[11px] text-muted-foreground/70">
+            A{" "}
+            <span className="font-medium text-foreground/70">Mentis Vision</span>{" "}
+            product.
+          </p>
         </div>
       </div>
     </footer>

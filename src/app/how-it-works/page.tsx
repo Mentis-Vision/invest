@@ -1,11 +1,27 @@
+import type { Metadata } from "next";
 import MarketingNav from "@/components/marketing/nav";
 import MarketingFooter from "@/components/marketing/footer";
 import WaitlistForm from "@/components/marketing/waitlist-form";
 import { Database, LineChart, Scale, FileText, ShieldCheck, AlertTriangle, CheckCircle2 } from "lucide-react";
 
-export const metadata = {
-  title: "How It Works · ClearPath Invest",
-  description: "The five-stage research pipeline: ingest, analyze, verify, supervise, deliver.",
+export const metadata: Metadata = {
+  title: "How It Works",
+  description:
+    "How ClearPath Invest turns live SEC, Federal Reserve, and market data into a traceable stock-research brief — in five stages, across three investment lenses.",
+  alternates: { canonical: "/how-it-works" },
+  openGraph: {
+    title: "How ClearPath's research pipeline works",
+    description:
+      "Five stages, three lenses, zero unverified claims. Live SEC + Fed data through Quality, Momentum, and Context analysis.",
+    url: "/how-it-works",
+    type: "article",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "How ClearPath's research pipeline works",
+    description:
+      "Five stages, three lenses, zero unverified claims. Live SEC + Fed data through Quality, Momentum, and Context analysis.",
+  },
 };
 
 const stages = [
@@ -21,9 +37,9 @@ const stages = [
     n: "02",
     title: "Analyze",
     icon: LineChart,
-    lead: "Three reasoning engines. Same evidence. Independent analysis.",
-    body: "The gathered data is sent — in parallel — to three distinct reasoning engines: Claude, GPT, and Gemini. Each works in isolation. Each produces a structured analysis: recommendation, confidence level, supporting signals with cited data points, and explicit risk factors. No chain-of-thought contamination between models.",
-    emphasis: "3 independent perspectives",
+    lead: "Three lenses. Same evidence. Independent analysis.",
+    body: "The gathered data is examined in parallel by three investment lenses — Quality, Momentum, and Context. Each applies its own discipline: fundamentals and competitive position (Quality), price action and sentiment (Momentum), and macro/sector context (Context). Under the hood, each lens is backed by a frontier model (Claude, GPT, Gemini) so no single vendor's blind spot becomes yours. Each lens produces a structured analysis: recommendation, confidence, signals with cited data, and explicit risks.",
+    emphasis: "3 independent lenses · 3 model families",
   },
   {
     n: "03",
@@ -38,7 +54,7 @@ const stages = [
     title: "Calibrate",
     icon: ShieldCheck,
     lead: "Consensus strength determines confidence.",
-    body: "Unanimous across all three models with verified data → HIGH confidence. Majority (2 of 3) → downgraded one level. Split decision → defaults to HOLD with LOW confidence. Any model returning INSUFFICIENT_DATA triggers an honest escalation: we tell you what we need to produce a more confident call.",
+    body: "Unanimous across all three lenses with verified data → HIGH confidence. Majority (2 of 3) → downgraded one level. Split decision → defaults to HOLD with LOW confidence. Any lens returning INSUFFICIENT_DATA triggers an honest escalation: we tell you what we'd need to produce a more confident call.",
     emphasis: "Honest confidence calibration",
   },
   {
@@ -65,13 +81,41 @@ const guarantees = [
   {
     icon: ShieldCheck,
     title: "You see disagreement, not hidden consensus",
-    body: "If Claude says BUY but GPT says SELL, that disagreement shows up in your brief. Other tools hide it. We surface it.",
+    body: "If the Quality lens says BUY but Momentum says SELL, that disagreement shows up in your brief. Other tools hide it. We surface it.",
   },
 ];
+
+// HowTo JSON-LD — describes the five-stage research pipeline.
+// XSS-safety: the use of dangerouslySetInnerHTML below is safe because
+// `howToLd` is a hard-coded server-side constant (derived from the
+// `stages` array above, which is also a server-side constant). There is
+// no user input, no DB value, no query param anywhere in this payload.
+// This is the Next.js-recommended pattern for JSON-LD injection, see
+// https://nextjs.org/docs/app/guides/json-ld.
+const howToLd = {
+  "@context": "https://schema.org",
+  "@type": "HowTo",
+  name: "How ClearPath Invest's five-stage research pipeline works",
+  description:
+    "From a ticker to a traceable research brief: ingest live data, analyze across three investment lenses, verify every claim, calibrate confidence, and deliver a structured brief.",
+  totalTime: "PT1M",
+  step: stages.map((s, i) => ({
+    "@type": "HowToStep",
+    position: i + 1,
+    name: s.title,
+    text: s.body,
+  })),
+} as const;
 
 export default function HowItWorks() {
   return (
     <div className="min-h-screen bg-background">
+      {/* JSON-LD structured data — see safety note above. Enables HowTo
+          rich results on Google and AI-citation surfaces. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(howToLd) }}
+      />
       <MarketingNav />
 
       {/* Header */}
@@ -130,6 +174,142 @@ export default function HowItWorks() {
                 </div>
               );
             })}
+          </div>
+        </div>
+      </section>
+
+      {/* Example brief — shows the actual structured output Stage 05
+          describes. Before this section was added, the page talked about
+          a "brief" without ever rendering one. Clearly labeled as an
+          illustrative example + informational-only, per legal guardrails. */}
+      <section className="border-t border-border py-20">
+        <div className="mx-auto max-w-4xl px-6">
+          <div className="mb-10 text-center">
+            <div className="mb-3 font-mono text-[11px] uppercase tracking-[0.25em] text-muted-foreground">
+              Example output
+            </div>
+            <h2 className="font-heading text-[36px] leading-tight tracking-tight md:text-[46px]">
+              What a <em className="italic text-[var(--buy)]">brief</em> looks like.
+            </h2>
+            <p className="mx-auto mt-3 max-w-[560px] text-[15px] leading-relaxed text-muted-foreground">
+              Five-stage pipeline, rendered as a single structured document —
+              verdict, consensus strength, the three lenses&rsquo; signals,
+              disagreements, and every claim citing its source.
+            </p>
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-[0_1px_0_0_rgba(0,0,0,0.03),0_24px_48px_-24px_rgba(26,26,30,0.12)]">
+            {/* Header */}
+            <div className="flex flex-wrap items-center justify-between gap-y-1 border-b border-border/70 bg-secondary/30 px-6 py-3">
+              <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                <span>AAPL</span>
+                <span className="text-foreground/20">·</span>
+                <span>Example brief</span>
+              </div>
+              <div className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--buy)]">
+                <ShieldCheck className="h-3 w-3" />
+                Verified · 12 sources
+              </div>
+            </div>
+
+            {/* Verdict */}
+            <div className="border-b border-border px-6 py-5">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                    Apple Inc.
+                  </div>
+                  <div className="mt-0.5 font-mono text-sm text-foreground">
+                    $187.44 <span className="text-[var(--sell)]">−0.6%</span>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-1">
+                  <span className="rounded-md border border-[var(--buy)]/25 bg-[var(--buy)]/10 px-3 py-1 text-sm font-semibold text-[var(--buy)]">
+                    BUY
+                  </span>
+                  <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                    MEDIUM confidence · 2 of 3 lenses agree
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Three lenses */}
+            <div className="divide-y divide-border border-b border-border md:grid md:grid-cols-3 md:divide-x md:divide-y-0">
+              {[
+                {
+                  lens: "Quality",
+                  call: "BUY",
+                  tone: "buy" as const,
+                  signal:
+                    "Services revenue +16% YoY (10-Q, Q2 FY26); operating margin 31.5%, sector median 14.8%.",
+                },
+                {
+                  lens: "Momentum",
+                  call: "BUY",
+                  tone: "buy" as const,
+                  signal:
+                    "50d MA above 200d MA; RSI 58 (neutral-bullish); 20-day volume +12% vs 90-day avg.",
+                },
+                {
+                  lens: "Context",
+                  call: "HOLD",
+                  tone: "hold" as const,
+                  signal:
+                    "Fed funds 5.33% compresses mega-cap multiples; China revenue −9% (10-Q); supply-chain headlines elevated.",
+                },
+              ].map((row) => (
+                <div key={row.lens} className="p-5">
+                  <div className="flex items-center justify-between">
+                    <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+                      {row.lens}
+                    </div>
+                    <span
+                      className={`rounded-sm px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider ${
+                        row.tone === "buy"
+                          ? "bg-[var(--buy)]/10 text-[var(--buy)]"
+                          : "bg-[var(--hold)]/10 text-[var(--hold)]"
+                      }`}
+                    >
+                      {row.call}
+                    </span>
+                  </div>
+                  <p className="mt-3 text-[13px] leading-relaxed text-foreground/85">
+                    {row.signal}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {/* Disagreement + summary */}
+            <div className="space-y-3 px-6 py-5 text-[14px] leading-relaxed text-foreground/85">
+              <div>
+                <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+                  Where the lenses disagree
+                </div>
+                <p>
+                  Quality and Momentum support a BUY on fundamentals and
+                  trend. Context flags macro headwinds (rates, China) that
+                  could compress multiples on a 3–6 month horizon.
+                </p>
+              </div>
+              <div>
+                <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+                  Summary
+                </div>
+                <p>
+                  A BUY call, but downgraded to MEDIUM confidence because the
+                  three lenses split 2-to-1. Entry under $180 preferred. Re-
+                  evaluate after next FOMC or the FY26 Q3 print, whichever
+                  comes first.
+                </p>
+              </div>
+            </div>
+
+            {/* Footer / disclaimer */}
+            <div className="border-t border-border bg-secondary/20 px-6 py-3 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground/70">
+              Illustrative example · Informational only · Not investment advice
+            </div>
           </div>
         </div>
       </section>

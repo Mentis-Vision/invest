@@ -9,6 +9,7 @@ import {
 import { pool } from "@/lib/db";
 import { log, errorInfo } from "@/lib/log";
 import { getTickerMetadataBatch } from "@/lib/data/ticker-metadata";
+import { sumMoney } from "@/lib/money";
 
 /**
  * GET /api/snaptrade/holdings
@@ -289,7 +290,12 @@ export async function GET(_req: NextRequest) {
       /* ignore */
     }
 
-    const totalValue = aggregated.reduce((s, h) => s + h.value, 0);
+    // sumMoney (cents-integer) rather than float reduce — drift across
+    // a multi-position portfolio otherwise surfaces as a total that
+    // disagrees with the brokerage's reported number by pennies,
+    // which reads as a correctness problem even though no money is
+    // actually wrong.
+    const totalValue = sumMoney(...aggregated.map((h) => h.value));
     const institutions = [
       ...new Set(
         accounts.map((a) => a.institution_name).filter((x): x is string => !!x)
@@ -299,14 +305,31 @@ export async function GET(_req: NextRequest) {
     // Sum broker-reported balances across accounts — this is the
     // authoritative "total in your brokerage including cash/settlements"
     // number, whereas `totalValue` above is just positions × price.
-    // The delta is cash drag; both are useful to surface.
-    const brokerageBalance = accounts.reduce((sum, a) => {
-      const amt = Number(a.balance?.total?.amount ?? 0);
-      return sum + (Number.isFinite(amt) ? amt : 0);
-    }, 0);
+    // The delta is cash drag; both are useful to surface. sumMoney
+    // silently skips non-finite entries so a broken balance field
+    // on one account doesn't poison the aggregate.
+    const brokerageBalance = sumMoney(
+      ...accounts.map((a) => Number(a.balance?.total?.amount ?? 0))
+    );
     const balanceCurrency =
       accounts.find((a) => a.balance?.total?.currency)?.balance?.total
         ?.currency ?? "USD";
+
+    // Snapshot-level freshness — max lastSyncedAt across all sources
+    // (SnapTrade rows just stamped NOW() above; Plaid rows stamped
+    // whenever the most recent webhook / exchange-initiated sync ran).
+    // Users see this as "Updated X ago" in the portfolio header so they
+    // can judge whether to act on the current numbers.
+    let lastSyncedAt: string | null = null;
+    try {
+      const { rows: syncRows } = await pool.query<{ ts: Date | null }>(
+        `SELECT MAX("lastSyncedAt") AS ts FROM "holding" WHERE "userId" = $1`,
+        [session.user.id]
+      );
+      lastSyncedAt = syncRows[0]?.ts?.toISOString() ?? null;
+    } catch {
+      /* ignore — freshness is cosmetic, not required */
+    }
 
     return NextResponse.json({
       connected: true,
@@ -316,6 +339,7 @@ export async function GET(_req: NextRequest) {
       balanceCurrency,
       institutions,
       accountCount: accounts.length,
+      lastSyncedAt,
     });
   } catch (err) {
     log.error("snaptrade.holdings", "unexpected failure", {

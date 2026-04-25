@@ -4,6 +4,33 @@ import MarketingFooter from "@/components/marketing/footer";
 import WaitlistForm from "@/components/marketing/waitlist-form";
 import { Check, ArrowUpRight, Database, FileText, LineChart, ShieldCheck, Scale } from "lucide-react";
 
+// Landing-page JSON-LD: SoftwareApplication + ItemList of data sources.
+// XSS-safe — all content is server-side static constants (see note in
+// root layout).
+const softwareAppLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "ClearPath Invest",
+  applicationCategory: "FinanceApplication",
+  applicationSubCategory: "Investment Research",
+  operatingSystem: "Web",
+  description:
+    "Evidence-based stock research for retail investors. Three independent lenses — Quality, Momentum, Context — examine live SEC, Federal Reserve, and market data. Every claim traces to a primary source.",
+  offers: [
+    { "@type": "Offer", name: "Beta (private)", price: "0", priceCurrency: "USD" },
+    { "@type": "Offer", name: "Individual", price: "29", priceCurrency: "USD" },
+    { "@type": "Offer", name: "Active", price: "79", priceCurrency: "USD" },
+    { "@type": "Offer", name: "Advisor", price: "500", priceCurrency: "USD" },
+  ],
+  featureList: [
+    "Live data from 12+ authoritative sources (SEC EDGAR, FRED, Yahoo Finance, BLS, CBO, FDIC, and more)",
+    "Three investment lenses — Quality, Momentum, Context — cross-examine the same verified evidence",
+    "Every number traces to a primary source",
+    "Honest confidence calibration: HOLD by default when evidence is ambiguous",
+    "Transparent model disagreement surfaced, never hidden",
+  ],
+} as const;
+
 const dataSources = [
   { name: "SEC EDGAR", sub: "10-K / 10-Q / 8-K filings" },
   { name: "FRED", sub: "Federal Reserve Economic Data" },
@@ -29,7 +56,7 @@ const otherToolsCons = [
 
 const clearPathPros = [
   "Live data from 12+ authoritative sources",
-  "Three independent reasoning engines cross-check each other",
+  "Three investment lenses — Quality, Momentum, Context — cross-examine the same evidence",
   "Every number traces to a primary source",
   "Bias toward HOLD when evidence is ambiguous",
   "Tells you exactly what it needs to be more confident",
@@ -38,6 +65,15 @@ const clearPathPros = [
 export default function Landing() {
   return (
     <div className="min-h-screen bg-background">
+      {/* JSON-LD structured data. The dangerouslySetInnerHTML below is
+          XSS-safe: `softwareAppLd` is a hard-coded server-side constant
+          (no user input, no DB value, no query param). This is the
+          Next.js-recommended pattern for JSON-LD — see
+          https://nextjs.org/docs/app/guides/json-ld. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareAppLd) }}
+      />
       <MarketingNav />
 
       {/* HERO */}
@@ -59,13 +95,13 @@ export default function Landing() {
           </div>
 
           <h1 className="font-heading text-[56px] leading-[1.02] tracking-tight text-foreground sm:text-[72px] md:text-[88px]">
-            Know what to do
+            Stock research.
             <br />
-            with <em className="italic text-[var(--buy)]">your money.</em>
+            Every claim <em className="italic text-[var(--buy)]">sourced.</em>
           </h1>
 
           <p className="mx-auto mt-6 max-w-[620px] text-[17px] leading-relaxed text-muted-foreground md:text-[18px]">
-            Every recommendation begins with real data — <span className="text-foreground">SEC filings, Federal Reserve indicators, live market prices</span> — then runs through rigorous, triple-verified analysis. Every claim traces to a source.
+            Evidence-based equity research for retail investors. Three independent lenses — <span className="text-foreground">Quality, Momentum, Context</span> — examine live data from SEC filings, the Federal Reserve, and market feeds. Every number traces to a primary source.
           </p>
 
           <div id="access" className="mx-auto mt-10 max-w-md">
@@ -79,11 +115,11 @@ export default function Landing() {
         {/* Mock verdict card preview */}
         <div className="relative mx-auto max-w-3xl px-6 pb-16">
           <div className="rounded-xl border border-border bg-card shadow-[0_1px_0_0_rgba(0,0,0,0.03),0_24px_48px_-24px_rgba(26,26,30,0.15)]">
-            <div className="flex items-center justify-between border-b border-border/70 px-6 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-y-1 border-b border-border/70 px-6 py-3">
               <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                 <span>NVDA</span>
                 <span className="text-foreground/20">·</span>
-                <span>Analysis</span>
+                <span>Example analysis</span>
               </div>
               <div className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--buy)]">
                 <ShieldCheck className="h-3 w-3" />
@@ -113,16 +149,22 @@ export default function Landing() {
               <div className="mt-5 grid grid-cols-3 gap-3 border-t border-border pt-4 text-[11px] font-mono">
                 <div className="flex items-center gap-1.5">
                   <div className="h-1.5 w-1.5 rounded-full bg-[var(--buy)]" />
-                  <span className="text-muted-foreground">Claude: HOLD</span>
+                  <span className="text-muted-foreground">Quality: HOLD</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <div className="h-1.5 w-1.5 rounded-full bg-[var(--buy)]" />
-                  <span className="text-muted-foreground">GPT: HOLD</span>
+                  <span className="text-muted-foreground">Momentum: HOLD</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <div className="h-1.5 w-1.5 rounded-full bg-[var(--buy)]" />
-                  <span className="text-muted-foreground">Gemini: HOLD</span>
+                  <span className="text-muted-foreground">Context: HOLD</span>
                 </div>
+              </div>
+              {/* Informational-only micro-label — required by AGENTS.md on
+                  every verdict surface. Lives inside the card so it travels
+                  with any screenshot of the mock. */}
+              <div className="mt-4 border-t border-border pt-3 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground/70">
+                Illustrative example · Informational only · Not investment advice
               </div>
             </div>
           </div>
@@ -155,7 +197,7 @@ export default function Landing() {
           <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
             {[
               { n: "01", icon: Database, title: "Ingest", body: "Pull live data from 12+ authoritative sources — SEC filings, Fed indicators, real prices. Nothing cached, nothing summarized." },
-              { n: "02", icon: LineChart, title: "Analyze", body: "Three independent reasoning engines examine the same evidence in parallel. No single model, no single viewpoint." },
+              { n: "02", icon: LineChart, title: "Analyze", body: "Three investment lenses — Quality, Momentum, Context — examine the same evidence in parallel. Each lens applies its own discipline; disagreement between them is surfaced, not hidden." },
               { n: "03", icon: Scale, title: "Verify", body: "A supervisor cross-checks every claim against the source data. Unverifiable claims are flagged and stripped." },
               { n: "04", icon: FileText, title: "Deliver", body: "A clear recommendation — BUY, HOLD, or SELL — with every supporting number traceable to its source." },
             ].map((s) => {

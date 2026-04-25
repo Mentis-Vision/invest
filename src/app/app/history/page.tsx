@@ -7,6 +7,7 @@ import {
   getUserPatternInsights,
   getActionOutcomeMatrix,
   getReflectionPrompts,
+  getSectorPatternInsight,
 } from "@/lib/history";
 import AppShell from "@/components/app-shell";
 import HistoryClient from "./history-client";
@@ -17,14 +18,15 @@ export default async function HistoryPage() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/sign-in");
 
-  // Five parallel reads. All indexed; fan-out is cheap.
-  const [items, trackRecord, patterns, matrix, reflections] =
+  // Six parallel reads. All indexed; fan-out is cheap.
+  const [items, trackRecord, patterns, matrix, reflections, sectorPattern] =
     await Promise.all([
       getUserHistory(session.user.id, { limit: 100, onlyActioned: true }),
       getUserTrackRecord(session.user.id, 30),
       getUserPatternInsights(session.user.id, 90),
       getActionOutcomeMatrix(session.user.id, 90),
       getReflectionPrompts(session.user.id, 3),
+      getSectorPatternInsight(session.user.id, 90),
     ]);
 
   return (
@@ -35,6 +37,7 @@ export default async function HistoryPage() {
         patterns={patterns}
         matrix={matrix}
         reflections={reflections}
+        sectorPattern={sectorPattern}
       />
     </AppShell>
   );

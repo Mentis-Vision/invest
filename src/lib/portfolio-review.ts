@@ -6,6 +6,7 @@ import {
   runPortfolioSupervisor,
 } from "./ai/portfolio-consensus";
 import { recordBatchUsage, recordUsage } from "./usage";
+import { sumMoney, normalizeWeights, percentOf } from "./money";
 
 /**
  * Shared portfolio-review pipeline.
@@ -105,6 +106,133 @@ export async function getCachedPortfolioReview(
 }
 
 /**
+ * Diagnose why a user's holdings are empty — so the UI can show an
+ * honest, specific message instead of a generic "connect your broker"
+ * when in fact the user just linked one and sync is in progress.
+ *
+ * States (ordered by priority):
+ *   - "syncing" — a brokerage Item was linked within the last 5 min
+ *                 and holdings haven't landed yet. Client should poll.
+ *   - "needs_reauth" — a Plaid Item is in login_required state.
+ *                      User needs to click through the re-auth flow.
+ *   - "empty_brokerage" — Items synced successfully but zero positions
+ *                         came back (e.g., cash-only account, or the
+ *                         brokerage returned nothing). Rare.
+ *   - "none" — user has no active brokerage connections at all.
+ */
+export type EmptyHoldingsState =
+  | { state: "none"; message: string }
+  | {
+      state: "syncing";
+      message: string;
+      institutionName: string | null;
+      retryAfterSec: number;
+    }
+  | {
+      state: "needs_reauth";
+      message: string;
+      institutionName: string | null;
+      itemId: string;
+    }
+  | {
+      state: "empty_brokerage";
+      message: string;
+      institutionName: string | null;
+    };
+
+const SYNC_GRACE_WINDOW_MS = 5 * 60 * 1000; // 5 min since link = still syncing
+
+export async function diagnoseEmptyHoldings(
+  userId: string
+): Promise<EmptyHoldingsState> {
+  // Pull Plaid Items sorted by most-recently-created.
+  const { rows: plaidItems } = await pool.query<{
+    itemId: string;
+    status: string;
+    statusDetail: string | null;
+    institutionName: string | null;
+    createdAt: Date;
+    lastSyncedAt: Date | null;
+  }>(
+    `SELECT "itemId", status, "statusDetail", "institutionName",
+            "createdAt", "lastSyncedAt"
+       FROM "plaid_item"
+      WHERE "userId" = $1 AND status <> 'removed'
+      ORDER BY "createdAt" DESC`,
+    [userId]
+  );
+
+  // Any Item stuck in login_required wins — the user needs to act.
+  const reauth = plaidItems.find((p) => p.status === "login_required");
+  if (reauth) {
+    return {
+      state: "needs_reauth",
+      institutionName: reauth.institutionName,
+      itemId: reauth.itemId,
+      message: reauth.institutionName
+        ? `Your ${reauth.institutionName} connection needs to be refreshed. Reconnect to resume syncing.`
+        : "Your brokerage connection needs to be refreshed. Reconnect to resume syncing.",
+    };
+  }
+
+  // If any Item was created within the sync grace window, treat as syncing.
+  const now = Date.now();
+  const recentItem = plaidItems.find(
+    (p) => now - p.createdAt.getTime() < SYNC_GRACE_WINDOW_MS
+  );
+  if (recentItem) {
+    return {
+      state: "syncing",
+      institutionName: recentItem.institutionName,
+      retryAfterSec: 15,
+      message: recentItem.institutionName
+        ? `Syncing your ${recentItem.institutionName} holdings — usually 30 seconds, sometimes up to 2 minutes.`
+        : "Syncing your holdings — usually 30 seconds, sometimes up to 2 minutes.",
+    };
+  }
+
+  // Check SnapTrade connections too — same grace-window logic.
+  const { rows: snaptrade } = await pool.query<{ createdAt: Date }>(
+    `SELECT "createdAt"
+       FROM "snaptrade_connection"
+      WHERE "userId" = $1
+      ORDER BY "createdAt" DESC
+      LIMIT 1`,
+    [userId]
+  );
+  if (snaptrade.length > 0) {
+    const recent = now - snaptrade[0].createdAt.getTime() < SYNC_GRACE_WINDOW_MS;
+    if (recent) {
+      return {
+        state: "syncing",
+        institutionName: null,
+        retryAfterSec: 15,
+        message:
+          "Syncing your holdings — usually 30 seconds, sometimes up to 2 minutes.",
+      };
+    }
+  }
+
+  // Has a linked brokerage, sync is old, still no holdings.
+  if (plaidItems.length > 0 || snaptrade.length > 0) {
+    const name = plaidItems[0]?.institutionName ?? null;
+    return {
+      state: "empty_brokerage",
+      institutionName: name,
+      message: name
+        ? `We connected to ${name} but haven't received any holdings yet. If you recently moved money in, try refreshing in a few minutes — otherwise contact support@clearpathinvest.app.`
+        : "We're connected to your brokerage but haven't received any holdings yet. If you recently moved money in, try refreshing in a few minutes — otherwise contact support@clearpathinvest.app.",
+    };
+  }
+
+  return {
+    state: "none",
+    message:
+      "Connect a brokerage to get started — we'll analyze your holdings and surface opportunities within a few minutes.",
+  };
+}
+
+/**
  * Run the full portfolio review pipeline against a user's holdings,
  * persist the result to portfolio_review_daily, return it.
  *
@@ -145,7 +273,14 @@ export async function generatePortfolioReview(
     const price = Number(h.lastPrice ?? h.avgPrice ?? 0);
     return shares * price;
   };
-  const totalValue = holdings.reduce((sum, h) => sum + marketValue(h), 0);
+  // sumMoney rounds each addend to cents before accumulating so the
+  // total matches the brokerage's reported total at the cent level
+  // instead of drifting by fractions-of-a-cent across N positions.
+  // This totalValue is persisted as portfolio_review_daily.totalValueAtRun
+  // and fed into the AI prompt, so precision matters for both user
+  // trust and LLM-facing consistency.
+  const perHoldingValues = holdings.map(marketValue);
+  const totalValue = sumMoney(...perHoldingValues);
   const macro = await getMacroSnapshot();
   const dataAsOf = new Date().toISOString();
 
@@ -159,19 +294,33 @@ export async function generatePortfolioReview(
       unclassified += v;
     }
   }
-  const sectorLines = [...sectorBuckets.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([sector, value]) => {
-      const pct = totalValue > 0 ? (value / totalValue) * 100 : 0;
-      return `  - ${sector}: $${value.toFixed(2)} (${pct.toFixed(1)}%)`;
-    });
+
+  // Build an ordered sector list first (largest first, unclassified last),
+  // then run one normalizeWeights pass so the percentages sum to EXACTLY
+  // 100 in the AI prompt — otherwise the model can be forgiven for
+  // double-checking our math, wasting tokens on a non-issue.
+  const sortedSectors = [...sectorBuckets.entries()].sort(
+    (a, b) => b[1] - a[1]
+  );
+  const sectorValues: number[] = sortedSectors.map(([, v]) => v);
+  if (unclassified > 0) sectorValues.push(unclassified);
+  const sectorPcts = normalizeWeights(sectorValues, 1);
+  const sectorLines: string[] = sortedSectors.map(([sector, value], idx) => {
+    return `  - ${sector}: $${sumMoney(value).toFixed(2)} (${sectorPcts[idx].toFixed(1)}%)`;
+  });
   if (unclassified > 0) {
-    const pct = totalValue > 0 ? (unclassified / totalValue) * 100 : 0;
+    const idx = sectorPcts.length - 1;
     sectorLines.push(
-      `  - Unclassified: $${unclassified.toFixed(2)} (${pct.toFixed(1)}%)`
+      `  - Unclassified: $${sumMoney(unclassified).toFixed(2)} (${sectorPcts[idx].toFixed(1)}%)`
     );
   }
 
+  // Per-position percentages use single-divide percentOf rather than
+  // normalizeWeights — positions are already sorted largest-first and
+  // rounding to 1dp across 50 positions would land close enough that
+  // enforcing exact-100 would mask real concentration signals. The
+  // visible totalValue above is exact, so per-position rounding drift
+  // is invisible to users.
   const dataBlock = [
     `PORTFOLIO SNAPSHOT (as of ${dataAsOf}):`,
     `Total positions: ${holdings.length}`,
@@ -185,7 +334,7 @@ export async function generatePortfolioReview(
       const shares = Number(h.shares);
       const current = Number(h.lastPrice ?? h.avgPrice ?? 0);
       const value = marketValue(h);
-      const pct = totalValue > 0 ? (value / totalValue) * 100 : 0;
+      const pct = percentOf(value, totalValue, 1);
       const avgCost =
         h.avgPrice !== null && h.avgPrice !== undefined
           ? Number(h.avgPrice)

@@ -25,7 +25,9 @@ import type {
   UserRecAction,
   PatternInsight,
   ActionOutcomeMatrix,
+  ActionLaneStats,
   ReflectionItem,
+  SectorPatternInsight,
 } from "@/lib/history";
 import Link from "next/link";
 import { CounterfactualChart } from "@/components/journal/counterfactual-chart";
@@ -146,12 +148,14 @@ export default function HistoryClient({
   patterns,
   matrix,
   reflections,
+  sectorPattern,
 }: {
   items: HistoryItem[];
   trackRecord: TrackRecord;
   patterns: PatternInsight;
   matrix: ActionOutcomeMatrix;
   reflections: ReflectionItem[];
+  sectorPattern: SectorPatternInsight | null;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -311,10 +315,15 @@ export default function HistoryClient({
         </CardContent>
       </Card>
 
+      {/* Sector-aware pattern (if one clears the significance bar) —
+          the single most meaningful behavioral signal we can surface
+          this week. Renders nothing when there's not enough data. */}
+      {sectorPattern && <SectorPatternCard pattern={sectorPattern} />}
+
       {/* Pattern insights — the behavioral lens on top of the journal. */}
       <PatternCard patterns={patterns} />
 
-      {/* Action × outcome crosstab — the "did acting help?" card. */}
+      {/* Action × outcome crosstab — 3 lanes, "did acting help?" */}
       <ActionOutcomeCard matrix={matrix} />
 
       {/* Reflection prompts — show 30-day-old notes against what
@@ -720,8 +729,8 @@ function PatternCard({ patterns }: { patterns: PatternInsight }) {
               }
               body={
                 missedOpportunities.count >= 3
-                  ? "You may be filtering too tight — the model caught things you missed."
-                  : "A few skipped calls paid off — watch for the pattern."
+                  ? `Several skipped calls turned out to be winners in the last ${daysWindow} days.`
+                  : "A handful of skipped calls ended up winning."
               }
               examples={missedOpportunities.examples}
               exampleLabel="Examples you skipped:"
@@ -739,8 +748,8 @@ function PatternCard({ patterns }: { patterns: PatternInsight }) {
               }
               body={
                 overReached.pctOfTaken !== null && overReached.pctOfTaken > 40
-                  ? "Over-eager follow-through — consider narrowing to high-confidence calls."
-                  : "A few of your acted-on calls didn't pay off — review the common thread."
+                  ? "Over 40% of the calls you took moved against you. A pattern to watch."
+                  : "A few of your acted-on calls didn't pay off. Worth seeing if there's a common thread."
               }
               examples={overReached.examples}
               exampleLabel="Examples you acted on:"
@@ -758,10 +767,10 @@ function PatternCard({ patterns }: { patterns: PatternInsight }) {
               }
               body={
                 buyFollowThrough.pctTook !== null && buyFollowThrough.pctTook < 30
-                  ? "You're skipping most BUY calls. If your hit rate is high, consider loosening your filter."
+                  ? "You've been skipping most BUY calls in this window."
                   : buyFollowThrough.pctTook !== null && buyFollowThrough.pctTook > 70
-                    ? "High follow-through on BUYs — make sure your confidence threshold matches."
-                    : "A balanced BUY follow-through rate."
+                    ? "You've been acting on most BUY calls in this window."
+                    : "Roughly balanced BUY follow-through."
               }
             />
           )}
@@ -824,42 +833,34 @@ function PatternTile({
 }
 
 /**
- * Action × Outcome 2×2 — visual crosstab that answers the big
- * journal question: "Did acting help?"
+ * Action × Outcome three-lane view.
  *
- * Four tiles:
- *   Acted + Won  — your wins from follow-through
- *   Acted + Lost — your losses from follow-through
- *   Skipped + Won — missed opportunities (worst quadrant if big)
- *   Skipped + Lost — bullets dodged (best quadrant if big)
+ * Each lane (took / ignored / opposed) gets one row showing:
+ *   total count
+ *   wins count
+ *   losses count
+ *   pending count
+ *   a 3-segment progress bar (green wins · red losses · muted pending)
+ *   a single contextual rate (follow-through, skip accuracy, or
+ *   counter-conviction accuracy) where it makes sense
  *
- * Hides when no evaluated outcomes exist yet (same threshold idea as
- * PatternCard — don't show a grid of zeros).
+ * The separate "opposed" lane (new) is what a counter-conviction
+ * reader looks like in data — rather than collapsing it into
+ * "ignored" where passive skipping drowns it out.
+ *
+ * Hides the whole card when no lane has any evaluated outcomes yet.
  */
 function ActionOutcomeCard({ matrix }: { matrix: ActionOutcomeMatrix }) {
-  const hasData =
-    matrix.tookWins +
-      matrix.tookLosses +
-      matrix.ignoredWins +
-      matrix.ignoredLosses >
-    0;
+  const laneHasData = (s: ActionLaneStats) =>
+    s.wins + s.losses + s.pending > 0;
+  const hasAny =
+    laneHasData(matrix.took) ||
+    laneHasData(matrix.ignored) ||
+    laneHasData(matrix.opposed);
+  if (!hasAny) return null;
 
-  if (!hasData) return null;
-
-  const followThroughRate =
-    matrix.tookWins + matrix.tookLosses > 0
-      ? Math.round(
-          (matrix.tookWins / (matrix.tookWins + matrix.tookLosses)) * 100
-        )
-      : null;
-  const skipAccuracy =
-    matrix.ignoredWins + matrix.ignoredLosses > 0
-      ? Math.round(
-          (matrix.ignoredLosses /
-            (matrix.ignoredWins + matrix.ignoredLosses)) *
-            100
-        )
-      : null;
+  const rate = (wins: number, losses: number) =>
+    wins + losses > 0 ? Math.round((wins / (wins + losses)) * 100) : null;
 
   return (
     <Card>
@@ -871,41 +872,46 @@ function ActionOutcomeCard({ matrix }: { matrix: ActionOutcomeMatrix }) {
           </span>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
-          Your actions cross-tabbed against the 7 / 30-day outcome
-          check. Bigger numbers in the green quadrants mean your
-          instinct is paying off.
+          Your recorded actions against the 7 / 30-day outcome check.
+          Three lanes — took, ignored, opposed — so a counter-conviction
+          bet isn&rsquo;t treated the same as a passive skip.
         </p>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 gap-2">
-          <MatrixTile
-            title="You acted + won"
-            count={matrix.tookWins}
-            pending={matrix.tookPending}
-            tone="good"
-            rate={followThroughRate}
-            rateLabel="follow-through hit rate"
-          />
-          <MatrixTile
-            title="You acted + lost"
-            count={matrix.tookLosses}
-            tone="bad"
-          />
-          <MatrixTile
-            title="You skipped, it won"
-            subtitle="Missed opportunities"
-            count={matrix.ignoredWins}
-            pending={matrix.ignoredPending}
-            tone="bad"
-          />
-          <MatrixTile
-            title="You skipped, it lost"
-            subtitle="Bullets dodged"
-            count={matrix.ignoredLosses}
-            tone="good"
-            rate={skipAccuracy}
-            rateLabel="skip accuracy"
-          />
+        <div className="space-y-3">
+          {laneHasData(matrix.took) && (
+            <LaneRow
+              label="Took"
+              description="You followed the call (took or partial)"
+              stats={matrix.took}
+              rate={rate(matrix.took.wins, matrix.took.losses)}
+              rateLabel="follow-through hit rate"
+              winTone="good"
+              lossTone="bad"
+            />
+          )}
+          {laneHasData(matrix.ignored) && (
+            <LaneRow
+              label="Ignored"
+              description="You skipped — wins are missed opportunities, losses are bullets dodged"
+              stats={matrix.ignored}
+              rate={rate(matrix.ignored.losses, matrix.ignored.wins)}
+              rateLabel="skip accuracy"
+              winTone="bad"
+              lossTone="good"
+            />
+          )}
+          {laneHasData(matrix.opposed) && (
+            <LaneRow
+              label="Opposed"
+              description="You bet against the call — wins validated your counter-read; losses didn't"
+              stats={matrix.opposed}
+              rate={rate(matrix.opposed.wins, matrix.opposed.losses)}
+              rateLabel="counter-conviction rate"
+              winTone="good"
+              lossTone="bad"
+            />
+          )}
         </div>
 
         {matrix.unmarkedTotal > 0 && (
@@ -922,50 +928,237 @@ function ActionOutcomeCard({ matrix }: { matrix: ActionOutcomeMatrix }) {
   );
 }
 
-function MatrixTile({
-  title,
-  subtitle,
-  count,
-  pending,
-  tone,
+/**
+ * One lane inside ActionOutcomeCard. Hides itself if its stats are
+ * empty (parent could pre-filter, but rendering a lane then checking
+ * makes the parent's JSX a lot shorter).
+ *
+ * `winTone` / `lossTone` let us flip which side is "good" per lane —
+ * for "ignored", a win is bad (missed) and a loss is good (dodged).
+ */
+function LaneRow({
+  label,
+  description,
+  stats,
   rate,
   rateLabel,
+  winTone,
+  lossTone,
 }: {
-  title: string;
-  subtitle?: string;
-  count: number;
-  pending?: number;
-  tone: "good" | "bad";
-  rate?: number | null;
-  rateLabel?: string;
+  label: string;
+  description: string;
+  stats: ActionLaneStats;
+  rate: number | null;
+  rateLabel: string;
+  winTone: "good" | "bad";
+  lossTone: "good" | "bad";
 }) {
-  const bg =
-    tone === "good"
-      ? "border-[var(--buy)]/25 bg-[var(--buy)]/5"
-      : "border-[var(--sell)]/25 bg-[var(--sell)]/5";
-  const accent =
-    tone === "good" ? "text-[var(--buy)]" : "text-[var(--sell)]";
+  const total = stats.wins + stats.losses + stats.pending;
+  const pct = (n: number) => (total > 0 ? (n / total) * 100 : 0);
+  const toneColor = (t: "good" | "bad") =>
+    t === "good"
+      ? "bg-[var(--buy)]"
+      : "bg-[var(--sell)]";
 
   return (
-    <div className={`rounded-md border ${bg} p-3`}>
-      <div className="text-[11px] font-medium text-foreground/80">{title}</div>
-      {subtitle && (
-        <div className="text-[10px] text-muted-foreground">{subtitle}</div>
-      )}
-      <div className={`mt-1 text-[22px] font-semibold tabular-nums ${accent}`}>
-        {count}
-      </div>
-      <div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground">
-        {pending !== undefined && pending > 0 && (
-          <span>+{pending} still pending</span>
+    <div className="rounded-md border border-border bg-card/50 p-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-baseline gap-2">
+            <span className="text-[13px] font-semibold">{label}</span>
+            <span className="font-mono tabular-nums text-[12px] text-muted-foreground">
+              {total} call{total === 1 ? "" : "s"}
+            </span>
+          </div>
+          <div className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+            {description}
+          </div>
+        </div>
+        {rate !== null && (
+          <div className="flex-shrink-0 text-right">
+            <div className="font-mono tabular-nums text-[14px] font-semibold">
+              {rate}%
+            </div>
+            <div className="text-[9px] uppercase tracking-wider text-muted-foreground">
+              {rateLabel}
+            </div>
+          </div>
         )}
-        {rate !== null && rate !== undefined && rateLabel && (
+      </div>
+
+      {/* Segmented progress bar: wins · losses · pending */}
+      <div className="mt-2 flex h-1.5 overflow-hidden rounded-full bg-secondary">
+        {stats.wins > 0 && (
+          <div
+            className={toneColor(winTone)}
+            style={{ width: `${pct(stats.wins)}%` }}
+          />
+        )}
+        {stats.losses > 0 && (
+          <div
+            className={toneColor(lossTone)}
+            style={{ width: `${pct(stats.losses)}%` }}
+          />
+        )}
+        {stats.pending > 0 && (
+          <div
+            className="bg-muted-foreground/40"
+            style={{ width: `${pct(stats.pending)}%` }}
+          />
+        )}
+      </div>
+
+      <div className="mt-1.5 flex items-center gap-3 text-[11px] font-mono tabular-nums text-muted-foreground">
+        <span>
+          <span className="text-foreground">{stats.wins}</span> won
+        </span>
+        <span>
+          <span className="text-foreground">{stats.losses}</span> lost
+        </span>
+        {stats.pending > 0 && (
           <span>
-            · {rate}% {rateLabel}
+            <span className="text-foreground">{stats.pending}</span> pending
           </span>
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Sector-aware single-pattern card.
+ *
+ * Renders at most one insight at a time — the most statistically
+ * significant "act vs. don't act" delta in the user's last 90 days,
+ * joined to ticker_metadata.sector. Parent hides the card entirely
+ * when nothing clears the significance threshold.
+ *
+ * Phrasing is informational ("here's what happened"), never
+ * prescriptive ("you should"). The copy changes per `kind` so the
+ * reader understands whether this is a skipped-winner, a taken-loser,
+ * or a confirmation that acting outperformed.
+ */
+function SectorPatternCard({ pattern }: { pattern: SectorPatternInsight }) {
+  const {
+    kind,
+    sector,
+    recommendation,
+    sampleSize,
+    avgMovePct,
+    winRatePct,
+    comparisonAvgMovePct,
+    comparisonWinRatePct,
+    comparisonSampleSize,
+    totalAnalysed,
+    droppedMissingSector,
+    daysWindow,
+  } = pattern;
+
+  const signed = (n: number | null) =>
+    n == null ? "—" : `${n > 0 ? "+" : ""}${n.toFixed(1)}%`;
+
+  let title: string;
+  let body: React.ReactNode;
+  let tone: "warn" | "good" | "neutral" = "neutral";
+
+  if (kind === "skipped_winners") {
+    title = `Skipped ${recommendation}s on ${sector}`;
+    tone = "warn";
+    body = (
+      <>
+        In the last {daysWindow} days you skipped{" "}
+        <strong>{sampleSize}</strong> {recommendation} call
+        {sampleSize === 1 ? "" : "s"} on <strong>{sector}</strong> tickers.
+        They moved <strong>{signed(avgMovePct)}</strong> on average
+        {winRatePct != null && <> ({winRatePct}% win rate)</>}.
+        {comparisonAvgMovePct != null && comparisonSampleSize >= 5 && (
+          <>
+            {" "}
+            The same calls you did take averaged{" "}
+            <strong>{signed(comparisonAvgMovePct)}</strong>.
+          </>
+        )}
+      </>
+    );
+  } else if (kind === "taken_losers") {
+    title = `Took ${recommendation}s on ${sector} that went the other way`;
+    tone = "warn";
+    body = (
+      <>
+        You acted on <strong>{sampleSize}</strong> {recommendation} call
+        {sampleSize === 1 ? "" : "s"} in <strong>{sector}</strong>; they
+        averaged <strong>{signed(avgMovePct)}</strong> at the evaluation
+        window
+        {winRatePct != null && <> ({winRatePct}% win rate)</>}.
+        {comparisonAvgMovePct != null && comparisonSampleSize >= 5 && (
+          <>
+            {" "}
+            The ones you skipped averaged{" "}
+            <strong>{signed(comparisonAvgMovePct)}</strong>.
+          </>
+        )}
+      </>
+    );
+  } else {
+    title = `${recommendation}s you acted on in ${sector} outperformed the ones you skipped`;
+    tone = "good";
+    body = (
+      <>
+        Acted: <strong>{sampleSize}</strong> call
+        {sampleSize === 1 ? "" : "s"},{" "}
+        {winRatePct != null ? `${winRatePct}% win rate` : "—"}
+        {avgMovePct != null && <> · avg {signed(avgMovePct)}</>}.
+        Skipped: <strong>{comparisonSampleSize}</strong> call
+        {comparisonSampleSize === 1 ? "" : "s"},{" "}
+        {comparisonWinRatePct != null
+          ? `${comparisonWinRatePct}% win rate`
+          : "—"}
+        {comparisonAvgMovePct != null && <> · avg {signed(comparisonAvgMovePct)}</>}.
+      </>
+    );
+  }
+
+  const ring =
+    tone === "warn"
+      ? "border-[var(--hold)]/40"
+      : tone === "good"
+        ? "border-[var(--buy)]/40"
+        : "border-border";
+  const accent =
+    tone === "warn"
+      ? "bg-[var(--hold)]/10 text-[var(--hold)]"
+      : tone === "good"
+        ? "bg-[var(--buy)]/10 text-[var(--buy)]"
+        : "bg-secondary text-muted-foreground";
+
+  return (
+    <Card className={`border ${ring}`}>
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${accent}`}
+            >
+              Pattern
+            </span>
+            <CardTitle className="text-base">{title}</CardTitle>
+          </div>
+          <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
+            Last {daysWindow} days
+          </span>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <p className="text-[13px] leading-relaxed text-foreground/90">
+          {body}
+        </p>
+        <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+          Based on {totalAnalysed - droppedMissingSector} of{" "}
+          {totalAnalysed} actioned calls with a known sector. Informational
+          only — past outcomes don&rsquo;t guarantee future results.
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 

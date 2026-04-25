@@ -8,6 +8,7 @@ import PortfolioView from "@/components/views/portfolio";
 import ResearchView from "@/components/views/research";
 import StrategyView from "@/components/views/strategy";
 import IntegrationsView from "@/components/views/integrations";
+import { ReauthBanner } from "@/components/app/reauth-banner";
 
 type View = "dashboard" | "portfolio" | "research" | "strategy" | "integrations";
 
@@ -60,9 +61,25 @@ function DashboardClientInner({
 
   return (
     <AppShell user={user} currentView={currentView} onViewChange={setCurrentView}>
-      {currentView === "dashboard" && <DashboardView userName={user.name} />}
+      {/* Reauth banner renders across all views — sits above the
+          per-view content so a broken brokerage connection is always
+          visible no matter where the user is in the app. */}
+      <div className="mb-4">
+        <ReauthBanner />
+      </div>
+      {currentView === "dashboard" && (
+        <DashboardView
+          userName={user.name}
+          onNavigateToPortfolio={() => setCurrentView("portfolio")}
+        />
+      )}
       {currentView === "portfolio" && <PortfolioView />}
-      {currentView === "research" && <ResearchView initialTicker={initialTicker} />}
+      {currentView === "research" && (
+        <ResearchView
+          initialTicker={initialTicker}
+          onNavigateToPortfolio={() => setCurrentView("portfolio")}
+        />
+      )}
       {currentView === "strategy" && <StrategyView />}
       {currentView === "integrations" && <IntegrationsView />}
     </AppShell>

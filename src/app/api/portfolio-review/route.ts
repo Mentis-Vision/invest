@@ -6,6 +6,7 @@ import { checkUsageCap, TIER_LIMITS } from "@/lib/usage";
 import {
   generatePortfolioReview,
   getCachedPortfolioReview,
+  diagnoseEmptyHoldings,
 } from "@/lib/portfolio-review";
 import { log, errorInfo } from "@/lib/log";
 
@@ -69,11 +70,18 @@ export async function GET() {
     return NextResponse.json({ ...review, cached: false });
   } catch (err) {
     if ((err as Error)?.message === "no_holdings") {
+      const diag = await diagnoseEmptyHoldings(session.user.id);
       return NextResponse.json(
         {
-          error: "no_holdings",
-          message:
-            "Connect your brokerage first — we can't review what we can't see.",
+          error: diag.state,
+          message: diag.message,
+          ...("institutionName" in diag
+            ? { institutionName: diag.institutionName }
+            : {}),
+          ...("retryAfterSec" in diag
+            ? { retryAfterSec: diag.retryAfterSec }
+            : {}),
+          ...("itemId" in diag ? { itemId: diag.itemId } : {}),
         },
         { status: 400 }
       );
@@ -133,11 +141,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ...review, cached: false });
   } catch (err) {
     if ((err as Error)?.message === "no_holdings") {
+      // Give the user an honest, specific message about WHY there are
+      // no holdings — syncing, needs reauth, truly not connected, etc.
+      // 400 status preserved so existing UI error handling still fires,
+      // but the `error` code is specific enough for the client to
+      // branch on (e.g. "syncing" → poll; "needs_reauth" → show CTA).
+      const diag = await diagnoseEmptyHoldings(session?.user?.id ?? userId);
       return NextResponse.json(
         {
-          error: "no_holdings",
-          message:
-            "Connect your brokerage first — we can't review what we can't see.",
+          error: diag.state,
+          message: diag.message,
+          ...("institutionName" in diag
+            ? { institutionName: diag.institutionName }
+            : {}),
+          ...("retryAfterSec" in diag
+            ? { retryAfterSec: diag.retryAfterSec }
+            : {}),
+          ...("itemId" in diag ? { itemId: diag.itemId } : {}),
         },
         { status: 400 }
       );

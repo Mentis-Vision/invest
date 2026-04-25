@@ -10,6 +10,10 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
+        // /embed/* are iframe-only widgets — noindex via page metadata
+        // to avoid competing with the canonical /stocks/[ticker] pages.
+        // Kept crawlable so JSON-LD still propagates; disallow lines
+        // would also hide legitimate backlinks to the widget.
         disallow: ["/app", "/app/", "/app/*", "/api/"],
       },
     ],

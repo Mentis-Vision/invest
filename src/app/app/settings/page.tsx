@@ -23,15 +23,28 @@ async function getTwoFactorEnabled(userId: string): Promise<boolean> {
   }
 }
 
-async function getWeeklyDigestOptOut(userId: string): Promise<boolean> {
+/**
+ * Both opt-out flags fetched in one round-trip. If the column doesn't
+ * exist yet (pre-migration) or the read fails, default to "subscribed"
+ * (opt-out = false) so a DB issue doesn't unsubscribe everyone.
+ */
+async function getNotificationOptOuts(
+  userId: string
+): Promise<{ weeklyDigestOptOut: boolean; weeklyBriefOptOut: boolean }> {
   try {
-    const { rows } = await pool.query<{ weeklyDigestOptOut: boolean | null }>(
-      `SELECT "weeklyDigestOptOut" FROM "user" WHERE id = $1 LIMIT 1`,
+    const { rows } = await pool.query<{
+      weeklyDigestOptOut: boolean | null;
+      weeklyBriefOptOut: boolean | null;
+    }>(
+      `SELECT "weeklyDigestOptOut", "weeklyBriefOptOut" FROM "user" WHERE id = $1 LIMIT 1`,
       [userId]
     );
-    return Boolean(rows[0]?.weeklyDigestOptOut);
+    return {
+      weeklyDigestOptOut: Boolean(rows[0]?.weeklyDigestOptOut),
+      weeklyBriefOptOut: Boolean(rows[0]?.weeklyBriefOptOut),
+    };
   } catch {
-    return false;
+    return { weeklyDigestOptOut: false, weeklyBriefOptOut: false };
   }
 }
 
@@ -39,10 +52,10 @@ export default async function SettingsPage() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/sign-in");
 
-  const [profile, twoFactorEnabled, weeklyDigestOptOut] = await Promise.all([
+  const [profile, twoFactorEnabled, optOuts] = await Promise.all([
     getUserProfile(session.user.id),
     getTwoFactorEnabled(session.user.id),
-    getWeeklyDigestOptOut(session.user.id),
+    getNotificationOptOuts(session.user.id),
   ]);
 
   return (
@@ -52,7 +65,8 @@ export default async function SettingsPage() {
       <SettingsClient
         initialProfile={profile}
         twoFactorEnabled={twoFactorEnabled}
-        weeklyDigestOptOut={weeklyDigestOptOut}
+        weeklyDigestOptOut={optOuts.weeklyDigestOptOut}
+        weeklyBriefOptOut={optOuts.weeklyBriefOptOut}
         user={{ name: session.user.name ?? "", email: session.user.email }}
       />
     </AppShell>

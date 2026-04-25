@@ -48,7 +48,7 @@ export default function SecurityPage() {
           <Tile
             icon={ShieldCheck}
             title="Read-only brokerage access"
-            body="We cannot trade on your behalf. We cannot move money. SnapTrade and Plaid both enforce read-only scopes at the brokerage level. Even if our servers were breached, there's no trade path."
+            body="We cannot trade on your behalf. We cannot move money. Plaid (our primary connector) and SnapTrade (used only where Plaid doesn't cover your broker) both enforce read-only scopes at the brokerage level. Even if our servers were breached, there's no trade path."
           />
           <Tile
             icon={Database}
@@ -88,6 +88,10 @@ export default function SecurityPage() {
             >
               Read the full policy →
             </a>
+          </p>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Hosted under our parent company&rsquo;s engineering org (Mentis
+            Vision) for version control.
           </p>
         </div>
 

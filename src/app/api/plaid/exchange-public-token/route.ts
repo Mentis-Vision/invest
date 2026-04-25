@@ -56,17 +56,41 @@ export async function POST(req: NextRequest) {
 
     // First holdings sync — best-effort; don't fail the exchange on
     // a sync hiccup because the Item is linked and a webhook will
-    // re-trigger shortly.
+    // re-trigger shortly. BUT we record the failure on the Item so the
+    // user sees a visible "sync failed, tap to retry" state rather
+    // than a mysteriously empty portfolio.
     let holdingsCount = 0;
+    let syncFailed = false;
+    let syncFailReason: string | null = null;
     try {
       const res = await syncHoldings(session.user.id, itemId);
       holdingsCount = res.holdings;
     } catch (err) {
+      syncFailed = true;
+      syncFailReason =
+        (err as Error)?.message?.slice(0, 200) ?? "Unknown sync error";
       log.warn("plaid.exchange", "initial holdings sync failed", {
         userId: session.user.id,
         itemId,
         ...errorInfo(err),
       });
+      // Mark the Item so the Reauth banner surfaces this as actionable
+      // ("Sync failed — tap to retry") instead of an empty portfolio.
+      // syncHoldings succeeding later (via webhook or manual retry)
+      // will clear this state by setting status back to 'active'.
+      const { pool } = await import("@/lib/db");
+      await pool
+        .query(
+          `UPDATE "plaid_item"
+           SET "status" = 'sync_failed',
+               "statusDetail" = $1,
+               "updatedAt" = NOW()
+           WHERE "itemId" = $2 AND "userId" = $3`,
+          [`Couldn't pull initial holdings: ${syncFailReason}`, itemId, session.user.id]
+        )
+        .catch(() => {
+          /* non-fatal — logging-only fallback */
+        });
     }
 
     return NextResponse.json({
@@ -75,6 +99,8 @@ export async function POST(req: NextRequest) {
       itemId,
       institutionName,
       holdings: holdingsCount,
+      syncFailed,
+      syncFailReason,
     });
   } catch (err) {
     log.error("plaid.exchange", "exchange failed", {

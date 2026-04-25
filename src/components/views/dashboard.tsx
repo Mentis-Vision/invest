@@ -10,6 +10,11 @@ import { Button } from "@/components/ui/button";
 import { NextMoveHero, type Review } from "@/components/dashboard/next-move-hero";
 import { StrategyFullBrief } from "@/components/views/strategy";
 import { CompactCounterfactual } from "@/components/dashboard/compact-counterfactual";
+import {
+  ReviewStatusBanner,
+  type ReviewStatus,
+} from "@/components/dashboard/review-status-banner";
+import { WidgetBoundary } from "@/components/dashboard/widget-boundary";
 
 /**
  * Dashboard (hybrid-v2 redesign).
@@ -26,18 +31,29 @@ import { CompactCounterfactual } from "@/components/dashboard/compact-counterfac
  */
 export default function DashboardView({
   userName,
+  onNavigateToPortfolio,
 }: {
   userName?: string;
+  onNavigateToPortfolio?: () => void;
 }) {
   return (
     <DrillProvider>
-      <DashboardBody userName={userName ?? "there"} />
+      <DashboardBody
+        userName={userName ?? "there"}
+        onNavigateToPortfolio={onNavigateToPortfolio}
+      />
       <DrillPanel />
     </DrillProvider>
   );
 }
 
-function DashboardBody({ userName }: { userName: string }) {
+function DashboardBody({
+  userName,
+  onNavigateToPortfolio,
+}: {
+  userName: string;
+  onNavigateToPortfolio?: () => void;
+}) {
   const gridRef = useRef<BlockGridHandle>(null);
   const [editing, setEditing] = useState(false);
   const [dayChangePct, setDayChangePct] = useState<number | null>(null);
@@ -45,7 +61,9 @@ function DashboardBody({ userName }: { userName: string }) {
 
   // ── Review state (for Next Move hero) ────────────────────────────
   const [review, setReview] = useState<Review | null>(null);
-  const [reviewLoading, setReviewLoading] = useState(true);
+  const [reviewStatus, setReviewStatus] = useState<ReviewStatus>({
+    kind: "loading",
+  });
   const [showFullBrief, setShowFullBrief] = useState(false);
 
   // ── Latest strategy action (for compact counterfactual strip) ────
@@ -63,20 +81,119 @@ function DashboardBody({ userName }: { userName: string }) {
 
   // Fetch the cached portfolio review (same endpoint Strategy used).
   // GET hits the nightly cache — $0 AI spend on page load.
+  //
+  // The endpoint returns one of several honest states when holdings
+  // are empty: "syncing" (brokerage just linked, wait), "needs_reauth"
+  // (expired connection, click to renew), "empty_brokerage" (synced
+  // but no positions returned), or "none" (user never connected).
+  // For "syncing" we auto-poll at the endpoint-provided cadence until
+  // either success or a 3-minute cap — past that we show a softer
+  // "taking longer than expected" card with a support link.
   useEffect(() => {
     let alive = true;
-    fetch("/api/portfolio-review")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (!alive || !d || d.error) return;
-        setReview(d as Review);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (alive) setReviewLoading(false);
-      });
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const MAX_SYNC_ATTEMPTS = 12; // × 15s default = 3 min
+    let attempts = 0;
+
+    async function load() {
+      if (!alive) return;
+      try {
+        const res = await fetch("/api/portfolio-review");
+        if (!alive) return;
+        const body = (await res.json().catch(() => ({}))) as Record<
+          string,
+          unknown
+        >;
+        if (res.ok && !body.error) {
+          setReview(body as unknown as Review);
+          setReviewStatus({ kind: "ok" });
+          return;
+        }
+        const code = String(body.error ?? "");
+        const instName = (body.institutionName as string | null) ?? null;
+
+        if (code === "syncing") {
+          const nextAttempts = attempts + 1;
+          attempts = nextAttempts;
+          setReviewStatus({
+            kind: "syncing",
+            institutionName: instName,
+            retryAfterSec: Number(body.retryAfterSec ?? 15),
+            attemptsUsed: nextAttempts,
+            maxAttempts: MAX_SYNC_ATTEMPTS,
+          });
+          if (nextAttempts < MAX_SYNC_ATTEMPTS) {
+            const wait = Math.max(
+              5,
+              Math.min(60, Number(body.retryAfterSec ?? 15))
+            );
+            timer = setTimeout(load, wait * 1000);
+          } else {
+            setReviewStatus({
+              kind: "empty_brokerage",
+              institutionName: instName,
+              message:
+                "Sync is taking longer than usual. If this persists for more than 10 minutes, email support@clearpathinvest.app and we'll look into it.",
+            });
+          }
+          return;
+        }
+        if (code === "needs_reauth") {
+          setReviewStatus({
+            kind: "needs_reauth",
+            institutionName: instName,
+            itemId: String(body.itemId ?? ""),
+          });
+          return;
+        }
+        if (code === "empty_brokerage") {
+          setReviewStatus({
+            kind: "empty_brokerage",
+            institutionName: instName,
+            message:
+              (body.message as string) ??
+              "We connected but haven't received holdings yet.",
+          });
+          return;
+        }
+        if (code === "none") {
+          setReviewStatus({
+            kind: "none",
+            message:
+              (body.message as string) ??
+              "Link a brokerage to see your portfolio.",
+          });
+          return;
+        }
+        if (code === "monthly_limit") {
+          setReviewStatus({
+            kind: "error",
+            message:
+              (body.message as string) ?? "Monthly budget reached.",
+          });
+          return;
+        }
+        setReviewStatus({
+          kind: "error",
+          message:
+            (body.message as string) ??
+            "Couldn't load today's review.",
+        });
+      } catch {
+        if (alive) {
+          setReviewStatus({
+            kind: "error",
+            message: "Network error — check your connection.",
+          });
+        }
+      }
+    }
+
+    load();
+
     return () => {
       alive = false;
+      if (timer) clearTimeout(timer);
     };
   }, []);
 
@@ -142,18 +259,33 @@ function DashboardBody({ userName }: { userName: string }) {
 
   return (
     <div className="space-y-4">
+      {/* ── Review status banner — syncing / reauth / empty / none.
+          Renders null when the review loaded successfully. Replaces
+          the old behavior of silently hiding the hero on any error. */}
+      <ReviewStatusBanner
+        status={reviewStatus}
+        onConnect={onNavigateToPortfolio}
+        onReauth={() => onNavigateToPortfolio?.()}
+      />
+
       {/* ── Next Move hero — above the greeting, below nothing ── */}
       {review && (
-        <NextMoveHero
-          review={review}
-          onStateChange={(s) =>
-            setReview((cur) => (cur ? { ...cur, nextMoveState: s } : cur))
-          }
-        />
+        <WidgetBoundary name="Next Move">
+          <NextMoveHero
+            review={review}
+            onStateChange={(s) =>
+              setReview((cur) => (cur ? { ...cur, nextMoveState: s } : cur))
+            }
+          />
+        </WidgetBoundary>
       )}
 
       {/* Full brief — inline expand under the hero */}
-      {review && showFullBrief && <StrategyFullBrief review={review} />}
+      {review && showFullBrief && (
+        <WidgetBoundary name="Full brief">
+          <StrategyFullBrief review={review} />
+        </WidgetBoundary>
+      )}
 
       {/* Toggle — only shown when a review is available */}
       {review && (
@@ -180,7 +312,11 @@ function DashboardBody({ userName }: { userName: string }) {
       {/* Compact counterfactual strip — shown when user acted on a
           recent Strategy rec in the last 48 h. Null-renders silently
           when no qualifying action exists. */}
-      {latestStrategyRecId && <CompactCounterfactual recId={latestStrategyRecId} />}
+      {latestStrategyRecId && (
+        <WidgetBoundary name="Counterfactual">
+          <CompactCounterfactual recId={latestStrategyRecId} />
+        </WidgetBoundary>
+      )}
 
       {/* Header row: greeting (left) · date + Customize (right) */}
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 pb-2">

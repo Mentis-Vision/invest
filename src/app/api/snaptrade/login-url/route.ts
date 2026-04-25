@@ -8,6 +8,7 @@ import {
 } from "@/lib/snaptrade";
 import { checkRateLimit, RULES } from "@/lib/rate-limit";
 import { log, errorInfo } from "@/lib/log";
+import { isDemoUser } from "@/lib/admin";
 
 /**
  * POST /api/snaptrade/login-url
@@ -18,6 +19,19 @@ export async function POST(_req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Demo account is read-only; pre-seeded holdings, no real brokerage
+  // linking. Keeps the demo account clean for due-diligence walkthroughs.
+  if (isDemoUser(session.user)) {
+    return NextResponse.json(
+      {
+        error: "demo_account",
+        message:
+          "The demo account has pre-seeded holdings and can't link real brokerages. Sign up for a real account to link your own.",
+      },
+      { status: 403 }
+    );
   }
 
   const rl = await checkRateLimit(

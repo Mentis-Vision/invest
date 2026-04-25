@@ -6,7 +6,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # ClearPath Invest — Agent guide
 
-> **READ FIRST:** `handoff/2026-04-19-next-session.md` (most current), `handoff/2026-04-15-state-of-app.md`, `handoff/2026-04-15-next-steps.md`, `handoff/2026-04-15-historical-tracking.md`, and `handoff/DEFERRED.md`.
+> **READ FIRST:** `handoff/2026-04-21-session-wrap.md` (most current), `handoff/2026-04-19-next-session.md`, `handoff/2026-04-15-state-of-app.md`, `handoff/2026-04-15-next-steps.md`, `handoff/2026-04-15-historical-tracking.md`, and `handoff/DEFERRED.md`.
 
 ## Hard rules (non-negotiable)
 

@@ -8,6 +8,7 @@ import {
   PLAID_ITEM_CAPS,
 } from "@/lib/plaid";
 import { log, errorInfo } from "@/lib/log";
+import { isDemoUser } from "@/lib/admin";
 
 /**
  * POST /api/plaid/link-token
@@ -32,6 +33,20 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Demo account is read-only — pre-seeded holdings, no real brokerage
+  // linking. Blocks the $0.35/mo per-Item charge and the "real user
+  // data showing up in the demo account" confusion mode.
+  if (isDemoUser(session.user)) {
+    return NextResponse.json(
+      {
+        error: "demo_account",
+        message:
+          "The demo account has pre-seeded holdings and can't link real brokerages. Sign up for a real account to link your own.",
+      },
+      { status: 403 }
+    );
+  }
+
   let body: { reauth?: unknown; itemId?: unknown } = {};
   try {
     body = await req.json();
@@ -39,14 +54,28 @@ export async function POST(req: NextRequest) {
     // empty body is fine — default flow is "new Item"
   }
 
-  const webhookUrl = (() => {
-    const base =
-      process.env.PLAID_WEBHOOK_URL ??
-      process.env.BETTER_AUTH_URL ??
-      process.env.NEXT_PUBLIC_APP_URL ??
-      null;
-    return base ? `${base.replace(/\/$/, "")}/api/plaid/webhook` : undefined;
-  })();
+  // App base — origin only, no path. Used to derive the redirect URI.
+  // Order: BETTER_AUTH_URL (authoritative for session cookies too) →
+  // NEXT_PUBLIC_APP_URL → nothing.
+  const appBase = (
+    process.env.BETTER_AUTH_URL ??
+    process.env.NEXT_PUBLIC_APP_URL ??
+    null
+  )?.replace(/\/$/, "");
+
+  // Webhook URL — if PLAID_WEBHOOK_URL is set, use it as the complete
+  // URL (explicit override). Otherwise derive from appBase. This is
+  // the URL Plaid POSTs to for DEFAULT_UPDATE / HISTORICAL_UPDATE /
+  // etc., so it must point to our /api/plaid/webhook handler.
+  const webhookUrl =
+    process.env.PLAID_WEBHOOK_URL ??
+    (appBase ? `${appBase}/api/plaid/webhook` : undefined);
+
+  // Required for OAuth institutions (Schwab, Fidelity, Vanguard). Must
+  // exactly match a URL registered in Plaid Dashboard → API → Allowed
+  // redirect URIs. Always derived from the app base — never from the
+  // webhook URL.
+  const redirectUri = appBase ? `${appBase}/plaid-oauth` : undefined;
 
   // Cost-cap gate for NEW Item flows. Reauth is exempt (it replaces
   // an existing Item, doesn't add one). If a user is at cap, return
@@ -110,16 +139,57 @@ export async function POST(req: NextRequest) {
     const linkToken = await createLinkToken({
       userId: session.user.id,
       webhookUrl,
+      redirectUri,
       accessToken,
     });
     return NextResponse.json({ linkToken });
   } catch (err) {
+    // Extract Plaid's API error details so we can return an actionable
+    // message to the client instead of a generic "Try again."
+    // Plaid SDK (axios) puts the useful bits at err.response.data.
+    const plaidData =
+      (err as { response?: { data?: unknown } })?.response?.data ?? null;
+    const plaidError = plaidData as {
+      error_code?: string;
+      error_type?: string;
+      error_message?: string;
+      display_message?: string | null;
+    } | null;
+
     log.error("plaid.link-token", "create failed", {
       userId: session.user.id,
+      plaidErrorCode: plaidError?.error_code,
+      plaidErrorType: plaidError?.error_type,
+      plaidErrorMessage: plaidError?.error_message,
       ...errorInfo(err),
     });
+
+    // Map common Plaid errors to user-actionable messages.
+    let userMessage = "Could not start Plaid Link. Try again.";
+    const code = plaidError?.error_code;
+    if (code === "INVALID_FIELD" || code === "INVALID_INPUT") {
+      const msg = plaidError?.error_message?.toLowerCase() ?? "";
+      if (msg.includes("redirect")) {
+        userMessage =
+          "Linking isn't fully configured for this deploy. Please contact support — we need to register our redirect URL with Plaid.";
+      } else {
+        userMessage = plaidError?.display_message ?? userMessage;
+      }
+    } else if (code === "INSTITUTION_NOT_SUPPORTED") {
+      userMessage =
+        "Your institution isn't ready yet. Registration may still be in progress (up to 24h after production was granted).";
+    } else if (code === "INSTITUTION_NOT_ENABLED_IN_REGION") {
+      userMessage =
+        "This institution isn't available in your region.";
+    } else if (plaidError?.display_message) {
+      userMessage = plaidError.display_message;
+    }
+
     return NextResponse.json(
-      { error: "Could not start Plaid Link. Try again." },
+      {
+        error: code ?? "plaid_error",
+        message: userMessage,
+      },
       { status: 500 }
     );
   }

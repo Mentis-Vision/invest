@@ -1,8 +1,36 @@
 # ClearPath Invest — Deferred Decisions & Open Items
 
-**Last updated:** 2026-04-17
+**Last updated:** 2026-04-25
 
 Running list of everything that was tabled during the P1–P5 implementation push. Each item notes why it was deferred, what triggers unblocking it, and the rough effort needed to close.
+
+---
+
+## Scheduled follow-ups (DO ON DATE)
+
+> Items here have a target date. Check this section first when you sit down to work.
+
+### Monday 2026-04-27 — raise E2E smoke thresholds
+
+After two warehouse refresh cycles (cron runs daily 14:00 UTC), the seed-universe expansion should have populated `ticker_market_daily` with 600+ rows. Raise the transitional thresholds back to meaningful production floors:
+
+- **`src/lib/e2e-smoke.ts`** — `Sitemap returns valid XML` test: change `urlCount > 5` → `urlCount > 100`
+- **`src/lib/e2e-smoke.ts`** — `Warehouse has fresh market rows` test: change `count >= 5` → `count >= 100`
+
+Both tests have inline comments noting the escalation. ~5 min, one PR. Re-run the smoke cron afterwards (`?dry=1`) to confirm both stay green at the new floor.
+
+If sitemap is still <100 URLs on Monday, the warehouse refresh isn't picking up the new seed list — investigate `src/lib/warehouse/refresh.ts` orchestrator + `src/lib/warehouse/universe.ts` `getTickerUniverse()` before raising the floor.
+
+### ~2026-05-25 — evaluate paid SEO instrumentation
+
+Optional: add Lighthouse score checks + keyword position tracking to the E2E smoke suite. Both require paid API access (Vercel Speed Insights API and SerpAPI / Ahrefs API respectively).
+
+Decide based on:
+- Is organic traffic non-zero by then? (no traffic = no signal to instrument)
+- Are the ticker pages actually ranking for any long-tail queries? (check Google Search Console first — it's free)
+- Budget for monitoring tools?
+
+If yes to all three: add a `lighthouse` and `seo-rank` category to `src/lib/e2e-smoke.ts`. If not, defer another 30 days. Either way, log the decision here.
 
 ---
 

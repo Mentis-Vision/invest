@@ -1,12 +1,27 @@
+import type { Metadata } from "next";
 import MarketingNav from "@/components/marketing/nav";
 import MarketingFooter from "@/components/marketing/footer";
 import WaitlistForm from "@/components/marketing/waitlist-form";
 import { Check } from "lucide-react";
 
-export const metadata = {
-  title: "Pricing · ClearPath Invest",
+export const metadata: Metadata = {
+  title: "Pricing",
   description:
-    "Three research products at three cost points. Four tiers, honest pricing.",
+    "ClearPath Invest pricing: free private beta, $29/mo Individual, $79/mo Active, $500/mo Advisor. Evidence-based stock research with live SEC and Federal Reserve data.",
+  alternates: { canonical: "/pricing" },
+  openGraph: {
+    title: "ClearPath Invest pricing — from free beta to $500/mo Advisor",
+    description:
+      "Three research depths, four tiers. Transparent fair-use caps. Your rate locks for 12 months at signup.",
+    url: "/pricing",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "ClearPath Invest pricing",
+    description:
+      "Three research depths, four tiers. From free private beta to $500/mo Advisor. 12-month price lock.",
+  },
 };
 
 type Tier = {
@@ -20,6 +35,52 @@ type Tier = {
   ctaKind: "waitlist" | "contact" | "active";
 };
 
+const faqItems = [
+  {
+    q: "Why three depths of research?",
+    a: "Different questions deserve different depth. Scanning 50 candidates needs a fast triage read; committing capital to a finalist deserves a full-panel consensus. Asking both with the same tool would either be wasteful or shallow. You get three depths; we route the right one for the context automatically, but you can always override.",
+  },
+  {
+    q: "Is this investment advice?",
+    a: "No. ClearPath is an informational research tool. We don't give personalized financial advice, and nothing we produce should be interpreted as such. For advice specific to your situation, consult a licensed advisor.",
+  },
+  {
+    q: "How is this different from a general chatbot?",
+    a: "Chatbots produce a single answer from stale training data with no source citations. ClearPath pulls live data from 12+ authoritative sources, applies three independent investment lenses — Quality, Momentum, Context — to the same verified facts, surfaces disagreement between them when it exists, and cites every claim back to its primary source. You see the evidence, not just the conclusion.",
+  },
+  {
+    q: "Can I use ClearPath with my existing brokerage?",
+    a: "Yes. We integrate with SnapTrade for read-only portfolio sync across 15+ major brokerages (Fidelity, Schwab, Robinhood, Coinbase, etc.). We never execute trades — you still do that yourself in your brokerage.",
+  },
+  {
+    q: "What happens to my data?",
+    a: "Your portfolio data stays in your account. We don't sell data, don't train models on your holdings, and don't share your information with third parties. The nightly warehouse holds ticker-level market data only — never userId or PII.",
+  },
+  {
+    q: "What if I want to switch tiers?",
+    a: "Up or down any time. We prorate. If you find yourself hitting the Individual cap three months in a row, that's the signal to upgrade to Active.",
+  },
+] as const;
+
+// FAQPage JSON-LD — wraps the existing FAQ below. Biggest SEO + LLM-
+// citation win on the site: FAQPage schema regularly unlocks AI
+// Overviews on Google. Static server-side constant, no user input.
+const faqPageLd = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: faqItems.map((item) => ({
+    "@type": "Question",
+    name: item.q,
+    acceptedAnswer: { "@type": "Answer", text: item.a },
+  })),
+} as const;
+
+// Tier volume numbers are published as concrete caps, not vague
+// magnitudes — the brand promise is "every claim traceable," so the
+// pricing page should not say "a few hundred." All caps are fair-use:
+// we email at 80% of the limit rather than hard-clip, giving headroom
+// for the occasional spike. Numbers sized so the 4× Individual→Active
+// headroom math still works.
 const tiers: Tier[] = [
   {
     name: "Beta",
@@ -27,10 +88,11 @@ const tiers: Tier[] = [
     price: "Free",
     priceSub: "during private beta",
     features: [
-      "A few hundred quick reads per month",
-      "A handful of deep reads + panel consensus each month",
+      "100 quick reads / month",
+      "10 deep reads / month",
+      "3 panel consensus briefs / month",
       "Overnight portfolio brief on every holding",
-      "All data sources",
+      "All 12+ data sources",
       "Email support",
     ],
     ctaLabel: "Request access",
@@ -43,9 +105,9 @@ const tiers: Tier[] = [
     priceSub: "per month",
     accent: "primary",
     features: [
-      "Thousands of quick reads per month",
-      "Hundreds of deep reads",
-      "Dozens of panel consensus reports",
+      "300 quick reads / month",
+      "30 deep reads / month",
+      "10 panel consensus briefs / month",
       "Overnight brief on every holding",
       "Portfolio sync + alerts",
       "Priority support",
@@ -61,7 +123,7 @@ const tiers: Tier[] = [
     accent: "secondary",
     features: [
       "Everything in Individual",
-      "4× the research headroom",
+      "1,200 quick / 120 deep / 40 panels per month (4×)",
       "Weekly portfolio review (auto-generated)",
       "Event-triggered alerts on holdings",
       "Priority routing on panel consensus",
@@ -76,7 +138,7 @@ const tiers: Tier[] = [
     priceSub: "per month",
     features: [
       "Up to 50 client portfolios",
-      "Effectively uncapped research",
+      "Effectively uncapped research under fair use",
       "White-label research briefs",
       "Compliance-friendly audit log",
       "API access",
@@ -87,9 +149,56 @@ const tiers: Tier[] = [
   },
 ];
 
+// Product / Offer JSON-LD — one per tier. Static server-side payload.
+// Parsed from the `tiers` array so it stays in sync with what the page
+// actually renders.
+const productsLd = tiers.map((t) => {
+  // Beta price "Free" → "0" numeric. All other tiers start with "$".
+  const numericPrice =
+    t.price === "Free"
+      ? "0"
+      : t.price.replace(/[^0-9.]/g, "") || "0";
+  return {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: `ClearPath Invest — ${t.name}`,
+    description: `${t.sub}. ${t.features.slice(0, 3).join(". ")}.`,
+    brand: { "@type": "Brand", name: "ClearPath Invest" },
+    offers: {
+      "@type": "Offer",
+      price: numericPrice,
+      priceCurrency: "USD",
+      availability: "https://schema.org/PreOrder",
+      priceSpecification: {
+        "@type": "UnitPriceSpecification",
+        price: numericPrice,
+        priceCurrency: "USD",
+        billingIncrement: 1,
+        unitText: "MONTH",
+      },
+    },
+  };
+});
+
 export default function Pricing() {
   return (
     <div className="min-h-screen bg-background">
+      {/* JSON-LD — FAQPage + one Product per tier. XSS-safe: the
+          dangerouslySetInnerHTML payloads are hard-coded server-side
+          constants (no user input, no DB value, no query param). This
+          is the Next.js-recommended pattern for JSON-LD, see
+          https://nextjs.org/docs/app/guides/json-ld. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqPageLd) }}
+      />
+      {productsLd.map((p, i) => (
+        <script
+          key={`product-ld-${i}`}
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(p) }}
+        />
+      ))}
       <MarketingNav />
 
       <section className="border-b border-border">
@@ -225,6 +334,10 @@ export default function Pricing() {
             Your rate at signup is locked for 12 months. You can switch tiers
             up or down any time — we prorate.
           </p>
+          <p className="mt-2 text-center text-[12px] text-muted-foreground/80">
+            Caps are fair-use — we email you at 80% of the limit, never hard-
+            clip mid-research. Unused capacity doesn&rsquo;t roll over.
+          </p>
         </div>
       </section>
 
@@ -235,32 +348,7 @@ export default function Pricing() {
           </h2>
 
           <div className="space-y-8">
-            {[
-              {
-                q: "Why three depths of research?",
-                a: "Different questions deserve different depth. Scanning 50 candidates needs a fast triage read; committing capital to a finalist deserves a full-panel consensus. Asking both with the same tool would either be wasteful or shallow. You get three depths; we route the right one for the context automatically, but you can always override.",
-              },
-              {
-                q: "Is this investment advice?",
-                a: "No. ClearPath is an informational research tool. We don't give personalized financial advice, and nothing we produce should be interpreted as such. For advice specific to your situation, consult a licensed advisor.",
-              },
-              {
-                q: "How is this different from a general chatbot?",
-                a: "Chatbots produce a single answer from stale training data with no source citations. ClearPath pulls live data from 12+ authoritative sources, applies three independent investment lenses (value, growth, macro) to the same verified facts, surfaces disagreement between them when it exists, and cites every claim back to its primary source. You see the evidence, not just the conclusion.",
-              },
-              {
-                q: "Can I use ClearPath with my existing brokerage?",
-                a: "Yes. We integrate with SnapTrade for read-only portfolio sync across 15+ major brokerages (Fidelity, Schwab, Robinhood, Coinbase, etc.). We never execute trades — you still do that yourself in your brokerage.",
-              },
-              {
-                q: "What happens to my data?",
-                a: "Your portfolio data stays in your account. We don't sell data, don't train models on your holdings, and don't share your information with third parties. The nightly warehouse holds ticker-level market data only — never userId or PII.",
-              },
-              {
-                q: "What if I want to switch tiers?",
-                a: "Up or down any time. We prorate. If you find yourself hitting the Individual cap three months in a row, that's the signal to upgrade to Active.",
-              },
-            ].map((item) => (
+            {faqItems.map((item) => (
               <div key={item.q}>
                 <h3 className="font-heading text-[20px] leading-tight text-foreground">
                   {item.q}

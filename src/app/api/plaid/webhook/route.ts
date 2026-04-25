@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "node:crypto";
+import { waitUntil } from "@vercel/functions";
 import {
   verifyPlaidWebhook,
   syncHoldings,
@@ -44,112 +46,179 @@ export async function POST(req: NextRequest) {
   const raw = await req.text();
   const signature = req.headers.get("plaid-verification");
 
-  const verify = await verifyPlaidWebhook(raw, signature);
-  if (!verify.ok) {
-    log.warn("plaid.webhook", "rejected", { reason: verify.reason });
-    return NextResponse.json(
-      { error: "unverified" },
-      { status: 401 }
-    );
-  }
-
-  let body: PlaidWebhookBody;
-  try {
-    body = JSON.parse(raw) as PlaidWebhookBody;
-  } catch {
-    return NextResponse.json({ error: "bad json" }, { status: 400 });
-  }
-
-  const { webhook_type: wType, webhook_code: wCode, item_id: itemId } = body;
-  if (!wType || !wCode || !itemId) {
-    return NextResponse.json({ error: "missing fields" }, { status: 400 });
-  }
-
-  // Resolve userId from itemId. If we don't own this item (already
-  // removed, or webhook for a stale item), 200-OK silently — Plaid
-  // retries on 5xx but not 4xx/2xx.
-  const { rows } = await pool.query(
-    `SELECT "userId" FROM "plaid_item"
-     WHERE "itemId" = $1 AND "status" <> 'removed'
-     LIMIT 1`,
-    [itemId]
-  );
-  if (rows.length === 0) {
-    log.info("plaid.webhook", "unknown item (already removed?)", { itemId });
-    return NextResponse.json({ ok: true });
-  }
-  const userId = (rows[0] as { userId: string }).userId;
-
-  // Record the last-webhook timestamp regardless of what we do with it
-  await pool
-    .query(
-      `UPDATE "plaid_item" SET "lastWebhookAt" = NOW(), "updatedAt" = NOW()
-       WHERE "itemId" = $1`,
-      [itemId]
-    )
-    .catch(() => {});
-
-  log.info("plaid.webhook", "received", {
-    userId,
-    itemId,
-    wType,
-    wCode,
-  });
+  // Observability: every webhook attempt is recorded in
+  // `plaid_webhook_event` regardless of verify/handler outcome.
+  // Populated throughout the flow; persisted exactly once in the
+  // finally block below. Fire-and-forget — a DB hiccup must never
+  // block webhook delivery because Plaid only retries on 5xx, and
+  // retries on observability-write-failure would be wrong.
+  const eventRow: {
+    verified: boolean;
+    itemId: string | null;
+    webhookType: string | null;
+    webhookCode: string | null;
+    errorReason: string | null;
+    payloadSample: string | null;
+  } = {
+    verified: false,
+    itemId: null,
+    webhookType: null,
+    webhookCode: null,
+    errorReason: null,
+    payloadSample: null,
+  };
 
   try {
-    switch (wType) {
-      case "INVESTMENTS_TRANSACTIONS": {
-        // `DEFAULT_UPDATE` → new txs. `HISTORICAL_UPDATE` → first pull.
-        // For both, pull last 90 days to be safe.
-        await syncTransactions(userId, itemId, 90);
-        // Also re-sync holdings — they often shift with transactions.
-        await syncHoldings(userId, itemId);
-        break;
-      }
-      case "HOLDINGS": {
-        await syncHoldings(userId, itemId);
-        break;
-      }
-      case "ITEM": {
-        if (wCode === "ERROR" || wCode === "LOGIN_REQUIRED") {
-          await pool.query(
-            `UPDATE "plaid_item"
-             SET "status" = 'login_required',
-                 "statusDetail" = $1,
-                 "updatedAt" = NOW()
-             WHERE "itemId" = $2`,
-            [
-              body.error?.error_message ?? wCode,
-              itemId,
-            ]
-          );
-        } else if (wCode === "PENDING_EXPIRATION") {
-          await pool.query(
-            `UPDATE "plaid_item"
-             SET "statusDetail" = 'access expiring — reauth to keep syncing',
-                 "updatedAt" = NOW()
-             WHERE "itemId" = $1`,
-            [itemId]
-          );
-        }
-        break;
-      }
-      default:
-        // Unknown webhook type. Log for visibility but don't error —
-        // new webhook types ship periodically; don't want retries.
-        log.info("plaid.webhook", "ignored type", { wType, wCode });
+    const verify = await verifyPlaidWebhook(raw, signature);
+    if (!verify.ok) {
+      eventRow.errorReason = (verify.reason ?? "verify failed").slice(0, 500);
+      // Keep the raw body on failures — it's the only place we can
+      // later inspect a sender claiming to be Plaid. Plaid webhook
+      // bodies never contain access tokens (only item_id + scope
+      // codes), so the 500-char cap + CHECK constraint is safe.
+      eventRow.payloadSample = raw.slice(0, 500);
+      log.warn("plaid.webhook", "rejected", { reason: verify.reason });
+      return NextResponse.json({ error: "unverified" }, { status: 401 });
+    }
+    eventRow.verified = true;
+
+    let body: PlaidWebhookBody;
+    try {
+      body = JSON.parse(raw) as PlaidWebhookBody;
+    } catch {
+      eventRow.errorReason = "bad json";
+      eventRow.payloadSample = raw.slice(0, 500);
+      return NextResponse.json({ error: "bad json" }, { status: 400 });
     }
 
-    return NextResponse.json({ ok: true });
-  } catch (err) {
-    log.error("plaid.webhook", "handler failed", {
+    const { webhook_type: wType, webhook_code: wCode, item_id: itemId } = body;
+    eventRow.webhookType = wType ?? null;
+    eventRow.webhookCode = wCode ?? null;
+    eventRow.itemId = itemId ?? null;
+
+    if (!wType || !wCode || !itemId) {
+      eventRow.errorReason = "missing fields";
+      eventRow.payloadSample = raw.slice(0, 500);
+      return NextResponse.json({ error: "missing fields" }, { status: 400 });
+    }
+
+    // Resolve userId from itemId. If we don't own this item (already
+    // removed, or webhook for a stale item), 200-OK silently — Plaid
+    // retries on 5xx but not 4xx/2xx.
+    const { rows } = await pool.query(
+      `SELECT "userId" FROM "plaid_item"
+       WHERE "itemId" = $1 AND "status" <> 'removed'
+       LIMIT 1`,
+      [itemId]
+    );
+    if (rows.length === 0) {
+      eventRow.errorReason = "unknown item";
+      log.info("plaid.webhook", "unknown item (already removed?)", { itemId });
+      return NextResponse.json({ ok: true });
+    }
+    const userId = (rows[0] as { userId: string }).userId;
+
+    // Record the last-webhook timestamp regardless of what we do with it
+    await pool
+      .query(
+        `UPDATE "plaid_item" SET "lastWebhookAt" = NOW(), "updatedAt" = NOW()
+         WHERE "itemId" = $1`,
+        [itemId]
+      )
+      .catch(() => {});
+
+    log.info("plaid.webhook", "received", {
       userId,
       itemId,
       wType,
       wCode,
-      ...errorInfo(err),
     });
-    // 500 lets Plaid retry — they back off automatically up to 3×.
-    return NextResponse.json({ error: "handler failed" }, { status: 500 });
+
+    try {
+      switch (wType) {
+        case "INVESTMENTS_TRANSACTIONS": {
+          // `DEFAULT_UPDATE` → new txs. `HISTORICAL_UPDATE` → first pull.
+          // For both, pull last 90 days to be safe.
+          await syncTransactions(userId, itemId, 90);
+          // Also re-sync holdings — they often shift with transactions.
+          await syncHoldings(userId, itemId);
+          break;
+        }
+        case "HOLDINGS": {
+          await syncHoldings(userId, itemId);
+          break;
+        }
+        case "ITEM": {
+          if (wCode === "ERROR" || wCode === "LOGIN_REQUIRED") {
+            await pool.query(
+              `UPDATE "plaid_item"
+               SET "status" = 'login_required',
+                   "statusDetail" = $1,
+                   "updatedAt" = NOW()
+               WHERE "itemId" = $2`,
+              [body.error?.error_message ?? wCode, itemId]
+            );
+          } else if (wCode === "PENDING_EXPIRATION") {
+            await pool.query(
+              `UPDATE "plaid_item"
+               SET "statusDetail" = 'access expiring — reauth to keep syncing',
+                   "updatedAt" = NOW()
+               WHERE "itemId" = $1`,
+              [itemId]
+            );
+          }
+          break;
+        }
+        default:
+          // Unknown webhook type. Log for visibility but don't error —
+          // new webhook types ship periodically; don't want retries.
+          log.info("plaid.webhook", "ignored type", { wType, wCode });
+      }
+
+      return NextResponse.json({ ok: true });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "handler failed";
+      eventRow.errorReason = msg.slice(0, 500);
+      log.error("plaid.webhook", "handler failed", {
+        userId,
+        itemId,
+        wType,
+        wCode,
+        ...errorInfo(err),
+      });
+      // 500 lets Plaid retry — they back off automatically up to 3×.
+      return NextResponse.json({ error: "handler failed" }, { status: 500 });
+    }
+  } finally {
+    // Persist exactly once per request. `waitUntil` registers the
+    // Promise with Vercel's Fluid Compute runtime so it is allowed
+    // to complete after the response is sent but before the function
+    // instance can be suspended. Without this wrapper a bare
+    // fire-and-forget Promise can be frozen mid-flight and silently
+    // lose the event row.
+    //
+    // The INSERT itself still cannot block webhook delivery — errors
+    // only affect admin visibility (backstopped by the warn log).
+    waitUntil(
+      pool
+        .query(
+          `INSERT INTO "plaid_webhook_event"
+             (id, verified, "itemId", "webhookType", "webhookCode",
+              "errorReason", "payloadSample")
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            crypto.randomUUID(),
+            eventRow.verified,
+            eventRow.itemId,
+            eventRow.webhookType,
+            eventRow.webhookCode,
+            eventRow.errorReason,
+            eventRow.payloadSample,
+          ]
+        )
+        .catch((err) => {
+          log.warn("plaid.webhook", "event persist failed", errorInfo(err));
+        })
+    );
   }
 }

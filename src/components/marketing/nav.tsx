@@ -5,8 +5,9 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 
 const navItems = [
+  { href: "/research", label: "Weekly brief" },
   { href: "/how-it-works", label: "How It Works" },
-  { href: "/manifesto", label: "Manifesto" },
+  { href: "/alternatives", label: "Compare" },
   { href: "/pricing", label: "Pricing" },
 ];
 
@@ -59,8 +60,12 @@ export default function MarketingNav() {
           >
             Sign in
           </Link>
+          {/* Absolute /#access (not bare #access) so the button works from
+              every page — on /pricing or /manifesto a bare hash anchor
+              just scrolls to top because the #access element only lives
+              on the landing. Next Link handles the route-then-scroll. */}
           <Link
-            href="#access"
+            href="/#access"
             className="rounded-md bg-foreground px-4 py-2 text-[13px] font-semibold text-background transition-all hover:bg-foreground/85"
           >
             Request access

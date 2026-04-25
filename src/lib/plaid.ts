@@ -279,12 +279,20 @@ export async function cleanupInactivePlaidItems(
  * Products scoped to `investments` only — Plaid enforces this at Link
  * time, which means even if future code tried to call bank endpoints,
  * the access_token wouldn't grant access.
+ *
+ * `redirectUri` is required for OAuth institutions (Schwab, Fidelity,
+ * Vanguard, etc.). Plaid sends the user to the institution's login page
+ * and then back to this URL on our domain; the page at that URL resumes
+ * the Link flow. Must exactly match a URL registered in the Plaid
+ * Dashboard under API → Allowed redirect URIs.
  */
 export async function createLinkToken(opts: {
   userId: string;
   webhookUrl?: string;
   /** For re-auth flows when an existing Item needs Login Required */
   accessToken?: string;
+  /** Required for OAuth institutions (Schwab, Fidelity, Vanguard, etc.) */
+  redirectUri?: string;
 }): Promise<string> {
   const client = plaidClient();
   const resp = await client.linkTokenCreate({
@@ -298,6 +306,7 @@ export async function createLinkToken(opts: {
     language: "en",
     webhook: opts.webhookUrl,
     access_token: opts.accessToken, // re-auth flow
+    redirect_uri: opts.redirectUri,
   });
   return resp.data.link_token;
 }
@@ -528,10 +537,17 @@ export async function syncHoldings(
     }
   }
 
-  // 4. Mark item as synced
+  // 4. Mark item as synced. Also clear any prior `sync_failed` state
+  //    so a successful retry heals a previously-broken Item. We do NOT
+  //    flip `login_required` → `active` here — that status must come
+  //    from a webhook or reauth flow since we can't prove the auth
+  //    ourselves just by reading holdings.
   await pool.query(
     `UPDATE "plaid_item"
-     SET "lastSyncedAt" = NOW(), "updatedAt" = NOW()
+     SET "lastSyncedAt" = NOW(),
+         "updatedAt" = NOW(),
+         "status" = CASE WHEN "status" = 'sync_failed' THEN 'active' ELSE "status" END,
+         "statusDetail" = CASE WHEN "status" = 'sync_failed' THEN NULL ELSE "statusDetail" END
      WHERE "itemId" = $1`,
     [itemId]
   );

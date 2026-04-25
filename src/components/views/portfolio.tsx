@@ -22,6 +22,8 @@ import {
 } from "@/components/dashboard/drill-context";
 import DrillPanel from "@/components/dashboard/drill-panel";
 import { ConnectPicker } from "@/components/brokerage/connect-picker";
+import { FreshnessIndicator } from "@/components/dashboard/freshness-indicator";
+import { sumMoney, normalizeWeights } from "@/lib/money";
 
 /**
  * Portfolio — redesigned as a grouped drill-down view.
@@ -99,7 +101,7 @@ function buildGroups(holdings: Holding[], by: GroupKey): Group[] {
         id: "all",
         label: "All positions",
         holdings,
-        totalValue: holdings.reduce((s, h) => s + h.value, 0),
+        totalValue: sumMoney(...holdings.map((h) => h.value)),
       },
     ];
   }
@@ -133,7 +135,11 @@ function buildGroups(holdings: Holding[], by: GroupKey): Group[] {
       buckets.set(key, g);
     }
     g.holdings.push(h);
-    g.totalValue += h.value;
+    // sumMoney each running group total so the cents rounding happens
+    // on every step — otherwise a 20-position group can drift into
+    // the 0.01 range and disagree with the sum of shown per-position
+    // dollars in the expanded view.
+    g.totalValue = sumMoney(g.totalValue, h.value);
   }
   return [...buckets.values()].sort((a, b) => b.totalValue - a.totalValue);
 }
@@ -157,6 +163,7 @@ function PortfolioBody() {
   const [totalValue, setTotalValue] = useState(0);
   const [brokerageBalance, setBrokerageBalance] = useState<number | null>(null);
   const [connected, setConnected] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notConfiguredMessage, setNotConfiguredMessage] = useState<string | null>(null);
   const popupRef = useRef<Window | null>(null);
@@ -179,6 +186,7 @@ function PortfolioBody() {
       setTotalValue(data.totalValue ?? 0);
       setBrokerageBalance(data.brokerageBalance ?? null);
       setConnected(!!data.connected);
+      setLastSyncedAt(data.lastSyncedAt ?? null);
     } catch {
       setError("Could not load holdings.");
     } finally {
@@ -325,7 +333,7 @@ function PortfolioBody() {
   }, [holdings, excludedAccounts]);
 
   const filteredTotal = useMemo(
-    () => filteredHoldings.reduce((s, h) => s + h.value, 0),
+    () => sumMoney(...filteredHoldings.map((h) => h.value)),
     [filteredHoldings]
   );
 
@@ -361,9 +369,12 @@ function PortfolioBody() {
           <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-foreground">
             My Portfolio
           </h2>
-          <p className="mt-0.5 text-[13px] text-muted-foreground">
-            Everything you hold, grouped however you want to look at it.
-          </p>
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[13px] text-muted-foreground">
+            <span>Everything you hold, grouped however you want to look at it.</span>
+            {connected && (
+              <FreshnessIndicator lastSyncedAt={lastSyncedAt} />
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {connected && (
@@ -532,12 +543,20 @@ function PortfolioBody() {
         <EmptyState onConnect={startLinking} loading={loadingToken} />
       ) : (
         <div className="space-y-3">
-          {groups.map((g) => {
-            const isFlat = groupBy === "flat";
-            const isCollapsed = collapsed[g.id] ?? false;
-            const weight =
-              filteredTotal > 0 ? (g.totalValue / filteredTotal) * 100 : 0;
-            return (
+          {(() => {
+            // Compute all group weights in a single largest-remainder
+            // pass so the column sums to exactly 100% across groups.
+            // Otherwise five 20% groups render as 20.0/20.0/20.0/20.0/19.9
+            // and users wonder why their portfolio adds up to 99.9%.
+            const groupWeights = normalizeWeights(
+              groups.map((g) => g.totalValue),
+              1
+            );
+            return groups.map((g, gIdx) => {
+              const isFlat = groupBy === "flat";
+              const isCollapsed = collapsed[g.id] ?? false;
+              const weight = groupWeights[gIdx] ?? 0;
+              return (
               <section
                 key={g.id}
                 className="overflow-hidden rounded-[10px] border border-border bg-card"
@@ -669,7 +688,8 @@ function PortfolioBody() {
                 )}
               </section>
             );
-          })}
+            });
+          })()}
         </div>
       )}
 

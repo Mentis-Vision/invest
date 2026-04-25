@@ -14,16 +14,6 @@ export default function PrivacyPage() {
     <>
       <MarketingNav />
       <main className="mx-auto max-w-3xl px-6 py-16 lg:py-24">
-        <div className="mb-8 rounded-md border border-[var(--hold)]/40 bg-[var(--hold)]/5 p-4 text-sm">
-          <p className="font-medium">Draft for attorney review.</p>
-          <p className="mt-1 text-muted-foreground">
-            This policy reflects our intended privacy practices but has not
-            been finalized by licensed counsel. It should be reviewed by a
-            qualified attorney, particularly for GDPR/CCPA compliance, before
-            ClearPath Invest accepts paying customers.
-          </p>
-        </div>
-
         <h1 className="font-[family-name:var(--font-display)] text-4xl font-medium tracking-tight">
           Privacy Policy
         </h1>
@@ -92,25 +82,18 @@ export default function PrivacyPage() {
           </ul>
           <h3>c. From brokerage integrations (if you link)</h3>
           <p>
-            We offer two brokerage-linking services. Both are <strong>read-only</strong> —
-            we cannot and do not initiate trades or move money. Both
-            require your explicit authorization through the brokerage&rsquo;s
-            own login screen.
+            Brokerage linking is <strong>read-only</strong> — we cannot and
+            do not initiate trades or move money. Linking requires your
+            explicit authorization through the brokerage&rsquo;s own login
+            screen. We use two services, with a Plaid-first policy:
           </p>
           <ul>
             <li>
-              <strong>Via SnapTrade</strong> — account balances, holdings,
-              positions, and trade activity for Robinhood, Coinbase, Kraken,
-              and most retail brokerages. We never receive your brokerage
-              login credentials. SnapTrade holds the authorization on your
-              behalf; we store an encrypted user secret that lets us query
-              your data.
-            </li>
-            <li>
-              <strong>Via Plaid Investments</strong> — holdings and
-              investment-transaction data for Schwab, Fidelity, Vanguard, and
-              other institutions SnapTrade doesn&rsquo;t cover. We use
-              Plaid&rsquo;s <em>Investments</em> product only.{" "}
+              <strong>Via Plaid Investments (primary)</strong> — holdings
+              and investment-transaction data for Schwab, Fidelity, Vanguard,
+              Robinhood, E*TRADE, Merrill, SoFi, Webull, and the large
+              majority of US brokerages. We use Plaid&rsquo;s{" "}
+              <em>Investments</em> product only.{" "}
               <strong>
                 We do not use Plaid Bank Accounts, Net Worth, Credit Cards,
                 Loans, Liabilities, Enrich, or Recurring Transactions
@@ -119,6 +102,15 @@ export default function PrivacyPage() {
               or loan data. Your brokerage login credentials are exchanged
               directly between you and Plaid; we receive only an encrypted
               access token scoped to investment-account data.
+            </li>
+            <li>
+              <strong>Via SnapTrade (fallback)</strong> — used only for
+              institutions Plaid doesn&rsquo;t cover, primarily crypto
+              exchanges (Coinbase, Kraken, Gemini) and a handful of
+              non-US/alt brokers (Questrade, Wealthsimple). Same read-only
+              posture; we never receive your brokerage login credentials.
+              SnapTrade holds the authorization on your behalf and we
+              store an encrypted user secret that lets us query your data.
             </li>
           </ul>
           <h3>d. From AI providers</h3>
@@ -179,13 +171,14 @@ export default function PrivacyPage() {
               inference.
             </li>
             <li>
-              <strong>SnapTrade</strong> — brokerage account linking
-              (Robinhood, Coinbase, Kraken, most retail brokerages).
+              <strong>Plaid</strong> — primary brokerage account linking,
+              Investments scope only (Schwab, Fidelity, Vanguard, Robinhood,
+              E*TRADE, Merrill, SoFi, Webull, and most US brokerages).
             </li>
             <li>
-              <strong>Plaid</strong> — brokerage account linking
-              (Schwab, Fidelity, Vanguard, and institutions SnapTrade
-              doesn&rsquo;t cover). Investments scope only.
+              <strong>SnapTrade</strong> — fallback brokerage linking for
+              institutions Plaid doesn&rsquo;t cover (crypto exchanges such
+              as Coinbase and Kraken, plus a few non-US brokers).
             </li>
             <li>
               <strong>Resend</strong> — transactional email (verification,

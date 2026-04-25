@@ -26,6 +26,8 @@ import DisclaimerModal from "@/components/disclaimer-modal";
 import OutcomePing from "@/components/outcome-ping";
 import { getHoldings } from "@/lib/client/holdings-cache";
 import ResearchStarter from "@/components/research/research-starter";
+import { DossierHero } from "@/components/research/dossier-hero";
+import { SectorRail } from "@/components/research/sector-rail";
 import { WarehouseFreshness } from "@/components/warehouse-freshness";
 import { MarketPulse } from "@/components/research/market-pulse";
 import { MiniSparkline } from "@/components/research/mini-sparkline";
@@ -357,8 +359,10 @@ function ModelCard({ result }: { result: ModelResult }) {
 
 export default function ResearchView({
   initialTicker,
+  onNavigateToPortfolio,
 }: {
   initialTicker?: string | null;
+  onNavigateToPortfolio?: () => void;
 }) {
   const [query, setQuery] = useState(initialTicker ?? "");
   const [loading, setLoading] = useState(false);
@@ -722,9 +726,14 @@ export default function ResearchView({
       <OutcomePing />
 
       <div>
-        <h2 className="text-3xl font-semibold tracking-tight text-[var(--foreground)]">
-          Research
-        </h2>
+        <div className="flex items-baseline gap-2">
+          <h2 className="text-3xl font-semibold tracking-tight text-[var(--foreground)]">
+            Research
+          </h2>
+          <span className="text-[11px] uppercase tracking-wider text-muted-foreground/70">
+            · Informational only
+          </span>
+        </div>
         <p className="text-sm text-muted-foreground">
           Three independent investment lenses — Quality, Momentum, Context —
           apply their discipline to the same verified data. Disagreement
@@ -733,27 +742,62 @@ export default function ResearchView({
         </p>
       </div>
 
-      <Card className="border-[var(--hold)]/30 bg-[var(--hold)]/5">
-        <CardContent className="flex items-start gap-3 py-3 text-xs">
-          <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-[var(--hold)]" />
-          <div>
-            <span className="font-medium">For informational purposes only.</span>{" "}
-            Not investment advice. Not a recommendation to buy or sell any
-            security. Consult a licensed financial advisor before making any
-            decision with your money.
-          </div>
-        </CardContent>
-      </Card>
+      {/* Slim search bar — sits up top so it's always one keystroke away
+          without dominating the page. The full Card-style search lower
+          down was the old pattern; this replaces it. */}
+      <form
+        onSubmit={handleSearch}
+        className="flex items-center gap-2 rounded-md border border-border bg-card/60 px-3 py-2"
+      >
+        <Search className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+        <Input
+          placeholder="Research a ticker — AAPL, NVDA, TSLA…"
+          className="h-8 flex-1 border-0 bg-transparent px-0 font-mono text-sm uppercase shadow-none focus-visible:ring-0"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          disabled={loading}
+        />
+        <Button
+          type="submit"
+          size="sm"
+          disabled={loading || !query.trim()}
+          className="h-8"
+        >
+          {loading ? (
+            <>
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              Analyzing
+            </>
+          ) : (
+            "Analyze"
+          )}
+        </Button>
+      </form>
+
+      {/* Dossier-of-the-day hero: zero-AI editorial brief on the
+          user's most-notable holding (or a trending fallback). Acts
+          as the page's focal point above the horizontal strips so
+          the landing feels like a considered publication, not a grid.
+          Hides once the user is actively looking at a result. */}
+      {!result && !quickResult && !standardResult && !loading && (
+        <DossierHero
+          onOpenResearch={(ticker) => {
+            const t = ticker.trim().toUpperCase();
+            setQuery(t);
+            runAnalysis(t, false);
+          }}
+        />
+      )}
 
       {/* Market pulse: today's index closes + macro headline. Lands first
           so the page has SOMETHING valuable before any user input. */}
       <MarketPulse />
 
-      {/* Your book today — top gainer + top loser from the user's own
-          portfolio. Each card is clickable and routes to the research
+      {/* Movers in your book — top gainer + top loser from the user's
+          own portfolio. Each card is clickable and routes to the research
           input auto-populated for that ticker. Hides when no holdings
           or all flat. */}
-      <YourBookToday />
+      <YourBookToday onSeeAll={onNavigateToPortfolio} />
 
       {/* Two-col strip: events this week + worth-reading. Together they
           give the user something to click on (events = what's coming,
@@ -764,55 +808,37 @@ export default function ResearchView({
         <WorthReading />
       </div>
 
+      {/* Sector explore rail — browse without needing a ticker. ETFs
+          are real research targets so clicking a sector tile loads
+          a real analysis. Landing-only; hides when a result is active. */}
+      {!result && !quickResult && !standardResult && !loading && (
+        <SectorRail
+          onOpenResearch={(ticker) => {
+            const t = ticker.trim().toUpperCase();
+            setQuery(t);
+            runAnalysis(t, false);
+          }}
+        />
+      )}
+
       {/* Recent searches — only on landing (no active result / loading). */}
       {!result && !quickResult && !standardResult && !loading && (
         <RecentSearchesStrip />
       )}
 
-      {/* Single-button flow:
-          - Click "Analyze" → instant Quick scan (no mode picker)
-          - On the Quick result card → "Go deeper" runs the Deep read
-            (single best-in-class model + adversarial debate)
-          The depth selector was removed deliberately. Users defaulted to
-          the most expensive option if asked; auto-routing + escape-hatch-
-          to-deeper is the cleaner pattern. */}
-
-      <Card>
-        <CardContent className="p-4">
-          <form onSubmit={handleSearch} className="flex gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Enter ticker (AAPL, NVDA, TSLA, MSFT...)"
-                className="pl-9 font-mono uppercase"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                disabled={loading}
-              />
-            </div>
-            <Button type="submit" disabled={loading || !query.trim()}>
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Analyzing
-                </>
-              ) : (
-                "Analyze"
-              )}
-            </Button>
-          </form>
-          {loading && (
-            <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              {result?.cached
-                ? "Loading cached analysis…"
-                : mode === "quick"
-                  ? "Reading the signals…"
-                  : "Going deeper — full thesis with adversarial debate…"}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Loading-state hint — the slim search bar at the top can't fit
+          per-mode loading copy, so surface it inline here while a run
+          is in flight. */}
+      {loading && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          {result?.cached
+            ? "Loading cached analysis…"
+            : mode === "quick"
+              ? "Reading the signals…"
+              : "Going deeper — full thesis with adversarial debate…"}
+        </div>
+      )}
 
       {error && (
         <Card className="border-red-500/20 bg-red-500/5">

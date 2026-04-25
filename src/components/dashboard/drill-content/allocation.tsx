@@ -5,6 +5,7 @@ import type { Holding } from "@/lib/client/holdings-cache";
 import { DrillHeader, DrillBody, DrillSection } from "./panel-shell";
 import { money, moneyFull, pct } from "../format";
 import { Drillable } from "../drill-context";
+import { sumMoney } from "@/lib/money";
 
 /**
  * Shows every holding that rolls up into the clicked allocation bucket
@@ -28,7 +29,7 @@ export function DrillAllocation({
     [holdings]
   );
   const bucketTotal = useMemo(
-    () => sorted.reduce((s, h) => s + effectiveValue(h), 0),
+    () => sumMoney(...sorted.map((h) => effectiveValue(h))),
     [sorted]
   );
   const share = totalValue > 0 ? bucketTotal / totalValue : 0;

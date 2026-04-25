@@ -1,6 +1,6 @@
 # Information Security Policy
 
-**Effective date:** 2026-04-19
+**Effective date:** 2026-04-20
 **Owner:** Sang Lippert, Founder
 **Review cadence:** Quarterly, or on material change
 
@@ -44,6 +44,8 @@ per §7 below.
 is what lets us pull that user's holdings + transactions; it's
 scoped to the single user. SnapTrade holds the actual brokerage
 OAuth grant and we never see the user's brokerage credentials.
+SnapTrade is used only for institutions and exchanges Plaid does
+not cover (primarily crypto exchanges and a few non-US brokers).
 
 **Plaid (Investments scope only)** — per-Item `access_token` for an
 institution the user linked (e.g., Schwab). Token scope is limited
@@ -144,9 +146,66 @@ secret. No cross-user data flows.
   SnapTrade (API console), Plaid (dashboard), and the AI provider
   accounts.
 - MFA enabled on all admin accounts.
-- Credentials rotated on departure (n/a as of 2026-04-19).
 - No shared accounts. No long-lived API keys checked into source
   control.
+- Offboarding and role-change procedures defined below
+  (Personnel lifecycle & offboarding).
+
+### Personnel lifecycle & offboarding
+
+**Current state:** ClearPath Invest operates with a sole engineer (the
+founder) as of 2026-04-20. There is no HR system, payroll provider, or
+employee directory in place because there are no employees other than
+the founder. The "terminated/transferred employee" risk vector is
+therefore not active, but the process below governs what will happen
+the moment it becomes relevant.
+
+**On hire (any engineer or contractor with production access):**
+
+- Accounts provisioned individually — no shared logins, no credential
+  reuse.
+- MFA (phishing-resistant where supported) required on day 1 for every
+  admin console: GitHub, Vercel, Neon, Resend, SnapTrade, Plaid,
+  Anthropic, OpenAI, Google Cloud, Google Workspace.
+- Principle of least privilege — role-scoped access granted only for
+  what the role requires.
+- Written acknowledgment of this policy and a signed confidentiality
+  agreement before any access is granted.
+
+**On role change:**
+
+- Access re-evaluated within 5 business days; permissions no longer
+  required are removed before new ones are added.
+
+**On offboarding (voluntary or involuntary):**
+
+- All access revoked within 24 hours of the separation decision,
+  targeting same-day revocation where practical.
+- Specific actions, tracked via a written offboarding checklist:
+  1. Disable/remove user from GitHub org and revoke personal access
+     tokens issued under the account.
+  2. Remove from Vercel team; revoke any personal API tokens.
+  3. Remove from Neon project; rotate any shared connection strings
+     the person could have exported.
+  4. Remove from Resend, SnapTrade, Plaid dashboards, AI provider
+     consoles, and Google Workspace.
+  5. Rotate any production secret the person had console-level access
+     to (Vercel environment variables, encryption keys) as a
+     precaution, regardless of separation reason.
+  6. Revoke active sessions and force logout across all admin
+     consoles.
+  7. Retrieve or remote-wipe any company-provisioned hardware.
+- A post-offboarding access audit verifies the above within 7 days.
+
+**Automation commitments:** once headcount reaches 3+ with production
+access, we will adopt an identity provider (Google Workspace + SSO into
+all admin consoles where supported, Okta or equivalent if complexity
+warrants) so that deactivating the identity source propagates
+revocation to downstream systems automatically. An HRIS integration
+(e.g., Rippling, Deel) will be layered on when team size justifies it.
+
+**Review:** this subsection is re-reviewed the day any second person
+receives production access, and quarterly thereafter.
 
 ---
 

@@ -663,28 +663,31 @@ export type PatternInsight = {
 };
 
 /**
- * A 2×2 crosstab of action × outcome, rolled up over the same 90-day
+ * Three-lane action × outcome crosstab, rolled up over the same 90-day
  * window PatternInsight uses. Answers "what happens when I act vs
  * when I don't?" — visually clearer than the text insights.
  *
- * Buckets:
- *   tookWins        — you acted (took/partial) AND the call later won
- *   tookLosses      — you acted AND it lost
- *   tookPending     — you acted, outcome still pending
- *   ignoredWins     — you skipped AND the call later won (missed op)
- *   ignoredLosses   — you skipped AND it lost (dodged bullet)
- *   ignoredPending  — you skipped, outcome still pending
+ * Lanes:
+ *   took      — userAction in ('took','partial') — you followed the call
+ *   ignored   — userAction = 'ignored' — you skipped the call
+ *   opposed   — userAction = 'opposed' — you did the opposite
  *
- * Uses 7d+30d windows as the evaluation horizon (matches the existing
- * trackRecord hit-rate calculation).
+ * Each lane carries wins / losses / pending counts evaluated at the
+ * 7d or 30d window (whichever is available first). `opposed` is split
+ * out from `ignored` because the semantics differ: ignoring is passive,
+ * opposing is a counter-conviction bet, and treating them as the same
+ * obscures a real behavioral signal.
  */
+export type ActionLaneStats = {
+  wins: number;
+  losses: number;
+  pending: number;
+};
+
 export type ActionOutcomeMatrix = {
-  tookWins: number;
-  tookLosses: number;
-  tookPending: number;
-  ignoredWins: number;
-  ignoredLosses: number;
-  ignoredPending: number;
+  took: ActionLaneStats;
+  ignored: ActionLaneStats;
+  opposed: ActionLaneStats;
   /** Total recommendations with an action recorded in the window. */
   actedTotal: number;
   /** Total without an action recorded (journal not yet marked). */
@@ -698,9 +701,12 @@ export async function getActionOutcomeMatrix(
 ): Promise<ActionOutcomeMatrix> {
   const windowInterval = `${days} days`;
 
-  // One query: each recommendation classified by (action bucket ×
-  // outcome bucket). CASE expressions collapse the 4 action types
-  // (took/partial/ignored/opposed) into 2 lanes (took/ignored).
+  // Three lanes, each with wins/losses/pending. The took lane keeps
+  // 'partial' grouped with 'took' because partial follow-through is
+  // still directional action — users treat them as the same intent
+  // ("I acted, even if not all the way"). opposed gets its own lane
+  // so the user can see when their counter-conviction paid off vs.
+  // when the model was right.
   const { rows } = await pool.query<{
     took_wins: number;
     took_losses: number;
@@ -708,6 +714,9 @@ export async function getActionOutcomeMatrix(
     ignored_wins: number;
     ignored_losses: number;
     ignored_pending: number;
+    opposed_wins: number;
+    opposed_losses: number;
+    opposed_pending: number;
     acted_total: number;
     unmarked_total: number;
   }>(
@@ -724,16 +733,25 @@ export async function getActionOutcomeMatrix(
          WHERE r."userAction" IN ('took','partial') AND o_verdict IS NULL
        )::int AS took_pending,
        COUNT(*) FILTER (
-         WHERE r."userAction" IN ('ignored','opposed')
-           AND o_verdict LIKE '%win%'
+         WHERE r."userAction" = 'ignored' AND o_verdict LIKE '%win%'
        )::int AS ignored_wins,
        COUNT(*) FILTER (
-         WHERE r."userAction" IN ('ignored','opposed')
+         WHERE r."userAction" = 'ignored'
            AND (o_verdict LIKE '%loss%' OR o_verdict LIKE '%regret%')
        )::int AS ignored_losses,
        COUNT(*) FILTER (
-         WHERE r."userAction" IN ('ignored','opposed') AND o_verdict IS NULL
+         WHERE r."userAction" = 'ignored' AND o_verdict IS NULL
        )::int AS ignored_pending,
+       COUNT(*) FILTER (
+         WHERE r."userAction" = 'opposed' AND o_verdict LIKE '%win%'
+       )::int AS opposed_wins,
+       COUNT(*) FILTER (
+         WHERE r."userAction" = 'opposed'
+           AND (o_verdict LIKE '%loss%' OR o_verdict LIKE '%regret%')
+       )::int AS opposed_losses,
+       COUNT(*) FILTER (
+         WHERE r."userAction" = 'opposed' AND o_verdict IS NULL
+       )::int AS opposed_pending,
        COUNT(*) FILTER (WHERE r."userAction" IS NOT NULL)::int AS acted_total,
        COUNT(*) FILTER (WHERE r."userAction" IS NULL)::int AS unmarked_total
      FROM "recommendation" r
@@ -756,16 +774,28 @@ export async function getActionOutcomeMatrix(
     ignored_wins: 0,
     ignored_losses: 0,
     ignored_pending: 0,
+    opposed_wins: 0,
+    opposed_losses: 0,
+    opposed_pending: 0,
     acted_total: 0,
     unmarked_total: 0,
   };
   return {
-    tookWins: r.took_wins,
-    tookLosses: r.took_losses,
-    tookPending: r.took_pending,
-    ignoredWins: r.ignored_wins,
-    ignoredLosses: r.ignored_losses,
-    ignoredPending: r.ignored_pending,
+    took: {
+      wins: r.took_wins,
+      losses: r.took_losses,
+      pending: r.took_pending,
+    },
+    ignored: {
+      wins: r.ignored_wins,
+      losses: r.ignored_losses,
+      pending: r.ignored_pending,
+    },
+    opposed: {
+      wins: r.opposed_wins,
+      losses: r.opposed_losses,
+      pending: r.opposed_pending,
+    },
     actedTotal: r.acted_total,
     unmarkedTotal: r.unmarked_total,
     daysWindow: days,
@@ -966,4 +996,279 @@ export async function getUserPatternInsights(
     },
     daysWindow: days,
   };
+}
+
+/**
+ * Sector-aware pattern surfaced one at a time.
+ *
+ * Walks the last 90 days joined to `ticker_metadata.sector`, groups by
+ * (sector, userAction-bucket, recommendation), and picks the single
+ * bucket with the strongest "act vs. don't-act" delta — either a big
+ * avg %-move gap between acted and skipped, or a big win-rate gap.
+ *
+ * Returns null when nothing clears the significance bar. The UI shows
+ * a plain empty state rather than a weak insight; surfacing a 1-sample
+ * "pattern" would erode trust.
+ *
+ * Min sample size: 5 per bucket. Sectors without `ticker_metadata`
+ * coverage (common for crypto and new IPOs) are silently excluded
+ * from the ranking — the surfaced count reflects what we could
+ * confidently classify.
+ */
+export type SectorPatternInsight = {
+  /** Which pattern shape we surfaced. */
+  kind: "skipped_winners" | "taken_losers" | "acted_outperformed";
+  sector: string;
+  /** BUY | HOLD | SELL — the recommendation bucket the pattern is about. */
+  recommendation: string;
+  /** The action bucket ('took','ignored','opposed') this pattern is about. */
+  userAction: "took" | "ignored" | "opposed";
+  /** How many recs fall in the (sector × action × recommendation) cell. */
+  sampleSize: number;
+  /** Avg 30-day (or 7d fallback) % move for this cell. */
+  avgMovePct: number | null;
+  /** Win rate (0–100) for this cell. */
+  winRatePct: number | null;
+  /** Comparison cell's avg move — the "what would have happened" baseline. */
+  comparisonAvgMovePct: number | null;
+  comparisonWinRatePct: number | null;
+  comparisonSampleSize: number;
+  /** Significance score used to rank — exposed for debugging. */
+  significance: number;
+  /** Total recommendations analysed this window; sample vs. denominator. */
+  totalAnalysed: number;
+  /** Recs dropped because ticker_metadata.sector IS NULL. */
+  droppedMissingSector: number;
+  daysWindow: number;
+};
+
+type SectorBucketRow = {
+  sector: string;
+  userAction: string;
+  recommendation: string;
+  n: number;
+  avgMove: number | null;
+  winRate: number | null;
+};
+
+const MIN_SECTOR_BUCKET_SIZE = 5;
+
+export async function getSectorPatternInsight(
+  userId: string,
+  days = 90
+): Promise<SectorPatternInsight | null> {
+  const windowInterval = `${days} days`;
+
+  // Pull every (sector × action × rec) bucket in one query, plus the
+  // denominator totals separately so we can report "X of Y recs had a
+  // known sector."
+  let bucketRows: SectorBucketRow[] = [];
+  let totalAnalysed = 0;
+  let droppedMissingSector = 0;
+
+  try {
+    const [bucketQuery, totalsQuery] = await Promise.all([
+      pool.query<{
+        sector: string;
+        userAction: string;
+        recommendation: string;
+        n: string;
+        avgMove: string | null;
+        wins: string;
+        evaluated: string;
+      }>(
+        `SELECT
+           tm.sector AS "sector",
+           r."userAction" AS "userAction",
+           r.recommendation AS "recommendation",
+           COUNT(*)::int AS n,
+           AVG(o."percentMove")::numeric(10,2) AS "avgMove",
+           COUNT(*) FILTER (WHERE o.verdict LIKE '%win%')::int AS wins,
+           COUNT(*) FILTER (
+             WHERE o.verdict LIKE '%win%'
+                OR o.verdict LIKE '%loss%'
+                OR o.verdict LIKE '%regret%'
+                OR o.verdict LIKE '%flat%'
+           )::int AS evaluated
+         FROM "recommendation" r
+         JOIN "ticker_metadata" tm ON tm.ticker = r.ticker
+         LEFT JOIN LATERAL (
+           SELECT verdict, "percentMove"
+           FROM "recommendation_outcome"
+           WHERE "recommendationId" = r.id
+             AND status = 'completed'
+             AND "window" IN ('7d','30d')
+           ORDER BY
+             CASE "window" WHEN '30d' THEN 1 ELSE 2 END
+           LIMIT 1
+         ) o ON TRUE
+         WHERE r."userId" = $1
+           AND r."createdAt" > NOW() - $2::interval
+           AND r."userAction" IN ('took','partial','ignored','opposed')
+           AND tm.sector IS NOT NULL
+         GROUP BY tm.sector, r."userAction", r.recommendation
+         HAVING COUNT(*) >= $3`,
+        [userId, windowInterval, MIN_SECTOR_BUCKET_SIZE]
+      ),
+      pool.query<{ total: string; missing: string }>(
+        `SELECT
+           COUNT(*)::int AS total,
+           COUNT(*) FILTER (
+             WHERE NOT EXISTS (
+               SELECT 1 FROM "ticker_metadata" tm
+               WHERE tm.ticker = r.ticker AND tm.sector IS NOT NULL
+             )
+           )::int AS missing
+         FROM "recommendation" r
+         WHERE r."userId" = $1
+           AND r."createdAt" > NOW() - $2::interval
+           AND r."userAction" IN ('took','partial','ignored','opposed')`,
+        [userId, windowInterval]
+      ),
+    ]);
+
+    bucketRows = bucketQuery.rows.map((row) => {
+      const evaluated = Number(row.evaluated);
+      return {
+        sector: row.sector,
+        userAction: row.userAction,
+        recommendation: row.recommendation,
+        n: Number(row.n),
+        avgMove: row.avgMove != null ? Number(row.avgMove) : null,
+        winRate:
+          evaluated > 0
+            ? Math.round((Number(row.wins) / evaluated) * 100)
+            : null,
+      };
+    });
+    totalAnalysed = Number(totalsQuery.rows[0]?.total ?? 0);
+    droppedMissingSector = Number(totalsQuery.rows[0]?.missing ?? 0);
+  } catch (err) {
+    log.warn("history", "sector pattern query failed", errorInfo(err));
+    return null;
+  }
+
+  if (bucketRows.length === 0) return null;
+
+  // Collapse took/partial into a single "took" lane for comparisons —
+  // users read them as the same bucket.
+  const laneOf = (a: string): "took" | "ignored" | "opposed" | null =>
+    a === "took" || a === "partial"
+      ? "took"
+      : a === "ignored"
+        ? "ignored"
+        : a === "opposed"
+          ? "opposed"
+          : null;
+
+  // Score each bucket on three pattern shapes:
+  //   skipped_winners:  you ignored a (sector, rec) combo and the avg
+  //                     move was meaningfully positive
+  //   taken_losers:     you took a (sector, rec) combo and the avg move
+  //                     was meaningfully negative
+  //   acted_outperformed: the acted lane outperformed the skipped lane
+  //                       on the same (sector, rec) by a wide margin
+  //
+  // Significance = |delta| * sqrt(n). Rewards bigger effect sizes and
+  // bigger samples without going full t-test (we don't have the power
+  // for one at these sample sizes anyway).
+  type Candidate = SectorPatternInsight & { _score: number };
+  const candidates: Candidate[] = [];
+
+  // Helper: find a comparison bucket for the same (sector, rec)
+  // combo where the lane matches a specific target. Explicit lane
+  // matching (not "any other lane") prevents an opposed-lane cohort
+  // from getting silently picked as the baseline for a skipped_winners
+  // finding — opposed = counter-bet, took = neutral-did-act, and
+  // those are semantically different foils.
+  const findLaneComp = (
+    row: SectorBucketRow,
+    targetLane: "took" | "ignored" | "opposed"
+  ) =>
+    bucketRows.find(
+      (other) =>
+        other.sector === row.sector &&
+        other.recommendation === row.recommendation &&
+        laneOf(other.userAction) === targetLane
+    );
+
+  for (const row of bucketRows) {
+    const lane = laneOf(row.userAction);
+    if (!lane) continue;
+
+    // Per-kind explicit comparison lane (see findLaneComp comment).
+    const comparison =
+      lane === "ignored"
+        ? findLaneComp(row, "took")
+        : lane === "took"
+          ? findLaneComp(row, "ignored")
+          : findLaneComp(row, "took"); // opposed lane compares to took
+    const compMove = comparison?.avgMove ?? null;
+    const compWinRate = comparison?.winRate ?? null;
+    const compN = comparison?.n ?? 0;
+
+    const base = {
+      sector: row.sector,
+      recommendation: row.recommendation,
+      userAction: lane,
+      sampleSize: row.n,
+      avgMovePct: row.avgMove,
+      winRatePct: row.winRate,
+      comparisonAvgMovePct: compMove,
+      comparisonWinRatePct: compWinRate,
+      comparisonSampleSize: compN,
+      totalAnalysed,
+      droppedMissingSector,
+      daysWindow: days,
+    };
+
+    // skipped_winners: you ignored a (sector, rec) and the avg move
+    // was positive. Tighten with "comparison" = the took lane did
+    // better on the same thing, amplifying the "you missed" signal.
+    if (lane === "ignored" && (row.avgMove ?? 0) > 2) {
+      const delta = (row.avgMove ?? 0) - (compMove ?? 0);
+      const score = Math.abs(row.avgMove ?? 0) * Math.sqrt(row.n);
+      candidates.push({
+        ...base,
+        kind: "skipped_winners",
+        significance: score,
+        _score: score + Math.max(0, delta),
+      });
+    }
+
+    // taken_losers: you took action on a (sector, rec) and the avg
+    // move was negative.
+    if (lane === "took" && (row.avgMove ?? 0) < -2) {
+      const score = Math.abs(row.avgMove ?? 0) * Math.sqrt(row.n);
+      candidates.push({
+        ...base,
+        kind: "taken_losers",
+        significance: score,
+        _score: score,
+      });
+    }
+
+    // acted_outperformed: the acted lane vs. a skipped lane — a
+    // positive endorsement, surfaced when the delta is material.
+    if (
+      lane === "took" &&
+      compN >= MIN_SECTOR_BUCKET_SIZE &&
+      (row.winRate ?? 0) - (compWinRate ?? 0) >= 25
+    ) {
+      const delta = (row.winRate ?? 0) - (compWinRate ?? 0);
+      const score = delta * Math.sqrt(row.n);
+      candidates.push({
+        ...base,
+        kind: "acted_outperformed",
+        significance: score,
+        _score: score,
+      });
+    }
+  }
+
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => b._score - a._score);
+  const { _score, ...winner } = candidates[0];
+  void _score;
+  return winner;
 }

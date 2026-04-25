@@ -34,33 +34,37 @@ const siteUrl =
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "ClearPath Invest — Know what to do with your money",
+    default: "ClearPath Invest — Evidence-based stock research",
     template: "%s · ClearPath Invest",
   },
   description:
-    "Evidence-based investing research. Three independent AI models cross-verify every recommendation against live SEC, FRED, and market data. Every claim traces to a source.",
+    "Evidence-based stock research for retail investors. Three independent lenses — Quality, Momentum, Context — examine live SEC, Federal Reserve, and market data. Every claim traces to a primary source.",
   keywords: [
     "investment research",
     "AI stock analysis",
-    "portfolio review",
+    "stock research tool",
+    "equity research",
+    "portfolio analysis",
     "SEC EDGAR",
     "evidence-based investing",
+    "AI investment research",
   ],
   authors: [{ name: "ClearPath Invest" }],
+  alternates: { canonical: "/" },
   openGraph: {
     type: "website",
     locale: "en_US",
     url: siteUrl,
     siteName: "ClearPath Invest",
-    title: "Know what to do with your money",
+    title: "Stock research. Every claim sourced.",
     description:
-      "Three independent AI models cross-verify every recommendation. Every claim traces to a source.",
+      "Three independent lenses — Quality, Momentum, Context — examine live SEC, Fed, and market data. Every claim traces to a primary source.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "ClearPath Invest",
+    title: "ClearPath Invest — Stock research, every claim sourced",
     description:
-      "Three independent AI models cross-verify every recommendation. Every claim traces to a source.",
+      "Three independent lenses examine live SEC + Fed data. Every number traces to its source.",
   },
   robots: {
     index: true,
@@ -73,19 +77,40 @@ export const metadata: Metadata = {
       "max-video-preview": -1,
     },
   },
-  icons: {
-    icon: [
-      // Founder-provided 1024×1014 PNG logomark. Served as-is; browsers
-      // downscale for the 16/32/64px tab contexts. ?v=2 busts caches
-      // left over from the earlier Vercel default / 404'd /icon.svg
-      // era — some users were still seeing the Vercel triangle in the
-      // browser tab after the logo-png switch on 2026-04-18.
-      { url: "/logo.png?v=2", type: "image/png", sizes: "any" },
-    ],
-    apple: [{ url: "/logo.png?v=2" }],
-    shortcut: [{ url: "/logo.png?v=2" }],
-  },
 };
+
+// Site-wide JSON-LD: Organization + WebSite. Rendered once in the root
+// layout so every page inherits the structured data. Page-level pages add
+// their own schemas (SoftwareApplication, HowTo, Article, FAQPage,
+// Product) on top. Crawlers + LLM citation bots weight this heavily for
+// AI Overviews / Perplexity / ChatGPT citations.
+//
+// XSS-safety note: dangerouslySetInnerHTML below is safe because the
+// content is a hard-coded server-side constant — no user input, no DB
+// value, no query param. JSON.stringify handles the serialization. This
+// is the pattern the Next.js docs recommend for JSON-LD (see
+// https://nextjs.org/docs/app/guides/json-ld).
+const organizationLd = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "ClearPath Invest",
+  url: siteUrl,
+  logo: `${siteUrl}/logo.png`,
+  description:
+    "Evidence-based stock research for retail investors. Three independent lenses — Quality, Momentum, Context — examine live SEC, Federal Reserve, and market data.",
+  email: "hello@clearpathinvest.app",
+  sameAs: [] as string[],
+} as const;
+
+const websiteLd = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "ClearPath Invest",
+  url: siteUrl,
+  description:
+    "Evidence-based stock research. Three lenses, live data, every claim sourced.",
+  publisher: { "@type": "Organization", name: "ClearPath Invest" },
+} as const;
 
 export default function RootLayout({
   children,
@@ -99,6 +124,16 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
+        {/* Site-wide JSON-LD — see safety note above. */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationLd) }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteLd) }}
+        />
+
         {/* Default to light — hybrid-v2 is calibrated for light-mode-
             first. Users can toggle via the theme switch; system
             preference still overrides when enableSystem. */}

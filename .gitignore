@@ -40,3 +40,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .superpowers/
+
+# macOS Finder metadata — Icon\r files in folders that have a custom icon set
+Icon?
+**/Icon?

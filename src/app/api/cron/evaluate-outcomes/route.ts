@@ -3,6 +3,7 @@ import {
   evaluatePendingOutcomes,
   linkTradesToRecommendations,
 } from "@/lib/outcomes";
+import { evaluatePendingPublicBriefOutcomes } from "@/lib/public-brief-outcomes";
 import { log, errorInfo } from "@/lib/log";
 import { reconcileAllUsers } from "@/lib/reconciliation";
 import { snaptradeConfigured, decryptSecret } from "@/lib/snaptrade";
@@ -197,6 +198,17 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     log.error("cron", "portfolio reviews failed", errorInfo(err));
     result.portfolioReviews = { error: "failed" };
+  }
+
+  // 11. Evaluate due public-brief outcome rows. Marketing-visible analog
+  //    of step 3: mirrors `evaluatePendingOutcomes` but operates on
+  //    public_weekly_brief_outcome (system-scope, no user). Runs last so
+  //    nothing upstream is blocked by a brief-outcome failure.
+  try {
+    result.publicBriefOutcomes = await evaluatePendingPublicBriefOutcomes(500);
+  } catch (err) {
+    log.error("cron", "public brief outcomes evaluation failed", errorInfo(err));
+    result.publicBriefOutcomes = { error: "failed" };
   }
 
   result.durationMs = Date.now() - started;

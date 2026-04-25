@@ -1,15 +1,55 @@
+import type { Metadata } from "next";
 import MarketingNav from "@/components/marketing/nav";
 import MarketingFooter from "@/components/marketing/footer";
 import WaitlistForm from "@/components/marketing/waitlist-form";
 
-export const metadata = {
-  title: "Manifesto · ClearPath Invest",
-  description: "Why single-AI answers are dangerous for real money.",
+export const metadata: Metadata = {
+  title: "Manifesto — Evidence-based AI investing",
+  description:
+    "Why single-AI answers are dangerous for real money. A manifesto on evidence-based stock research with three independent lenses, source citations, and honest confidence signals.",
+  alternates: { canonical: "/manifesto" },
+  openGraph: {
+    title: "Manifesto: Investing should not be vibes",
+    description:
+      "Why one AI isn't enough for real-money decisions. The case for evidence-first stock research with traceable sources.",
+    url: "/manifesto",
+    type: "article",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Manifesto: Investing should not be vibes",
+    description:
+      "Why one AI isn't enough for real-money decisions. The case for evidence-first stock research with traceable sources.",
+  },
 };
+
+// Article JSON-LD — unlocks LLM citation + Google article rich results.
+// XSS-safety: the dangerouslySetInnerHTML in the JSX below is safe —
+// `articleLd` is a hard-coded server-side constant with no user input,
+// no DB value, no query param. This is the Next.js-recommended pattern
+// for JSON-LD injection, see https://nextjs.org/docs/app/guides/json-ld.
+const articleLd = {
+  "@context": "https://schema.org",
+  "@type": "Article",
+  headline: "Investing should not be vibes",
+  description:
+    "A manifesto on evidence-based stock research: why single-AI answers are dangerous for real money, and what a three-lens, traceable approach looks like instead.",
+  author: { "@type": "Organization", name: "ClearPath Invest" },
+  publisher: { "@type": "Organization", name: "ClearPath Invest" },
+  datePublished: "2026-04-01",
+  articleSection: "Manifesto",
+  keywords:
+    "evidence-based investing, AI stock research, three-lens analysis, investment research methodology",
+} as const;
 
 export default function Manifesto() {
   return (
     <div className="min-h-screen bg-background">
+      {/* JSON-LD Article schema — see safety note above the constant. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(articleLd) }}
+      />
       <MarketingNav />
 
       <article className="mx-auto max-w-[680px] px-6 py-20">
@@ -17,7 +57,7 @@ export default function Manifesto() {
         <header className="mb-16 text-center">
           <div className="mb-4 flex items-center justify-center gap-3 font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
             <div className="h-px w-8 bg-border" />
-            <span>Manifesto · No. 01</span>
+            <span>Manifesto</span>
             <div className="h-px w-8 bg-border" />
           </div>
           <h1 className="font-heading text-[48px] leading-[1.05] tracking-tight md:text-[64px]">
@@ -26,7 +66,7 @@ export default function Manifesto() {
             be <em className="italic text-[var(--buy)]">vibes</em>.
           </h1>
           <p className="mt-6 font-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
-            By the ClearPath Team · 2026
+            By Sang · Founder, ClearPath Invest · April 2026
           </p>
         </header>
 
@@ -49,11 +89,11 @@ export default function Manifesto() {
           </p>
 
           <p>
-            And it deserves more than one opinion. A single model — no matter how capable — has blind spots it doesn&rsquo;t know about. So we send the same evidence to three. Claude. GPT. Gemini. They analyze independently. Then a supervisor reviews all three, flags genuine disagreements, and verifies that every claim actually appears in the source data.
+            And it deserves more than one opinion. So we built three independent lenses — <em>Quality</em>, <em>Momentum</em>, <em>Context</em> — each applying its own discipline to the same verified evidence. Each lens is powered by a different frontier model (Claude, GPT, Gemini) so no single vendor&rsquo;s blind spots become yours. They analyze in isolation. Then a supervisor reviews all three, flags genuine disagreements, and verifies that every claim actually appears in the source data.
           </p>
 
           <p>
-            The unpleasant truth about AI investing tools: most of them <em>hide</em> disagreement. They present smooth, confident consensus because it reads better. We do the opposite. If Claude says BUY and GPT says SELL, you see it. That disagreement is information. It tells you the evidence is ambiguous, and that &ldquo;HOLD&rdquo; is probably the honest answer.
+            The unpleasant truth about AI investing tools: most of them <em>hide</em> disagreement. They present smooth, confident consensus because it reads better. We do the opposite. If Quality says BUY and Momentum says SELL, you see it. That disagreement is information. It tells you the evidence is ambiguous, and that &ldquo;HOLD&rdquo; is probably the honest answer.
           </p>
 
           <h2 className="pt-8 font-heading text-[28px] leading-tight tracking-tight md:text-[32px]">

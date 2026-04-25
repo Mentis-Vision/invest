@@ -37,6 +37,7 @@ import {
 
 type Props = {
   initialEnabled: boolean;
+  className?: string;
 };
 
 type TotpData = {
@@ -44,7 +45,7 @@ type TotpData = {
   backupCodes: string[];
 };
 
-export default function TwoFactorSection({ initialEnabled }: Props) {
+export default function TwoFactorSection({ initialEnabled, className }: Props) {
   const [enabled, setEnabled] = useState(initialEnabled);
   const [stage, setStage] = useState<
     "idle" | "enable-password" | "enable-verify" | "disable-password"
@@ -150,20 +151,35 @@ export default function TwoFactorSection({ initialEnabled }: Props) {
     });
   }
 
+  // Conditional emphasis: subtle green when 2FA is enabled (positive
+  // signal, blends in), red/destructive when disabled (security nudge —
+  // we want eyes drawn to it). Mirrors the Danger zone styling for the
+  // disabled case so "this needs attention" reads consistently.
+  const emphasis = enabled
+    ? "border-[var(--buy)]/30 bg-[var(--buy)]/[0.03]"
+    : "border-destructive/40 bg-destructive/5";
+
   return (
-    <Card className="mt-6">
+    <Card className={`${emphasis} ${className ?? ""}`.trim()}>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-base">
             <ShieldCheck className="h-4 w-4 text-primary" />
             Two-factor authentication
           </CardTitle>
-          {enabled && (
+          {enabled ? (
             <Badge
               variant="outline"
               className="border-[var(--buy)]/30 bg-[var(--buy)]/10 text-[var(--buy)]"
             >
               Enabled
+            </Badge>
+          ) : (
+            <Badge
+              variant="outline"
+              className="border-destructive/40 bg-destructive/10 text-destructive"
+            >
+              Off
             </Badge>
           )}
         </div>

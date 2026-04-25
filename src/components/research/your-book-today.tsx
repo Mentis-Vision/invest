@@ -5,13 +5,12 @@ import Link from "next/link";
 import { Flame, TrendingUp, TrendingDown } from "lucide-react";
 
 /**
- * "Your book today" — surfaces the top gainer + top loser in the
+ * "Movers in your book" — surfaces the top gainer + top loser in the
  * user's own portfolio for the current session.
  *
- * Complements MarketPulse (which shows broad-market context) by
- * pulling the ticker-tape user-holdings feed and picking the two
- * extremes. Clickable — tapping either ticker drops it into the
- * research starter input and auto-submits.
+ * Complements MarketPulse (broad-market context) and DossierHero
+ * (single-ticker spotlight). Clicking either tile routes to research
+ * for that symbol.
  *
  * Renders nothing when:
  *   - User has no holdings (nothing to show)
@@ -28,7 +27,11 @@ type TapeHolding = {
   kind: "index" | "holding";
 };
 
-export function YourBookToday() {
+export function YourBookToday({
+  onSeeAll,
+}: {
+  onSeeAll?: () => void;
+}) {
   const [items, setItems] = useState<TapeHolding[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -63,17 +66,32 @@ export function YourBookToday() {
 
   return (
     <div className="rounded-md border border-border bg-card p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.22em] text-muted-foreground">
-          <Flame className="h-3 w-3 text-[var(--hold)]" />
-          Your book today
+      <div className="mb-3 flex items-end justify-between">
+        <div>
+          <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.22em] text-muted-foreground">
+            <Flame className="h-3 w-3 text-[var(--hold)]" />
+            Movers in your book
+          </div>
+          <div className="mt-0.5 text-[11px] text-muted-foreground/80">
+            Today's biggest gainer and loser across your holdings.
+          </div>
         </div>
-        <Link
-          href="/app?view=portfolio"
-          className="text-[11px] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-        >
-          See all →
-        </Link>
+        {onSeeAll ? (
+          <button
+            type="button"
+            onClick={onSeeAll}
+            className="text-[11px] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            See all →
+          </button>
+        ) : (
+          <Link
+            href="/app?view=portfolio"
+            className="text-[11px] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            See all →
+          </Link>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-3">

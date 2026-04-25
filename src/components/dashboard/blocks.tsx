@@ -21,6 +21,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { Holding } from "@/lib/client/holdings-cache";
 import { getHoldings } from "@/lib/client/holdings-cache";
+import { FreshnessIndicator } from "./freshness-indicator";
+import { sumMoney, percentOf, normalizeWeights } from "@/lib/money";
 import { MiniSparkline } from "@/components/research/mini-sparkline";
 
 // ─── Shared helpers ──────────────────────────────────────────────────
@@ -83,6 +85,9 @@ type Totals = {
   dayChangePct: number | null;
   dayChangeDollar: number | null;
   cashPct: number;
+  /** ISO timestamp of the most recent successful holdings sync. Drives
+   *  the "Updated X ago" trust indicator on portfolio surfaces. */
+  lastSyncedAt: string | null;
 };
 
 function useHoldings(): { data: Totals | null; loading: boolean } {
@@ -116,17 +121,22 @@ function useHoldings(): { data: Totals | null; loading: boolean } {
             dayChangePct = (dayChangeDollar / prev) * 100;
           }
         }
-        // Cash share
+        // Cash share — sumMoney over the cash-classified values so
+        // the cash total is cent-exact, and percentOf for a single
+        // rounded percentage rather than a compounded float calc.
         const cashClasses = new Set(["cash", "money_market", "mmf"]);
-        const cash = holdings.reduce((sum, h) => {
-          const cls = (h.assetClass ?? "").toLowerCase();
-          const isCash =
-            cashClasses.has(cls) ||
-            h.ticker.toUpperCase() === "CASH" ||
-            h.ticker.toUpperCase().endsWith("CASH");
-          return isCash ? sum + (h.value ?? 0) : sum;
-        }, 0);
-        const cashPct = totalValue > 0 ? (cash / totalValue) * 100 : 0;
+        const cashValues = holdings
+          .filter((h) => {
+            const cls = (h.assetClass ?? "").toLowerCase();
+            return (
+              cashClasses.has(cls) ||
+              h.ticker.toUpperCase() === "CASH" ||
+              h.ticker.toUpperCase().endsWith("CASH")
+            );
+          })
+          .map((h) => h.value ?? 0);
+        const cash = sumMoney(...cashValues);
+        const cashPct = percentOf(cash, totalValue, 1);
         setState({
           data: {
             holdings,
@@ -135,6 +145,7 @@ function useHoldings(): { data: Totals | null; loading: boolean } {
             dayChangePct,
             dayChangeDollar,
             cashPct,
+            lastSyncedAt: d.lastSyncedAt ?? null,
           },
           loading: false,
         });
@@ -236,6 +247,12 @@ export function BlockSummary({ size }: { size?: BlockSize } = {}) {
               {dayDesc}
             </div>
           )}
+          {data?.connected && (
+            <FreshnessIndicator
+              lastSyncedAt={data.lastSyncedAt}
+              className="mt-1.5"
+            />
+          )}
         </div>
         <div className="grid grid-cols-2 gap-3 border-t border-border pt-3">
           <div>
@@ -289,29 +306,34 @@ export function BlockSummary({ size }: { size?: BlockSize } = {}) {
   const gridCols = variant === "half" ? 2 : 5;
 
   return (
-    <div
-      className="grid gap-4"
-      style={{ gridTemplateColumns: `repeat(${gridCols}, 1fr)` }}
-    >
-      {display.map((s) => (
-        <div key={s.k}>
-          <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-            {s.k}
-          </div>
-          <div
-            className={`mt-1 font-mono text-[20px] font-semibold leading-none tracking-[-0.02em] ${s.tone ?? "text-foreground"}`}
-          >
-            {s.v}
-          </div>
-          {s.d && (
-            <div
-              className={`mt-1.5 text-[11px] ${s.tone ?? "text-muted-foreground"}`}
-            >
-              {s.d}
+    <div className="space-y-3">
+      <div
+        className="grid gap-4"
+        style={{ gridTemplateColumns: `repeat(${gridCols}, 1fr)` }}
+      >
+        {display.map((s) => (
+          <div key={s.k}>
+            <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+              {s.k}
             </div>
-          )}
-        </div>
-      ))}
+            <div
+              className={`mt-1 font-mono text-[20px] font-semibold leading-none tracking-[-0.02em] ${s.tone ?? "text-foreground"}`}
+            >
+              {s.v}
+            </div>
+            {s.d && (
+              <div
+                className={`mt-1.5 text-[11px] ${s.tone ?? "text-muted-foreground"}`}
+              >
+                {s.d}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      {data?.connected && (
+        <FreshnessIndicator lastSyncedAt={data.lastSyncedAt} />
+      )}
     </div>
   );
 }
@@ -686,12 +708,38 @@ export function BlockSector() {
   const buckets = new Map<string, number>();
   for (const h of data.holdings) {
     const s = h.sector ?? "Unclassified";
-    buckets.set(s, (buckets.get(s) ?? 0) + (h.value ?? 0));
+    buckets.set(s, sumMoney(buckets.get(s) ?? 0, h.value ?? 0));
   }
-  const rows = [...buckets.entries()]
-    .map(([s, v]) => ({ sector: s, value: v, pct: (v / data.totalValue) * 100 }))
-    .sort((a, b) => b.pct - a.pct)
-    .slice(0, 6);
+  // Sort by raw value, keep the top-5, and fold the rest into an
+  // "Other" bucket. This preserves the "percentages sum to 100%"
+  // invariant without silently dropping the long tail — an admin
+  // with 9 sectors would otherwise see top-6 normalized to 100%
+  // and miss the rest of the portfolio entirely.
+  const sortedAll = [...buckets.entries()].sort((a, b) => b[1] - a[1]);
+  const TOP_N = 5;
+  const top = sortedAll.slice(0, TOP_N);
+  const tail = sortedAll.slice(TOP_N);
+  const displayBuckets: Array<[string, number]> =
+    tail.length > 0
+      ? [
+          ...top,
+          [
+            tail.length === 1
+              ? tail[0][0]
+              : `Other (${tail.length} sectors)`,
+            sumMoney(...tail.map(([, v]) => v)),
+          ],
+        ]
+      : top;
+  const sectorPcts = normalizeWeights(
+    displayBuckets.map(([, v]) => v),
+    1
+  );
+  const rows = displayBuckets.map(([s, v], i) => ({
+    sector: s,
+    value: v,
+    pct: sectorPcts[i],
+  }));
   return (
     <ul className="space-y-1.5">
       {rows.map((r) => (
@@ -764,8 +812,9 @@ export function BlockMacro() {
             {m.label}
           </div>
           <div className="mt-1 font-mono text-[15px] font-semibold">
-            {m.value.toFixed(2)}
-            {m.unit === "Percent" ? "%" : ""}
+            {typeof m.value === "number" && Number.isFinite(m.value)
+              ? `${m.value.toFixed(2)}${m.unit === "Percent" ? "%" : ""}`
+              : "—"}
           </div>
           {typeof m.delta === "number" && (
             <div className="text-[10px] text-muted-foreground">

@@ -45,6 +45,13 @@ export type HoldingsSnapshot = {
   institutions?: string[];
   accountCount?: number;
   message?: string;
+  /**
+   * ISO timestamp of the most recent successful sync from any linked
+   * brokerage. The client renders this as "Updated X ago" so users can
+   * judge how fresh the portfolio numbers are before acting on them.
+   * Null when no sync has ever completed (first-time linking).
+   */
+  lastSyncedAt?: string | null;
 };
 
 const TTL_MS = 60_000;
@@ -72,9 +79,12 @@ async function fetchHoldings(): Promise<HoldingsSnapshot> {
     connected: !!data.connected,
     holdings: data.holdings ?? [],
     totalValue: data.totalValue ?? 0,
+    brokerageBalance: data.brokerageBalance,
+    balanceCurrency: data.balanceCurrency,
     institutions: data.institutions,
     accountCount: data.accountCount,
     message: data.message,
+    lastSyncedAt: data.lastSyncedAt ?? null,
   };
   for (const cb of listeners) cb(snap);
   return snap;

@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import type { Holding } from "@/lib/client/holdings-cache";
+import { sumMoney, normalizeWeights } from "@/lib/money";
 
 /**
  * Portfolio allocation donut chart.
@@ -96,10 +97,10 @@ export default function AllocationDonut({
     // Unclassified is misleading for a crypto portfolio. Same heuristic
     // applies on the server side in portfolio-review's prompt block.
     const nonCrypto = holdings.filter((h) => h.assetClass !== "crypto");
-    const nonCryptoValue = nonCrypto.reduce((s, h) => s + h.value, 0);
-    const withSectorValue = nonCrypto
-      .filter((h) => h.sector)
-      .reduce((s, h) => s + h.value, 0);
+    const nonCryptoValue = sumMoney(...nonCrypto.map((h) => h.value));
+    const withSectorValue = sumMoney(
+      ...nonCrypto.filter((h) => h.sector).map((h) => h.value)
+    );
     const sectorCoverage =
       nonCryptoValue > 0 ? withSectorValue / nonCryptoValue : 0;
     const bucketNonCryptoBySector = sectorCoverage >= 0.5;
@@ -114,14 +115,23 @@ export default function AllocationDonut({
       } else {
         key = labelForAssetClass(h.assetClass) ?? "Unclassified";
       }
-      buckets.set(key, (buckets.get(key) ?? 0) + h.value);
+      buckets.set(key, sumMoney(buckets.get(key) ?? 0, h.value));
     }
 
     const entries = [...buckets.entries()].sort((a, b) => b[1] - a[1]);
+    // Allocation is the most prominent "sum to 100%" surface in the
+    // product — percents adjacent to a pie chart. normalizeWeights
+    // enforces exact-100 summation via largest-remainder; adjacent
+    // slices of identical size will render as 33.3 / 33.3 / 33.4 (not
+    // three 33.3s leaving 0.1 unaccounted).
+    const pcts = normalizeWeights(
+      entries.map(([, v]) => v),
+      1
+    );
     return entries.map(([name, value], i) => ({
       name,
       value,
-      pct: (value / totalValue) * 100,
+      pct: pcts[i],
       color: colorFor(name, i),
     }));
   }, [holdings, totalValue]);
