@@ -1,7 +1,8 @@
 import Link from "next/link";
 import MarketingNav from "@/components/marketing/nav";
 import MarketingFooter from "@/components/marketing/footer";
-import { Check, ArrowUpRight, Database, FileText, LineChart, ShieldCheck, Scale } from "lucide-react";
+import DemoVerdict from "@/components/marketing/demo-verdict";
+import { Check, ArrowUpRight, Database, FileText, LineChart, ShieldCheck, Scale, Landmark } from "lucide-react";
 
 // Landing-page JSON-LD: SoftwareApplication + ItemList of data sources.
 // XSS-safe — all content is server-side static constants (see note in
@@ -119,61 +120,81 @@ export default function Landing() {
           </div>
         </div>
 
-        {/* Mock verdict card preview */}
-        <div className="relative mx-auto max-w-3xl px-6 pb-16">
-          <div className="rounded-xl border border-border bg-card shadow-[0_1px_0_0_rgba(0,0,0,0.03),0_24px_48px_-24px_rgba(26,26,30,0.15)]">
-            <div className="flex flex-wrap items-center justify-between gap-y-1 border-b border-border/70 px-6 py-3">
-              <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                <span>NVDA</span>
-                <span className="text-foreground/20">·</span>
-                <span>Example analysis</span>
-              </div>
-              <div className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--buy)]">
-                <ShieldCheck className="h-3 w-3" />
-                Verified · 12 sources
-              </div>
+        {/* Interactive verdict demo — replaces the prior static NVDA
+            mock. Visitors can swap between four sample tickers (NVDA,
+            TSLA, AAPL, NFLX); the TSLA case deliberately shows lens
+            disagreement so visitors see what the three-lens
+            differentiator actually changes. Component is client-side
+            with hardcoded data — zero backend cost. */}
+        <DemoVerdict />
+
+        {/* Brokerage social proof — names the brokers we've actually
+            verified as working today (Schwab + Coinbase user-tested),
+            plus a hedge for the rest of the supported list. Update
+            this once the brokerage spot-check completes — see
+            handoff/brokerage-verification.md. */}
+        <div className="relative mx-auto max-w-3xl px-6 pb-20 text-center">
+          <div className="inline-flex flex-wrap items-center justify-center gap-x-3 gap-y-1 font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+            <Landmark className="h-3.5 w-3.5 text-[var(--buy)]" />
+            <span>Connects to your brokerage:</span>
+            <span className="text-foreground/85">Schwab</span>
+            <span className="text-foreground/20">·</span>
+            <span className="text-foreground/85">Fidelity</span>
+            <span className="text-foreground/20">·</span>
+            <span className="text-foreground/85">Robinhood</span>
+            <span className="text-foreground/20">·</span>
+            <span className="text-foreground/85">Vanguard</span>
+            <span className="text-foreground/20">·</span>
+            <span className="text-foreground/85">Coinbase</span>
+            <span className="text-foreground/20">·</span>
+            <span>+ 25 more</span>
+          </div>
+          <p className="mt-2 text-[12px] text-muted-foreground/70">
+            Read-only sync via Plaid + SnapTrade. We never execute trades.
+          </p>
+        </div>
+      </section>
+
+      {/* Trust amplifier strip — echoes the auth-footer copy
+          ("three lenses, one verdict · cited to primary sources")
+          so the trust language is consistent across surfaces. */}
+      <section className="border-y border-border bg-secondary/40 py-10">
+        <div className="mx-auto grid max-w-5xl gap-6 px-6 text-center md:grid-cols-3">
+          <div>
+            <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+              Mechanism
             </div>
-            <div className="px-6 py-6">
-              <div className="mb-4 flex items-start justify-between gap-4">
-                <div>
-                  <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">NVIDIA Corp</div>
-                  <div className="mt-0.5 font-mono text-sm text-foreground">
-                    $486.92 <span className="text-[var(--buy)]">+1.2%</span>
-                  </div>
-                </div>
-                <div className="flex flex-col items-end gap-1">
-                  <span className="rounded-md border border-[var(--hold)]/25 bg-[var(--hold)]/10 px-3 py-1 text-sm font-semibold text-[var(--hold)]">
-                    HOLD
-                  </span>
-                  <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                    HIGH confidence · Unanimous
-                  </span>
-                </div>
-              </div>
-              <p className="text-sm leading-relaxed text-foreground/85">
-                Valuation elevated (forward P/E 38.2 vs sector 24.1) offsets strong revenue growth (122% YoY per latest 10-Q). With Fed funds at 5.33% and the 10Y at 4.38%, risk-asset multiples face compression. Wait for entry below $420 or for next earnings print.
-              </p>
-              <div className="mt-5 grid grid-cols-3 gap-3 border-t border-border pt-4 text-[11px] font-mono">
-                <div className="flex items-center gap-1.5">
-                  <div className="h-1.5 w-1.5 rounded-full bg-[var(--buy)]" />
-                  <span className="text-muted-foreground">Quality: HOLD</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="h-1.5 w-1.5 rounded-full bg-[var(--buy)]" />
-                  <span className="text-muted-foreground">Momentum: HOLD</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="h-1.5 w-1.5 rounded-full bg-[var(--buy)]" />
-                  <span className="text-muted-foreground">Context: HOLD</span>
-                </div>
-              </div>
-              {/* Informational-only micro-label — required by AGENTS.md on
-                  every verdict surface. Lives inside the card so it travels
-                  with any screenshot of the mock. */}
-              <div className="mt-4 border-t border-border pt-3 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground/70">
-                Illustrative example · Informational only · Not investment advice
-              </div>
+            <div className="mt-2 font-heading text-[20px] leading-snug">
+              Three independent model families
             </div>
+            <p className="mt-1 text-[12.5px] text-muted-foreground">
+              Claude, GPT, Gemini — each lens runs on a different
+              vendor so no single blind spot becomes yours.
+            </p>
+          </div>
+          <div>
+            <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+              Evidence
+            </div>
+            <div className="mt-2 font-heading text-[20px] leading-snug">
+              Cited to primary sources
+            </div>
+            <p className="mt-1 text-[12.5px] text-muted-foreground">
+              Every number traces back to its 10-Q, FRED series, or
+              market feed. A supervisor rejects unverifiable claims.
+            </p>
+          </div>
+          <div>
+            <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+              Honesty
+            </div>
+            <div className="mt-2 font-heading text-[20px] leading-snug">
+              Misses published, same as wins
+            </div>
+            <p className="mt-1 text-[12.5px] text-muted-foreground">
+              Every brief is scored at 7d / 30d / 90d / 365d. The
+              public track record shows hits and misses both.
+            </p>
           </div>
         </div>
       </section>
