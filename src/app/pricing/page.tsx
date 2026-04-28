@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import MarketingNav from "@/components/marketing/nav";
 import MarketingFooter from "@/components/marketing/footer";
-import Link from "next/link";
-import { Check } from "lucide-react";
+import PricingTiersClient, {
+  type TierDef,
+} from "./pricing-tiers-client";
+import { auth } from "@/lib/auth";
 
 export const metadata: Metadata = {
   title: "Pricing",
@@ -24,16 +27,6 @@ export const metadata: Metadata = {
   },
 };
 
-type Tier = {
-  name: string;
-  sub: string;
-  price: string;
-  priceSub: string;
-  accent?: "primary" | "secondary";
-  features: string[];
-  ctaLabel: string;
-  ctaKind: "waitlist" | "contact" | "active";
-};
 
 const faqItems = [
   {
@@ -81,12 +74,14 @@ const faqPageLd = {
 // we email at 80% of the limit rather than hard-clip, giving headroom
 // for the occasional spike. Numbers sized so the 4× Individual→Active
 // headroom math still works.
-const tiers: Tier[] = [
+const tiers: TierDef[] = [
   {
+    slug: "trial",
     name: "Free trial",
     sub: "Full access for 30 days",
-    price: "Free",
-    priceSub: "no credit card",
+    monthly: { price: "Free", priceSub: "no credit card" },
+    annual: { price: "Free", priceSub: "no credit card" },
+    ctaKind: "trial",
     features: [
       "Every Individual-tier feature, unlocked",
       "100 quick reads · 10 deep reads · 3 panels per month",
@@ -94,15 +89,17 @@ const tiers: Tier[] = [
       "All 12+ data sources",
       "Cancels automatically — no card on file",
     ],
-    ctaLabel: "Start free trial",
-    ctaKind: "active",
   },
   {
+    slug: "individual",
     name: "Individual",
     sub: "For most investors",
-    price: "$29",
-    priceSub: "per month",
+    monthly: { price: "$29", priceSub: "per month" },
+    // Two months free framing: 12 × $29 = $348; we charge $290 = 16.7% off.
+    annual: { price: "$290", priceSub: "per year · save $58" },
     accent: "primary",
+    badge: "Most investors",
+    ctaKind: "checkout",
     features: [
       "300 quick reads / month",
       "30 deep reads / month",
@@ -111,15 +108,16 @@ const tiers: Tier[] = [
       "Portfolio sync + alerts",
       "Priority support",
     ],
-    ctaLabel: "Start with Individual",
-    ctaKind: "active",
   },
   {
+    slug: "active",
     name: "Active",
     sub: "For portfolio builders",
-    price: "$79",
-    priceSub: "per month",
+    monthly: { price: "$79", priceSub: "per month" },
+    annual: { price: "$790", priceSub: "per year · save $158" },
     accent: "secondary",
+    badge: "Power users",
+    ctaKind: "checkout",
     features: [
       "Everything in Individual",
       "1,200 quick / 120 deep / 40 panels per month (4×)",
@@ -127,14 +125,14 @@ const tiers: Tier[] = [
       "Event-triggered alerts on holdings",
       "Priority routing on panel consensus",
     ],
-    ctaLabel: "Start with Active",
-    ctaKind: "active",
   },
   {
+    slug: "advisor",
     name: "Advisor",
     sub: "For RIAs & planners",
-    price: "$500",
-    priceSub: "per month",
+    monthly: { price: "$500", priceSub: "per month" },
+    annual: { price: "$5,000", priceSub: "per year · save $1,000" },
+    ctaKind: "contact",
     features: [
       "Up to 50 client portfolios",
       "Effectively uncapped research under fair use",
@@ -143,20 +141,16 @@ const tiers: Tier[] = [
       "API access",
       "Dedicated onboarding",
     ],
-    ctaLabel: "Contact us",
-    ctaKind: "contact",
   },
 ];
 
-// Product / Offer JSON-LD — one per tier. Static server-side payload.
-// Parsed from the `tiers` array so it stays in sync with what the page
-// actually renders.
+// Product / Offer JSON-LD — one per tier, using monthly price as
+// canonical. Stays in sync with the `tiers` array.
 const productsLd = tiers.map((t) => {
-  // Beta price "Free" → "0" numeric. All other tiers start with "$".
   const numericPrice =
-    t.price === "Free"
+    t.monthly.price === "Free"
       ? "0"
-      : t.price.replace(/[^0-9.]/g, "") || "0";
+      : t.monthly.price.replace(/[^0-9.]/g, "") || "0";
   return {
     "@context": "https://schema.org",
     "@type": "Product",
@@ -167,7 +161,7 @@ const productsLd = tiers.map((t) => {
       "@type": "Offer",
       price: numericPrice,
       priceCurrency: "USD",
-      availability: "https://schema.org/PreOrder",
+      availability: "https://schema.org/InStock",
       priceSpecification: {
         "@type": "UnitPriceSpecification",
         price: numericPrice,
@@ -179,7 +173,15 @@ const productsLd = tiers.map((t) => {
   };
 });
 
-export default function Pricing() {
+export default async function Pricing() {
+  // Auth-aware CTAs: a signed-in visitor clicking "Upgrade to
+  // Individual" should hit Stripe Checkout directly rather than
+  // bouncing through /sign-up. The session check runs server-side so
+  // the initial HTML is correct (no flash of "Start free trial"
+  // followed by "Upgrade").
+  const session = await auth.api.getSession({ headers: await headers() });
+  const isAuthed = !!session;
+
   return (
     <div className="min-h-screen bg-background">
       {/* JSON-LD — FAQPage + one Product per tier. XSS-safe: the
@@ -261,77 +263,12 @@ export default function Pricing() {
 
       <section className="py-20">
         <div className="mx-auto max-w-6xl px-6">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {tiers.map((t) => (
-              <div
-                key={t.name}
-                className={`relative rounded-xl border bg-card p-7 ${
-                  t.accent === "primary"
-                    ? "border-[var(--buy)]/30 shadow-[0_4px_32px_-8px_rgba(45,95,63,0.15)]"
-                    : t.accent === "secondary"
-                      ? "border-[var(--decisive)]/30"
-                      : "border-border"
-                }`}
-              >
-                {t.accent === "primary" && (
-                  <div className="absolute -top-3 left-6 rounded-full bg-[var(--buy)] px-3 py-1 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--primary-foreground)]">
-                    Most investors
-                  </div>
-                )}
-                {t.accent === "secondary" && (
-                  <div className="absolute -top-3 left-6 rounded-full bg-[var(--decisive)] px-3 py-1 font-mono text-[10px] uppercase tracking-[0.2em] text-white">
-                    Power users
-                  </div>
-                )}
-                <div className="mb-5">
-                  <h3 className="font-heading text-[22px] leading-tight">
-                    {t.name}
-                  </h3>
-                  <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
-                    {t.sub}
-                  </p>
-                </div>
-                <div className="mb-5 border-y border-border py-5">
-                  <div className="font-heading text-[32px] leading-none tracking-tight">
-                    {t.price}
-                  </div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    {t.priceSub}
-                  </div>
-                </div>
-                <ul className="mb-6 space-y-2.5">
-                  {t.features.map((f) => (
-                    <li key={f} className="flex items-start gap-2 text-[13px]">
-                      <Check
-                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--buy)]"
-                        strokeWidth={2.5}
-                      />
-                      <span className="text-foreground/85 leading-snug">{f}</span>
-                    </li>
-                  ))}
-                </ul>
-                {t.ctaKind === "contact" ? (
-                  <a
-                    href="mailto:hello@clearpathinvest.app?subject=Advisor%20tier%20inquiry"
-                    className="flex w-full items-center justify-center rounded-md border border-border bg-card px-4 py-2.5 text-[12px] font-semibold text-foreground transition-colors hover:bg-secondary"
-                  >
-                    {t.ctaLabel}
-                  </a>
-                ) : (
-                  /* All non-Advisor tiers route to /sign-up. The 30-day
-                     trial is no-card, so anyone can start; on conversion
-                     they pick a paid tier. The src param tags which
-                     pricing card they came from for funnel analytics. */
-                  <Link
-                    href={`/sign-up?src=pricing-${t.name.toLowerCase().replace(/\s+/g, "-")}`}
-                    className="flex w-full items-center justify-center rounded-md bg-foreground px-4 py-2.5 text-[12px] font-semibold text-background transition-colors hover:bg-foreground/85"
-                  >
-                    {t.ctaLabel}
-                  </Link>
-                )}
-              </div>
-            ))}
-          </div>
+          {/* Tier grid + monthly/annual toggle + auth-aware CTAs all
+              live in the client component so the interval state
+              re-renders prices without a server round-trip. The
+              server passes the canonical tier definitions and the
+              authed bit; the client owns interactivity. */}
+          <PricingTiersClient tiers={tiers} isAuthed={isAuthed} />
 
           <p className="mt-10 text-center text-[13px] text-muted-foreground">
             Your rate at signup is locked for 12 months. You can switch tiers
