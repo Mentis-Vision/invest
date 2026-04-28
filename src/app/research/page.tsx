@@ -67,10 +67,10 @@ export default async function ResearchIndex() {
 
           <div className="mt-8 flex items-center justify-center gap-3">
             <Link
-              href="/#access"
+              href="/sign-up?src=research-hero"
               className="inline-flex items-center gap-1.5 rounded-md bg-foreground px-5 py-2.5 text-[13px] font-semibold text-background transition-colors hover:bg-foreground/85"
             >
-              Get weekly briefs by email
+              Start your free trial
               <ArrowRight className="h-3.5 w-3.5" />
             </Link>
             <a
@@ -96,14 +96,14 @@ export default async function ResearchIndex() {
                 Priming
               </div>
               <p className="mt-3 text-[15px] leading-relaxed text-foreground/85">
-                The first weekly brief drops Monday. Want it by email on
-                arrival?
+                The first weekly brief drops Monday. Sign up to get it by
+                email and run analyses on your own portfolio.
               </p>
               <Link
-                href="/#access"
+                href="/sign-up?src=research-index"
                 className="mt-4 inline-flex items-center gap-1 text-[12px] font-semibold text-foreground underline underline-offset-4 hover:text-[var(--buy)]"
               >
-                Request access
+                Start your free trial
               </Link>
             </div>
           ) : (

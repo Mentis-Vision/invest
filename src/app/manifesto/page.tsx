@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import MarketingNav from "@/components/marketing/nav";
 import MarketingFooter from "@/components/marketing/footer";
-import WaitlistForm from "@/components/marketing/waitlist-form";
 
 export const metadata: Metadata = {
-  title: "Manifesto — Evidence-based AI investing",
+  title: "Manifesto — Investing should not be vibes",
   description:
     "Why single-AI answers are dangerous for real money. A manifesto on evidence-based stock research with three independent lenses, source citations, and honest confidence signals.",
   alternates: { canonical: "/manifesto" },
@@ -151,13 +151,18 @@ export default function Manifesto() {
         {/* CTA */}
         <div className="mt-20 rounded-xl border border-border bg-secondary/40 p-8 text-center">
           <h3 className="font-heading text-[26px] leading-tight tracking-tight">
-            Join the private beta.
+            Try it on your own portfolio.
           </h3>
           <p className="mt-2 text-sm text-muted-foreground">
-            Access opens in waves. No spam.
+            Free 30-day trial. No credit card. Cancel anytime.
           </p>
-          <div className="mx-auto mt-6 max-w-md">
-            <WaitlistForm source="manifesto" />
+          <div className="mx-auto mt-6 flex justify-center">
+            <Link
+              href="/sign-up?src=manifesto"
+              className="inline-flex items-center justify-center rounded-md bg-foreground px-7 py-3 text-[15px] font-semibold text-background transition-all hover:bg-foreground/85"
+            >
+              Start your free trial
+            </Link>
           </div>
         </div>
       </article>

@@ -68,9 +68,9 @@ export default async function TrackRecordPage() {
           <p className="mx-auto mt-6 max-w-[640px] text-[17px] leading-relaxed text-muted-foreground">
             Every brief ClearPath issues is evaluated against the ticker&rsquo;s
             actual price movement on a 7d / 30d / 90d / 365d schedule. The
-            stats below are aggregate across all beta users — no userId,
-            no individual briefs, just the honest win / loss / flat
-            distribution.
+            stats below are aggregate across all early-access members —
+            no userId, no individual briefs, just the honest win / loss
+            / flat distribution.
           </p>
         </div>
       </section>
@@ -93,15 +93,15 @@ export default async function TrackRecordPage() {
             See a live brief.
           </h2>
           <p className="mx-auto mt-3 max-w-[500px] text-[15px] leading-relaxed text-muted-foreground">
-            Request access to the private beta and run a three-lens analysis
-            on any US equity. Every claim traces to its source.
+            Run a three-lens analysis on any US equity. Free 30-day trial,
+            no credit card. Every claim traces to its source.
           </p>
           <div className="mt-8 flex justify-center gap-3">
             <Link
-              href="/#access"
+              href="/sign-up?src=track-record"
               className="inline-flex items-center gap-1.5 rounded-md bg-foreground px-5 py-2.5 text-[13px] font-semibold text-background transition-colors hover:bg-foreground/85"
             >
-              Request access
+              Start your free trial
               <ArrowRight className="h-3.5 w-3.5" />
             </Link>
             <Link
@@ -223,7 +223,7 @@ function NoDataYetView({ tr }: { tr: PublicTrackRecord }) {
         Priming.
       </h2>
       <p className="mx-auto mt-3 max-w-[560px] text-[15px] leading-relaxed text-muted-foreground">
-        ClearPath is in private beta. The first 30-day outcomes resolve on a
+        ClearPath is in early access. The first 30-day outcomes resolve on a
         rolling basis — this page will publish real hit-rate and calibration
         stats as soon as the first window closes.{" "}
         {tr.totalBriefs > 0 && (
@@ -297,7 +297,7 @@ function MethodologySection() {
           <div>
             <h3 className="font-heading text-[18px]">4. Aggregate only</h3>
             <p className="mt-1 text-muted-foreground">
-              All stats are summed across every beta user&rsquo;s evaluated
+              All stats are summed across every member&rsquo;s evaluated
               briefs. We never publish individual briefs, tickers, or user
               identifiers here. The underlying warehouse tables are
               ticker-keyed and hold no userId — that privacy constraint is

@@ -458,15 +458,15 @@ export default function AlternativesHub() {
             Decide for yourself.
           </h2>
           <p className="mx-auto mt-3 max-w-[500px] text-[15px] leading-relaxed text-muted-foreground">
-            Request access to the private beta. Runs on live SEC, Federal
-            Reserve, and market data. Every claim traces to its source.
+            Free 30-day trial. No credit card. Runs on live SEC, Federal
+            Reserve, and market data — every claim traces to its source.
           </p>
           <div className="mt-8 flex justify-center gap-3">
             <Link
-              href="/#access"
+              href="/sign-up?src=alternatives"
               className="inline-flex items-center gap-1.5 rounded-md bg-foreground px-5 py-2.5 text-[13px] font-semibold text-background transition-colors hover:bg-foreground/85"
             >
-              Request access
+              Start your free trial
               <ArrowRight className="h-3.5 w-3.5" />
             </Link>
             <Link
