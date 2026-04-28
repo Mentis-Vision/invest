@@ -64,6 +64,14 @@ export type UserProfile = {
     esgPreference?: boolean;
     notes?: string;
     density?: DashboardDensity;
+    /**
+     * User-supplied display labels for individual brokerage accounts,
+     * keyed `${institutionName}::${accountName}`. Lets a household
+     * rename "Traditional IRA" to "Sang's IRA" / "Spouse's IRA" without
+     * us touching the broker-supplied names. Missing keys fall back to
+     * the auto-detected friendly type.
+     */
+    accountAliases?: Record<string, string>;
   };
   disclaimerAcceptedAt: string | null;
   updatedAt: string | null;
@@ -163,6 +171,31 @@ function sanitizeUpdate(input: ProfileUpdate): ProfileUpdate {
         p.density === "standard" ||
         p.density === "advanced"
           ? p.density
+          : undefined,
+      // Cap at 50 aliases / 80-char labels / 200-char keys so a
+      // malformed payload can't bloat the profile JSONB blob. The
+      // keys are `institution::accountName` strings and brokers
+      // generally stay well under 100 chars combined.
+      accountAliases:
+        p.accountAliases &&
+        typeof p.accountAliases === "object" &&
+        !Array.isArray(p.accountAliases)
+          ? Object.fromEntries(
+              Object.entries(
+                p.accountAliases as Record<string, unknown>
+              )
+                .filter(
+                  ([k, v]) =>
+                    typeof k === "string" &&
+                    typeof v === "string" &&
+                    (v as string).trim().length > 0
+                )
+                .slice(0, 50)
+                .map(([k, v]) => [
+                  k.slice(0, 200),
+                  (v as string).trim().slice(0, 80),
+                ])
+            )
           : undefined,
     };
   }
