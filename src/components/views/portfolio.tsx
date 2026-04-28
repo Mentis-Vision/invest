@@ -108,11 +108,16 @@ function buildGroups(holdings: Holding[], by: GroupKey): Group[] {
 
   const buckets = new Map<string, Group>();
   for (const h of holdings) {
+    // institution_account groups by the INDIVIDUAL account, not by
+    // (institution, detected_type). The previous behavior collapsed
+    // two Traditional IRAs at the same broker (e.g. Sang's and
+    // Spouse's) into one bucket because the detected type was
+    // identical — keying on raw accountName keeps them separate.
     const key =
       by === "institution"
         ? h.institutionName ?? "Unclassified"
         : by === "institution_account"
-          ? `${h.institutionName ?? "Unclassified"}::${detectAccountType(h.accountName)}`
+          ? `${h.institutionName ?? "Unclassified"}::${h.accountName ?? "Default"}`
           : by === "sector"
             ? h.sector ?? "Unclassified"
             : by === "asset_class"
@@ -129,8 +134,24 @@ function buildGroups(holdings: Holding[], by: GroupKey): Group[] {
             : by === "sector"
               ? h.sector ?? "Unclassified"
               : (h.assetClass ?? "Unclassified").replace(/^\w/, (c) => c.toUpperCase());
-      const sublabel =
-        by === "institution_account" ? h.institutionName ?? undefined : undefined;
+      // For institution_account, the sublabel surfaces the raw
+      // accountName when it carries info beyond the friendly type
+      // label — that's what disambiguates "Sang's IRA" from
+      // "Spouse's IRA" at the same broker. When the accountName
+      // matches the detected type exactly (e.g. literally
+      // "Traditional IRA"), we drop it so single-account users keep
+      // the clean "Type / Institution" presentation.
+      let sublabel: string | undefined;
+      if (by === "institution_account") {
+        const institution = h.institutionName ?? "Unclassified";
+        const detected = detectAccountType(h.accountName);
+        const carriesExtra =
+          !!h.accountName &&
+          h.accountName.trim().toUpperCase() !== detected.toUpperCase();
+        sublabel = carriesExtra
+          ? `${institution} · ${h.accountName}`
+          : institution;
+      }
       g = { id: key, label, sublabel, holdings: [], totalValue: 0 };
       buckets.set(key, g);
     }
