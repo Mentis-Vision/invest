@@ -184,19 +184,28 @@ function buildGroups(
   // total AUM), then by per-account value within each broker. The
   // earlier value-only sort interleaved a small Coinbase wallet
   // between two Schwab accounts whenever its balance fell between
-  // theirs, which made the list feel unorganized.
+  // theirs.
+  //
+  // Defensive normalize: institutionName can come in slightly
+  // different shapes from SnapTrade vs Plaid for the same broker
+  // ("Charles Schwab" vs "Charles Schwab " vs "charles schwab"),
+  // which would otherwise create two adjacent buckets that sort as
+  // distinct institutions. Trim + lowercase for the sort key only;
+  // displayed labels stay as-is.
   if (by === "institution_account") {
+    const normInst = (g: Group) =>
+      (g.id.split("::")[0] ?? "").trim().toLowerCase();
     const institutionTotals = new Map<string, number>();
     for (const g of buckets.values()) {
-      const inst = g.id.split("::")[0] ?? "";
+      const inst = normInst(g);
       institutionTotals.set(
         inst,
         sumMoney(institutionTotals.get(inst) ?? 0, g.totalValue)
       );
     }
     return [...buckets.values()].sort((a, b) => {
-      const aInst = a.id.split("::")[0] ?? "";
-      const bInst = b.id.split("::")[0] ?? "";
+      const aInst = normInst(a);
+      const bInst = normInst(b);
       if (aInst !== bInst) {
         const aT = institutionTotals.get(aInst) ?? 0;
         const bT = institutionTotals.get(bInst) ?? 0;
@@ -1008,13 +1017,13 @@ function GroupHeader({
                   e.stopPropagation();
                   onStartEdit();
                 }}
-                className="shrink-0 rounded-md p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-secondary/60 hover:text-foreground group-hover/header:opacity-100 focus:opacity-100"
+                className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
                 aria-label={
                   onClearAlias ? "Edit account name" : "Rename this account"
                 }
-                title={onClearAlias ? "Edit account name" : "Rename"}
+                title={onClearAlias ? "Edit name" : "Rename"}
               >
-                <Pencil className="h-3 w-3" />
+                <Pencil className="h-3.5 w-3.5" />
               </button>
             )}
             {canRename && onClearAlias && (
@@ -1025,7 +1034,7 @@ function GroupHeader({
                   e.stopPropagation();
                   onClearAlias();
                 }}
-                className="shrink-0 rounded-md p-0.5 text-[10px] uppercase tracking-wide text-muted-foreground opacity-0 hover:bg-secondary/60 hover:text-foreground group-hover/header:opacity-100"
+                className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
                 aria-label="Clear custom name"
                 title="Reset to auto-detected name"
               >
