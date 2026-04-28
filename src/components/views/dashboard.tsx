@@ -221,28 +221,16 @@ function DashboardBody({
     );
 
     let alive = true;
-    Promise.all([
-      getHoldings(),
-      fetch("/api/track-record")
-        .then((r) => (r.ok ? r.json() : null))
-        .catch(() => null),
-    ])
-      .then(([d, tr]) => {
+    // Day change comes from the holdings endpoint now — it computes
+    // per-position price moves so the number stays correct on days
+    // when an account is added or removed. The old snapshot-diff
+    // approach misread a freshly linked $764k Schwab account as a
+    // +29,117% gain.
+    getHoldings()
+      .then((d) => {
         if (!alive) return;
         setConnected(!!d.connected);
-        const totalValue = d.totalValue ?? 0;
-        const series = (tr?.portfolioSeries ?? []) as Array<{
-          date: string;
-          totalValue: number;
-        }>;
-        if (series.length >= 2 && totalValue > 0) {
-          const prev = series[series.length - 2]?.totalValue ?? 0;
-          if (prev > 0) {
-            setDayChangePct(((totalValue - prev) / prev) * 100);
-            return;
-          }
-        }
-        setDayChangePct(null);
+        setDayChangePct(d.dayChangePct ?? null);
       })
       .catch(() => {});
     return () => {

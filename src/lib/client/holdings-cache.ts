@@ -36,6 +36,21 @@ export type HoldingsSnapshot = {
   /** Sum of market value (shares × price) across all positions. */
   totalValue: number;
   /**
+   * Today's $ change across the portfolio, computed per-holding from
+   * each position's intraday price move (NOT from a portfolio-total
+   * snapshot diff — that approach mis-attributes a newly linked
+   * account's full balance as a same-day gain). Null if no holding
+   * had a usable quote (cash-only portfolio or every fetch failed).
+   */
+  dayChangeDollar?: number | null;
+  /**
+   * Today's % change across the covered (quote-having) portion of the
+   * portfolio. Denominator is yesterday's close of those holdings, so
+   * the percentage stays meaningful when accounts get added or
+   * removed mid-session.
+   */
+  dayChangePct?: number | null;
+  /**
    * Broker-reported total balance across all linked accounts — includes
    * cash, money-market, settlement balances, etc. Null if the broker
    * didn't report it. The delta between this and totalValue is cash drag.
@@ -79,6 +94,8 @@ async function fetchHoldings(): Promise<HoldingsSnapshot> {
     connected: !!data.connected,
     holdings: data.holdings ?? [],
     totalValue: data.totalValue ?? 0,
+    dayChangeDollar: data.dayChangeDollar ?? null,
+    dayChangePct: data.dayChangePct ?? null,
     brokerageBalance: data.brokerageBalance,
     balanceCurrency: data.balanceCurrency,
     institutions: data.institutions,

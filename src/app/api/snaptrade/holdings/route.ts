@@ -9,7 +9,92 @@ import {
 import { pool } from "@/lib/db";
 import { log, errorInfo } from "@/lib/log";
 import { getTickerMetadataBatch } from "@/lib/data/ticker-metadata";
+import { getStockSnapshot } from "@/lib/data/yahoo";
 import { sumMoney } from "@/lib/money";
+
+// Tickers we should NOT try to fetch live quotes for — cash sweep
+// vehicles, money-market positions, and Plaid's "CASH" placeholder.
+// These contribute zero to day P&L (price doesn't move).
+const CASH_LIKE_CLASSES = new Set(["cash", "money_market", "mmf"]);
+function isCashLike(h: { ticker: string; assetClass: string }): boolean {
+  const cls = (h.assetClass ?? "").toLowerCase();
+  if (CASH_LIKE_CLASSES.has(cls)) return true;
+  const t = h.ticker.toUpperCase();
+  return t === "CASH" || t.endsWith("CASH");
+}
+
+/**
+ * Compute today's $ change and % change from per-holding price moves
+ * — NOT from a portfolio-total snapshot diff. The snapshot-diff
+ * approach is broken on any day a brokerage account is added or
+ * removed: yesterday's snapshot doesn't include the new account, so
+ * its full balance gets booked as "today's gain" (a $764k Schwab
+ * link surfaced as +29,117% today).
+ *
+ * Per-holding math is robust:
+ *   prev_close = price / (1 + changePct/100)
+ *   day_$ per holding = (price - prev_close) * shares
+ *                     = value * changePct / (100 + changePct)
+ *
+ * Newly-linked holdings contribute only their actual day move, not
+ * their full balance.
+ *
+ * Snapshot fetches are cached by `getStockSnapshot`, so repeated
+ * loads share work with the ticker tape and dossier views.
+ */
+async function computeDayChange(
+  holdings: Holding[]
+): Promise<{ dayChangeDollar: number | null; dayChangePct: number | null }> {
+  const tradable = holdings.filter(
+    (h) => !isCashLike(h) && Number.isFinite(h.value) && h.value !== 0 && h.shares !== 0
+  );
+  if (tradable.length === 0) {
+    return { dayChangeDollar: null, dayChangePct: null };
+  }
+
+  // Dedupe by ticker — the same security can sit in multiple
+  // accounts, but Yahoo doesn't care which account; one fetch each.
+  const uniqueTickers = [...new Set(tradable.map((h) => h.ticker))];
+  const snapshots = new Map<string, { price: number; changePct: number }>();
+  await Promise.all(
+    uniqueTickers.map(async (t) => {
+      try {
+        const snap = await getStockSnapshot(t);
+        if (snap && Number.isFinite(snap.changePct)) {
+          snapshots.set(t, { price: snap.price, changePct: snap.changePct });
+        }
+      } catch {
+        // Skip on failure — the holding contributes 0 day change
+        // rather than poisoning the whole portfolio number.
+      }
+    })
+  );
+
+  let dayDollar = 0;
+  let coveredValue = 0; // value of holdings we have snapshots for
+  for (const h of tradable) {
+    const snap = snapshots.get(h.ticker);
+    if (!snap) continue;
+    const pct = snap.changePct;
+    // Guard against divide-by-zero on extreme negative pct (-100 = wipeout).
+    if (pct <= -100) continue;
+    dayDollar += (h.value * pct) / (100 + pct);
+    coveredValue += h.value;
+  }
+
+  // Reference base for the % is yesterday's close of the COVERED
+  // holdings only. Using the full portfolio total as the denominator
+  // would re-introduce the same skew when uncovered (cash, freshly
+  // linked, or quote-failed) tickers shift the total.
+  const prevCovered = coveredValue - dayDollar;
+  if (prevCovered <= 0) {
+    return { dayChangeDollar: null, dayChangePct: null };
+  }
+  return {
+    dayChangeDollar: dayDollar,
+    dayChangePct: (dayDollar / prevCovered) * 100,
+  };
+}
 
 type Holding = {
   ticker: string;
@@ -124,7 +209,7 @@ function countDistinctAccounts(holdings: Holding[]): number {
  * client payload stays identical regardless of which sources
  * contributed.
  */
-function buildHoldingsResponse(
+async function buildHoldingsResponse(
   aggregated: Holding[],
   accountCount: number,
   brokerageBalance: number | null,
@@ -139,10 +224,13 @@ function buildHoldingsResponse(
         .filter((x): x is string => !!x)
     ),
   ];
+  const { dayChangeDollar, dayChangePct } = await computeDayChange(aggregated);
   return NextResponse.json({
     connected: true,
     holdings: aggregated,
     totalValue,
+    dayChangeDollar,
+    dayChangePct,
     brokerageBalance,
     balanceCurrency,
     institutions,
@@ -265,7 +353,13 @@ export async function GET(_req: NextRequest) {
           await loadLastSyncedAt(userId)
         );
       }
-      return NextResponse.json({ connected: true, holdings: [], totalValue: 0 });
+      return NextResponse.json({
+        connected: true,
+        holdings: [],
+        totalValue: 0,
+        dayChangeDollar: null,
+        dayChangePct: null,
+      });
     }
 
     // 1c. Upsert one snaptrade_connection row per unique brokerage_authorization.
@@ -496,11 +590,14 @@ export async function GET(_req: NextRequest) {
         ?.currency ?? "USD";
 
     const lastSyncedAt = await loadLastSyncedAt(userId);
+    const { dayChangeDollar, dayChangePct } = await computeDayChange(aggregated);
 
     return NextResponse.json({
       connected: true,
       holdings: aggregated,
       totalValue,
+      dayChangeDollar,
+      dayChangePct,
       brokerageBalance: brokerageBalance > 0 ? brokerageBalance : null,
       balanceCurrency,
       institutions,

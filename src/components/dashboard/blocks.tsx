@@ -97,30 +97,18 @@ function useHoldings(): { data: Totals | null; loading: boolean } {
   });
   useEffect(() => {
     let alive = true;
-    Promise.all([
-      getHoldings(),
-      fetch("/api/track-record")
-        .then((r) => (r.ok ? r.json() : null))
-        .catch(() => null),
-    ])
-      .then(([d, tr]) => {
+    getHoldings()
+      .then((d) => {
         if (!alive) return;
         const holdings = d.holdings ?? [];
         const totalValue = d.totalValue ?? 0;
-        // Day change: today's total vs yesterday's snapshot.
-        let dayChangeDollar: number | null = null;
-        let dayChangePct: number | null = null;
-        const series = (tr?.portfolioSeries ?? []) as Array<{
-          date: string;
-          totalValue: number;
-        }>;
-        if (series.length >= 2 && totalValue > 0) {
-          const prev = series[series.length - 2]?.totalValue ?? 0;
-          if (prev > 0) {
-            dayChangeDollar = totalValue - prev;
-            dayChangePct = (dayChangeDollar / prev) * 100;
-          }
-        }
+        // Day change comes from the holdings endpoint, where it's
+        // computed per-position from each holding's intraday price
+        // move. The previous portfolio-snapshot diff approach
+        // misattributed any account add/delete to "today's gain"
+        // (e.g. a fresh Schwab link surfaced as +29,117%).
+        const dayChangeDollar = d.dayChangeDollar ?? null;
+        const dayChangePct = d.dayChangePct ?? null;
         // Cash share — sumMoney over the cash-classified values so
         // the cash total is cent-exact, and percentOf for a single
         // rounded percentage rather than a compounded float calc.
