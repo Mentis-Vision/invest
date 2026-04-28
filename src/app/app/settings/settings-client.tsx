@@ -147,24 +147,21 @@ export default function SettingsClient({
         </CardContent>
       </Card>
 
-      {/* Row 1 — Account-level controls. 2FA (security) on the left.
-          The right column stacks two ToggleListCards (Notifications +
-          Investment values) — both share the same toggle pattern, so
-          stacking them here builds the visual language of "this column
-          is your boolean preferences" while 2FA sits alone as the
-          security card. */}
+      {/* Row 1 — Account-level controls. Notifications (the most
+          frequently touched card) on the left so it's first to land
+          on. The right column stacks 2FA above Investment values —
+          security still sits above the ESG/values toggle so it stays
+          above-the-fold even when the column is narrow. */}
       <div className="grid gap-4 md:grid-cols-2">
-        <TwoFactorSection
-          initialEnabled={twoFactorEnabled}
+        <NotificationsSection
+          initialOptOuts={{
+            weeklyDigestOptOut,
+            weeklyBriefOptOut,
+          }}
           className="h-full"
         />
         <div className="flex flex-col gap-4">
-          <NotificationsSection
-            initialOptOuts={{
-              weeklyDigestOptOut,
-              weeklyBriefOptOut,
-            }}
-          />
+          <TwoFactorSection initialEnabled={twoFactorEnabled} />
           <InvestmentValuesSection
             profile={profile}
             onProfileSaved={(saved) => setProfile(saved)}
@@ -172,113 +169,11 @@ export default function SettingsClient({
         </div>
       </div>
 
-      {/* Row 2 — Investing profile. Risk tolerance (tall, 3 stacked
-          options) on the left; Time horizon + Goals stacked on the
-          right so the column heights match. Inner stack uses h-full
-          + flex-1 cards so they grow to fill whatever height Risk
-          tolerance establishes — keeps the left/right halves
-          symmetrical regardless of content length. */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Risk tolerance</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {RISK_OPTIONS.map((r) => {
-              const active = profile.riskTolerance === r.value;
-              return (
-                <label
-                  key={r.value}
-                  className={`flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors ${
-                    active
-                      ? "border-[var(--buy)]/40 bg-[var(--buy)]/5"
-                      : "border-border hover:bg-accent/40"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="risk"
-                    className="mt-0.5"
-                    checked={active}
-                    onChange={() =>
-                      setProfile((p) => ({ ...p, riskTolerance: r.value }))
-                    }
-                  />
-                  <div>
-                    <div className="text-sm font-medium">{r.label}</div>
-                    <div className="text-xs text-muted-foreground">{r.desc}</div>
-                  </div>
-                </label>
-              );
-            })}
-          </CardContent>
-        </Card>
-
-        <div className="flex h-full flex-col gap-4">
-          <Card className="flex flex-1 flex-col">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Time horizon</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-1 items-center">
-              <div className="grid w-full gap-2 sm:grid-cols-3">
-                {HORIZON_OPTIONS.map((h) => {
-                  const active = profile.horizon === h.value;
-                  return (
-                    <button
-                      key={h.value}
-                      type="button"
-                      onClick={() =>
-                        setProfile((p) => ({ ...p, horizon: h.value }))
-                      }
-                      className={`flex flex-col items-start rounded-md border p-3 text-left text-sm transition-colors ${
-                        active
-                          ? "border-[var(--buy)]/40 bg-[var(--buy)]/5"
-                          : "border-border hover:bg-accent/40"
-                      }`}
-                    >
-                      <span className="font-medium">{h.label}</span>
-                      <span className="mt-1 text-xs text-muted-foreground">
-                        {h.desc}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="flex flex-1 flex-col">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Goals</CardTitle>
-              <p className="text-xs text-muted-foreground">
-                Pick any that apply. No limit.
-              </p>
-            </CardHeader>
-            <CardContent className="flex flex-1 items-center">
-              <div className="flex flex-wrap gap-2">
-                {GOAL_OPTIONS.map((g) => {
-                  const active = profile.investmentGoals.includes(g.value);
-                  return (
-                    <button
-                      key={g.value}
-                      type="button"
-                      onClick={() => toggleGoal(g.value)}
-                      className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-                        active
-                          ? "border-[var(--buy)] bg-[var(--buy)]/10 text-[var(--buy)]"
-                          : "border-border text-muted-foreground hover:bg-accent/40"
-                      }`}
-                    >
-                      {g.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
+      {/* Preferences — broader research-shaping controls (density,
+          excluded sectors, notes for the analysts). Sits above the
+          investing-profile row so the user can shape "what ClearPath
+          looks at" before drilling into "how aggressive should it
+          be" (risk + horizon) below. */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Preferences</CardTitle>
@@ -388,6 +283,113 @@ export default function SettingsClient({
         </CardContent>
       </Card>
 
+      {/* Investing profile — Risk tolerance (tall, 3 stacked options)
+          on the left; Time horizon + Goals stacked on the right so
+          the column heights match. Inner stack uses h-full + flex-1
+          cards so they grow to fill whatever height Risk tolerance
+          establishes — keeps the left/right halves symmetrical
+          regardless of content length. */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Risk tolerance</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {RISK_OPTIONS.map((r) => {
+              const active = profile.riskTolerance === r.value;
+              return (
+                <label
+                  key={r.value}
+                  className={`flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors ${
+                    active
+                      ? "border-[var(--buy)]/40 bg-[var(--buy)]/5"
+                      : "border-border hover:bg-accent/40"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="risk"
+                    className="mt-0.5"
+                    checked={active}
+                    onChange={() =>
+                      setProfile((p) => ({ ...p, riskTolerance: r.value }))
+                    }
+                  />
+                  <div>
+                    <div className="text-sm font-medium">{r.label}</div>
+                    <div className="text-xs text-muted-foreground">{r.desc}</div>
+                  </div>
+                </label>
+              );
+            })}
+          </CardContent>
+        </Card>
+
+        <div className="flex h-full flex-col gap-4">
+          <Card className="flex flex-1 flex-col">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Time horizon</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-1 items-center">
+              <div className="grid w-full gap-2 sm:grid-cols-3">
+                {HORIZON_OPTIONS.map((h) => {
+                  const active = profile.horizon === h.value;
+                  return (
+                    <button
+                      key={h.value}
+                      type="button"
+                      onClick={() =>
+                        setProfile((p) => ({ ...p, horizon: h.value }))
+                      }
+                      className={`flex flex-col items-start rounded-md border p-3 text-left text-sm transition-colors ${
+                        active
+                          ? "border-[var(--buy)]/40 bg-[var(--buy)]/5"
+                          : "border-border hover:bg-accent/40"
+                      }`}
+                    >
+                      <span className="font-medium">{h.label}</span>
+                      <span className="mt-1 text-xs text-muted-foreground">
+                        {h.desc}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="flex flex-1 flex-col">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Goals</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Pick any that apply. No limit.
+              </p>
+            </CardHeader>
+            <CardContent className="flex flex-1 items-center">
+              <div className="flex flex-wrap gap-2">
+                {GOAL_OPTIONS.map((g) => {
+                  const active = profile.investmentGoals.includes(g.value);
+                  return (
+                    <button
+                      key={g.value}
+                      type="button"
+                      onClick={() => toggleGoal(g.value)}
+                      className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                        active
+                          ? "border-[var(--buy)] bg-[var(--buy)]/10 text-[var(--buy)]"
+                          : "border-border text-muted-foreground hover:bg-accent/40"
+                      }`}
+                    >
+                      {g.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
       {error && (
         <Card className="border-destructive/40 bg-destructive/5">
           <CardContent className="py-3 text-sm text-destructive">
@@ -419,8 +421,8 @@ export default function SettingsClient({
         )}
       </div>
 
-      {/* Notifications + 2FA now live in the row-1 right column above —
-          no duplicate render here. Danger zone stays full-width and last
+      {/* Notifications + 2FA already render in row 1 above — no
+          duplicate render here. Danger zone stays full-width and last
           so destructive actions are visually isolated. */}
 
       {/* ─── Danger zone ─────────────────────────────────────────── */}

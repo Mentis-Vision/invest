@@ -28,13 +28,20 @@ type TapeItem = {
 };
 
 function formatPrice(symbol: string, price: number): string {
-  // Special-case the yield tickers (^TNX, ^VIX) — they come through as
-  // decimals like 4.32; we want "4.32%" / "14.8", not "$4.32".
+  // ^TNX is a yield (decimal like 4.32 → "4.32%"). ^VIX is an
+  // unitless level (14.8). Other ^-prefixed symbols are stock-market
+  // indices (^GSPC, ^IXIC, ^DJI, ^RUT) — they carry index points,
+  // not dollars, so render with thousands separators and no "$".
+  // Without this branch the ^DJI ~40,000 reading would show as
+  // "$40,123" and read like a price, not an index level.
   if (symbol.startsWith("^TNX")) {
     return `${price.toFixed(2)}%`;
   }
   if (symbol.startsWith("^VIX")) {
     return price.toFixed(1);
+  }
+  if (symbol.startsWith("^")) {
+    return price.toLocaleString("en-US", { maximumFractionDigits: 2 });
   }
   if (price >= 1000) {
     return `$${price.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
