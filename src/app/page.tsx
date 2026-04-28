@@ -1,7 +1,6 @@
 import Link from "next/link";
 import MarketingNav from "@/components/marketing/nav";
 import MarketingFooter from "@/components/marketing/footer";
-import WaitlistForm from "@/components/marketing/waitlist-form";
 import { Check, ArrowUpRight, Database, FileText, LineChart, ShieldCheck, Scale } from "lucide-react";
 
 // Landing-page JSON-LD: SoftwareApplication + ItemList of data sources.
@@ -17,7 +16,7 @@ const softwareAppLd = {
   description:
     "Evidence-based stock research for retail investors. Three independent lenses — Quality, Momentum, Context — examine live SEC, Federal Reserve, and market data. Every claim traces to a primary source.",
   offers: [
-    { "@type": "Offer", name: "Beta (private)", price: "0", priceCurrency: "USD" },
+    { "@type": "Offer", name: "Free 30-day trial", price: "0", priceCurrency: "USD" },
     { "@type": "Offer", name: "Individual", price: "29", priceCurrency: "USD" },
     { "@type": "Offer", name: "Active", price: "79", priceCurrency: "USD" },
     { "@type": "Offer", name: "Advisor", price: "500", priceCurrency: "USD" },
@@ -91,7 +90,7 @@ export default function Landing() {
         <div className="relative mx-auto max-w-5xl px-6 pt-20 pb-28 text-center">
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-[11px] font-mono uppercase tracking-[0.18em] text-muted-foreground">
             <span className="h-1.5 w-1.5 rounded-full bg-[var(--buy)]" />
-            Private beta · Issue 01
+            Early access · Free 30-day trial
           </div>
 
           <h1 className="font-heading text-[56px] leading-[1.02] tracking-tight text-foreground sm:text-[72px] md:text-[88px]">
@@ -104,10 +103,18 @@ export default function Landing() {
             Evidence-based equity research for retail investors. Three independent lenses — <span className="text-foreground">Quality, Momentum, Context</span> — examine live data from SEC filings, the Federal Reserve, and market feeds. Every number traces to a primary source.
           </p>
 
-          <div id="access" className="mx-auto mt-10 max-w-md">
-            <WaitlistForm source="landing-hero" />
-            <p className="mt-3 text-[12px] text-muted-foreground/70">
-              No spam. Just one email when access opens.
+          {/* Direct sign-up CTA — replaces the prior waitlist form. The
+              30-day full-feature trial is no-card-required, so the
+              friction is just an email + password. */}
+          <div id="access" className="mx-auto mt-10 flex flex-col items-center gap-3">
+            <Link
+              href="/sign-up?src=landing-hero"
+              className="inline-flex items-center justify-center rounded-md bg-foreground px-7 py-3 text-[15px] font-semibold text-background transition-all hover:bg-foreground/85"
+            >
+              Start your free 30-day trial
+            </Link>
+            <p className="text-[12px] text-muted-foreground/70">
+              No credit card. Cancel anytime.
             </p>
           </div>
         </div>
@@ -283,7 +290,7 @@ export default function Landing() {
             <div className="grid grid-cols-1 divide-y divide-border md:grid-cols-2 md:divide-x md:divide-y-0">
               <div className="p-6 md:p-8">
                 <div className="mb-4 font-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
-                  Other AI investing tools
+                  Single-model AI tools
                 </div>
                 <ul className="space-y-3 text-sm">
                   {otherToolsCons.map((t) => (
@@ -322,10 +329,18 @@ export default function Landing() {
             <em className="italic text-[var(--buy)]">considered</em> decisions?
           </h2>
           <p className="mx-auto mt-5 max-w-[480px] text-[16px] leading-relaxed text-muted-foreground">
-            Join the private beta. We&rsquo;re onboarding investors who want evidence, not vibes.
+            Start your free 30-day trial — full access, no credit card. Built for investors who want evidence, not vibes.
           </p>
-          <div className="mx-auto mt-8 max-w-md">
-            <WaitlistForm source="landing-cta" />
+          <div className="mx-auto mt-8 flex flex-col items-center gap-3">
+            <Link
+              href="/sign-up?src=landing-cta"
+              className="inline-flex items-center justify-center rounded-md bg-foreground px-7 py-3 text-[15px] font-semibold text-background transition-all hover:bg-foreground/85"
+            >
+              Start your free 30-day trial
+            </Link>
+            <p className="text-[12px] text-muted-foreground/70">
+              No credit card. Cancel anytime.
+            </p>
           </div>
         </div>
       </section>

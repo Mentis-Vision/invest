@@ -171,7 +171,7 @@ export default function SignInPage() {
       <p className="mt-6 text-center text-[12px] text-muted-foreground">
         No account?{" "}
         <Link href="/sign-up" className="font-medium text-foreground underline decoration-[var(--buy)] decoration-2 underline-offset-[5px] transition-colors hover:text-[var(--buy)]">
-          Request access
+          Start your free trial
         </Link>
       </p>
     </AuthLayout>

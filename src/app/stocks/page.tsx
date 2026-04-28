@@ -135,10 +135,10 @@ export default async function StocksIndex() {
           <p className="mt-10 text-center text-[12px] text-muted-foreground">
             Don&rsquo;t see a ticker?{" "}
             <Link
-              href="/#access"
+              href="/sign-up?src=stocks-index"
               className="underline underline-offset-4 hover:text-foreground"
             >
-              Request beta access
+              Start your free trial
             </Link>{" "}
             and run a live three-lens analysis on any US equity.
           </p>

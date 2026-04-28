@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import MarketingNav from "@/components/marketing/nav";
 import MarketingFooter from "@/components/marketing/footer";
-import WaitlistForm from "@/components/marketing/waitlist-form";
 import { getPublicDossier } from "@/lib/warehouse/public-dossier";
 import type { DossierTone, SignalTone } from "@/lib/warehouse/dossier";
 
@@ -114,7 +113,7 @@ export default async function TickerPage({
 
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <Link
-              href={`/#access`}
+              href={`/sign-up?src=stocks-${t}-hero`}
               className="inline-flex items-center gap-1.5 rounded-md bg-foreground px-5 py-2.5 text-[13px] font-semibold text-background transition-colors hover:bg-foreground/85"
             >
               Get full {t} research
@@ -141,12 +140,17 @@ export default async function TickerPage({
                 {t} · Priming
               </div>
               <p className="mt-3 text-[15px] leading-relaxed text-foreground/85">
-                We haven&rsquo;t primed a public brief for {t} yet. Request
-                access to run a live three-lens analysis with the full
-                research desk — priced at zero during the private beta.
+                We haven&rsquo;t primed a public brief for {t} yet. Sign up
+                to run a live three-lens analysis with the full research
+                desk — free during your 30-day trial.
               </p>
-              <div className="mx-auto mt-5 max-w-md">
-                <WaitlistForm source={`stocks-${t}`} />
+              <div className="mx-auto mt-5 flex justify-center">
+                <Link
+                  href={`/sign-up?src=stocks-${t}`}
+                  className="inline-flex items-center justify-center rounded-md bg-foreground px-6 py-2.5 text-[13px] font-semibold text-background transition-colors hover:bg-foreground/85"
+                >
+                  Start your free trial
+                </Link>
               </div>
             </div>
           )}

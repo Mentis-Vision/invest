@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import MarketingNav from "@/components/marketing/nav";
 import MarketingFooter from "@/components/marketing/footer";
-import WaitlistForm from "@/components/marketing/waitlist-form";
 import { Database, LineChart, Scale, FileText, ShieldCheck, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -350,13 +350,18 @@ export default function HowItWorks() {
       <section className="py-24">
         <div className="mx-auto max-w-2xl px-6 text-center">
           <h2 className="font-heading text-[36px] leading-tight tracking-tight md:text-[46px]">
-            See it in action.
+            See it on your portfolio.
           </h2>
           <p className="mt-4 text-muted-foreground">
-            Request access to the private beta.
+            Free 30-day trial. No credit card. Full access to all three lenses.
           </p>
-          <div className="mx-auto mt-8 max-w-md">
-            <WaitlistForm source="how-it-works" />
+          <div className="mx-auto mt-8 flex justify-center">
+            <Link
+              href="/sign-up?src=how-it-works"
+              className="inline-flex items-center justify-center rounded-md bg-foreground px-7 py-3 text-[15px] font-semibold text-background transition-all hover:bg-foreground/85"
+            >
+              Start your free trial
+            </Link>
           </div>
         </div>
       </section>

@@ -60,15 +60,16 @@ export default function MarketingNav() {
           >
             Sign in
           </Link>
-          {/* Absolute /#access (not bare #access) so the button works from
-              every page — on /pricing or /manifesto a bare hash anchor
-              just scrolls to top because the #access element only lives
-              on the landing. Next Link handles the route-then-scroll. */}
+          {/* Direct sign-up — replaces the prior "Request access"
+              CTA that pointed at the landing waitlist anchor. The
+              30-day full-feature trial is no-card-required, so the
+              CTA can promise a clear outcome ("start free") rather
+              than a waitlist position. */}
           <Link
-            href="/#access"
+            href="/sign-up?src=nav"
             className="rounded-md bg-foreground px-4 py-2 text-[13px] font-semibold text-background transition-all hover:bg-foreground/85"
           >
-            Request access
+            Start free
           </Link>
         </div>
       </div>

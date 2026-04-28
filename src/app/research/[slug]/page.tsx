@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import MarketingNav from "@/components/marketing/nav";
 import MarketingFooter from "@/components/marketing/footer";
-import WaitlistForm from "@/components/marketing/waitlist-form";
 import {
   TrendingUp,
   TrendingDown,
@@ -271,15 +270,20 @@ export default async function BriefPage({
               </h2>
               <p className="mt-3 text-[15px] leading-relaxed text-muted-foreground">
                 This is a weekly public brief. ClearPath runs the same
-                three-lens pipeline on demand for any US equity in the
-                private beta — free during beta.
+                three-lens pipeline on demand for any US equity. Free
+                30-day trial — no credit card.
               </p>
               <p className="mt-4 text-[11px] text-muted-foreground/70">
                 Informational only · Not investment advice
               </p>
             </div>
-            <div>
-              <WaitlistForm source={`brief-${brief.ticker}`} />
+            <div className="flex md:justify-end">
+              <Link
+                href={`/sign-up?src=brief-${brief.ticker}`}
+                className="inline-flex items-center justify-center rounded-md bg-foreground px-6 py-3 text-[14px] font-semibold text-background transition-colors hover:bg-foreground/85"
+              >
+                Start your free trial
+              </Link>
             </div>
           </div>
         </div>

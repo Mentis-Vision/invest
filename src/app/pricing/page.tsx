@@ -1,16 +1,16 @@
 import type { Metadata } from "next";
 import MarketingNav from "@/components/marketing/nav";
 import MarketingFooter from "@/components/marketing/footer";
-import WaitlistForm from "@/components/marketing/waitlist-form";
+import Link from "next/link";
 import { Check } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Pricing",
   description:
-    "ClearPath Invest pricing: free private beta, $29/mo Individual, $79/mo Active, $500/mo Advisor. Evidence-based stock research with live SEC and Federal Reserve data.",
+    "ClearPath Invest pricing: free 30-day trial, $29/mo Individual, $79/mo Active, $500/mo Advisor. Evidence-based stock research with live SEC and Federal Reserve data.",
   alternates: { canonical: "/pricing" },
   openGraph: {
-    title: "ClearPath Invest pricing — from free beta to $500/mo Advisor",
+    title: "ClearPath Invest pricing — free trial to $500/mo Advisor",
     description:
       "Three research depths, four tiers. Transparent fair-use caps. Your rate locks for 12 months at signup.",
     url: "/pricing",
@@ -20,7 +20,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "ClearPath Invest pricing",
     description:
-      "Three research depths, four tiers. From free private beta to $500/mo Advisor. 12-month price lock.",
+      "Three research depths, four tiers. Free 30-day trial, no card required. 12-month price lock at signup.",
   },
 };
 
@@ -83,20 +83,19 @@ const faqPageLd = {
 // headroom math still works.
 const tiers: Tier[] = [
   {
-    name: "Beta",
-    sub: "Invitation only",
+    name: "Free trial",
+    sub: "Full access for 30 days",
     price: "Free",
-    priceSub: "during private beta",
+    priceSub: "no credit card",
     features: [
-      "100 quick reads / month",
-      "10 deep reads / month",
-      "3 panel consensus briefs / month",
+      "Every Individual-tier feature, unlocked",
+      "100 quick reads · 10 deep reads · 3 panels per month",
       "Overnight portfolio brief on every holding",
       "All 12+ data sources",
-      "Email support",
+      "Cancels automatically — no card on file",
     ],
-    ctaLabel: "Request access",
-    ctaKind: "waitlist",
+    ctaLabel: "Start free trial",
+    ctaKind: "active",
   },
   {
     name: "Individual",
@@ -112,8 +111,8 @@ const tiers: Tier[] = [
       "Portfolio sync + alerts",
       "Priority support",
     ],
-    ctaLabel: "Join waitlist",
-    ctaKind: "waitlist",
+    ctaLabel: "Start with Individual",
+    ctaKind: "active",
   },
   {
     name: "Active",
@@ -128,7 +127,7 @@ const tiers: Tier[] = [
       "Event-triggered alerts on holdings",
       "Priority routing on panel consensus",
     ],
-    ctaLabel: "Join Active waitlist",
+    ctaLabel: "Start with Active",
     ctaKind: "active",
   },
   {
@@ -214,8 +213,8 @@ export default function Pricing() {
           </h1>
           <p className="mx-auto mt-6 max-w-[640px] text-[17px] leading-relaxed text-muted-foreground">
             Quick Scan for triaging candidates. Standard for a real thesis.
-            Full Panel for high-conviction decisions. Every tier has the same
-            overnight dossier on your holdings at zero AI cost.
+            Full Panel for high-conviction decisions. Every tier includes the
+            same overnight dossier on your holdings — no add-on fees.
           </p>
         </div>
       </section>
@@ -318,13 +317,17 @@ export default function Pricing() {
                   >
                     {t.ctaLabel}
                   </a>
-                ) : t.ctaKind === "active" ? (
-                  <WaitlistForm source="pricing-active" layout="vertical" />
                 ) : (
-                  <WaitlistForm
-                    source={`pricing-${t.name.toLowerCase()}`}
-                    layout="vertical"
-                  />
+                  /* All non-Advisor tiers route to /sign-up. The 30-day
+                     trial is no-card, so anyone can start; on conversion
+                     they pick a paid tier. The src param tags which
+                     pricing card they came from for funnel analytics. */
+                  <Link
+                    href={`/sign-up?src=pricing-${t.name.toLowerCase().replace(/\s+/g, "-")}`}
+                    className="flex w-full items-center justify-center rounded-md bg-foreground px-4 py-2.5 text-[12px] font-semibold text-background transition-colors hover:bg-foreground/85"
+                  >
+                    {t.ctaLabel}
+                  </Link>
                 )}
               </div>
             ))}
