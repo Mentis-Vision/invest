@@ -10,6 +10,9 @@ import {
   Landmark,
   Layers,
   Filter,
+  Pencil,
+  Check as CheckIcon,
+  X as XIcon,
 } from "lucide-react";
 import {
   getHoldings,
@@ -94,7 +97,11 @@ type Group = {
   totalValue: number;
 };
 
-function buildGroups(holdings: Holding[], by: GroupKey): Group[] {
+function buildGroups(
+  holdings: Holding[],
+  by: GroupKey,
+  aliases?: Record<string, string>
+): Group[] {
   if (by === "flat") {
     return [
       {
@@ -126,21 +133,29 @@ function buildGroups(holdings: Holding[], by: GroupKey): Group[] {
 
     let g = buckets.get(key);
     if (!g) {
+      // For per-account grouping, prefer the user's saved alias
+      // ("Sang's IRA") over the auto-detected friendly type. The
+      // alias is keyed by the same `institution::accountName` string
+      // we use for grouping, so a stale alias for a renamed account
+      // simply orphans rather than mis-labelling something.
+      const aliasLabel =
+        by === "institution_account" && aliases ? aliases[key] : undefined;
       const label =
         by === "institution_account"
-          ? detectAccountType(h.accountName)
+          ? aliasLabel ?? detectAccountType(h.accountName)
           : by === "institution"
             ? h.institutionName ?? "Unclassified"
             : by === "sector"
               ? h.sector ?? "Unclassified"
               : (h.assetClass ?? "Unclassified").replace(/^\w/, (c) => c.toUpperCase());
-      // For institution_account, the sublabel surfaces the raw
-      // accountName when it carries info beyond the friendly type
-      // label — that's what disambiguates "Sang's IRA" from
-      // "Spouse's IRA" at the same broker. When the accountName
-      // matches the detected type exactly (e.g. literally
-      // "Traditional IRA"), we drop it so single-account users keep
-      // the clean "Type / Institution" presentation.
+      // For institution_account, the sublabel surfaces (in order):
+      // institution · [type when alias replaces it] · accountName-when-distinct.
+      // - If the user has set an alias, prepend the auto-detected
+      //   type so they can still tell "Sang's IRA" is a Traditional
+      //   IRA at a glance.
+      // - Append the raw accountName when it adds info beyond the
+      //   friendly type — that disambiguates Sang's vs Spouse's IRA
+      //   at the same broker for users who haven't set aliases yet.
       let sublabel: string | undefined;
       if (by === "institution_account") {
         const institution = h.institutionName ?? "Unclassified";
@@ -148,9 +163,10 @@ function buildGroups(holdings: Holding[], by: GroupKey): Group[] {
         const carriesExtra =
           !!h.accountName &&
           h.accountName.trim().toUpperCase() !== detected.toUpperCase();
-        sublabel = carriesExtra
-          ? `${institution} · ${h.accountName}`
-          : institution;
+        const parts = [institution];
+        if (aliasLabel) parts.push(detected);
+        if (carriesExtra && h.accountName) parts.push(h.accountName);
+        sublabel = parts.join(" · ");
       }
       g = { id: key, label, sublabel, holdings: [], totalValue: 0 };
       buckets.set(key, g);
@@ -161,6 +177,34 @@ function buildGroups(holdings: Holding[], by: GroupKey): Group[] {
     // the 0.01 range and disagree with the sum of shown per-position
     // dollars in the expanded view.
     g.totalValue = sumMoney(g.totalValue, h.value);
+  }
+
+  // Institution-aware sort for the per-account view: cluster all
+  // accounts at the same broker together (sorted by the broker's
+  // total AUM), then by per-account value within each broker. The
+  // earlier value-only sort interleaved a small Coinbase wallet
+  // between two Schwab accounts whenever its balance fell between
+  // theirs, which made the list feel unorganized.
+  if (by === "institution_account") {
+    const institutionTotals = new Map<string, number>();
+    for (const g of buckets.values()) {
+      const inst = g.id.split("::")[0] ?? "";
+      institutionTotals.set(
+        inst,
+        sumMoney(institutionTotals.get(inst) ?? 0, g.totalValue)
+      );
+    }
+    return [...buckets.values()].sort((a, b) => {
+      const aInst = a.id.split("::")[0] ?? "";
+      const bInst = b.id.split("::")[0] ?? "";
+      if (aInst !== bInst) {
+        const aT = institutionTotals.get(aInst) ?? 0;
+        const bT = institutionTotals.get(bInst) ?? 0;
+        if (aT !== bT) return bT - aT;
+        return aInst.localeCompare(bInst);
+      }
+      return b.totalValue - a.totalValue;
+    });
   }
   return [...buckets.values()].sort((a, b) => b.totalValue - a.totalValue);
 }
@@ -196,6 +240,20 @@ function PortfolioBody() {
   const [excludedAccounts, setExcludedAccounts] = useState<Set<string>>(new Set());
   const [showFilters, setShowFilters] = useState(false);
 
+  // ── Account aliases (user-supplied display names) ──
+  // Stored in user_profile.preferences.accountAliases keyed by
+  // `${institutionName}::${accountName}`. Same key buildGroups uses,
+  // so the override flows through naturally without any cross-keying.
+  const [accountAliases, setAccountAliases] = useState<Record<string, string>>(
+    {}
+  );
+  const [allPreferences, setAllPreferences] = useState<Record<string, unknown>>(
+    {}
+  );
+  const [editingAliasKey, setEditingAliasKey] = useState<string | null>(null);
+  const [editingAliasValue, setEditingAliasValue] = useState("");
+  const [savingAlias, setSavingAlias] = useState(false);
+
   const loadHoldings = useCallback(async (force = false) => {
     setLoadingHoldings(true);
     try {
@@ -218,6 +276,81 @@ function PortfolioBody() {
   useEffect(() => {
     loadHoldings();
   }, [loadHoldings]);
+
+  // Load the user's saved preferences once so we can apply alias
+  // overrides to group labels. Failure is non-fatal — we just fall
+  // back to auto-detected types.
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/user/profile")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!alive || !data?.profile) return;
+        const prefs =
+          (data.profile.preferences as Record<string, unknown> | undefined) ??
+          {};
+        setAllPreferences(prefs);
+        const aliases = prefs.accountAliases;
+        if (
+          aliases &&
+          typeof aliases === "object" &&
+          !Array.isArray(aliases)
+        ) {
+          setAccountAliases(aliases as Record<string, string>);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Save (or clear) an alias for a single account. Sends the full
+  // preferences blob because the profile endpoint replaces it
+  // wholesale; partial writes would wipe excludedSectors/notes/etc.
+  const saveAlias = useCallback(
+    async (key: string, value: string) => {
+      const trimmed = value.trim();
+      const nextAliases: Record<string, string> = { ...accountAliases };
+      if (trimmed) nextAliases[key] = trimmed.slice(0, 80);
+      else delete nextAliases[key];
+
+      // Optimistic — flip UI first, revert on failure.
+      setAccountAliases(nextAliases);
+      setSavingAlias(true);
+      try {
+        const res = await fetch("/api/user/profile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            preferences: { ...allPreferences, accountAliases: nextAliases },
+          }),
+        });
+        if (!res.ok) throw new Error("save failed");
+        const data = await res.json();
+        const savedPrefs =
+          (data.profile?.preferences as Record<string, unknown> | undefined) ??
+          {};
+        setAllPreferences(savedPrefs);
+        const savedAliases = savedPrefs.accountAliases;
+        if (
+          savedAliases &&
+          typeof savedAliases === "object" &&
+          !Array.isArray(savedAliases)
+        ) {
+          setAccountAliases(savedAliases as Record<string, string>);
+        }
+      } catch {
+        // Revert optimistic state.
+        setAccountAliases(accountAliases);
+      } finally {
+        setSavingAlias(false);
+        setEditingAliasKey(null);
+        setEditingAliasValue("");
+      }
+    },
+    [accountAliases, allPreferences]
+  );
 
   useEffect(() => {
     return () => {
@@ -359,8 +492,8 @@ function PortfolioBody() {
   );
 
   const groups = useMemo(
-    () => buildGroups(filteredHoldings, groupBy),
-    [filteredHoldings, groupBy]
+    () => buildGroups(filteredHoldings, groupBy, accountAliases),
+    [filteredHoldings, groupBy, accountAliases]
   );
 
   function toggleCollapse(id: string) {
@@ -583,41 +716,32 @@ function PortfolioBody() {
                 className="overflow-hidden rounded-[10px] border border-border bg-card"
               >
                 {!isFlat && (
-                  <button
-                    type="button"
-                    onClick={() => toggleCollapse(g.id)}
-                    className="flex w-full items-center gap-3 border-b border-border px-4 py-3 text-left transition-colors hover:bg-secondary/40"
-                  >
-                    <ChevronRight
-                      className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
-                        isCollapsed ? "" : "rotate-90"
-                      }`}
-                    />
-                    <GroupIcon by={groupBy} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-baseline gap-2">
-                        <span className="truncate text-[14px] font-semibold text-foreground">
-                          {g.label}
-                        </span>
-                        {g.sublabel && (
-                          <span className="truncate text-[12px] text-muted-foreground">
-                            · {g.sublabel}
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-0.5 text-[11px] text-muted-foreground">
-                        {g.holdings.length} position{g.holdings.length === 1 ? "" : "s"}
-                      </div>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <div className="font-mono text-[14px] font-semibold text-foreground">
-                        {money(g.totalValue)}
-                      </div>
-                      <div className="text-[11px] text-muted-foreground">
-                        {pct(weight)} of filtered
-                      </div>
-                    </div>
-                  </button>
+                  <GroupHeader
+                    group={g}
+                    weight={weight}
+                    isCollapsed={isCollapsed}
+                    onToggleCollapse={() => toggleCollapse(g.id)}
+                    groupBy={groupBy}
+                    canRename={groupBy === "institution_account"}
+                    isEditing={editingAliasKey === g.id}
+                    onStartEdit={() => {
+                      setEditingAliasKey(g.id);
+                      setEditingAliasValue(accountAliases[g.id] ?? "");
+                    }}
+                    editingValue={editingAliasValue}
+                    onEditingValueChange={setEditingAliasValue}
+                    onSave={() => saveAlias(g.id, editingAliasValue)}
+                    onCancel={() => {
+                      setEditingAliasKey(null);
+                      setEditingAliasValue("");
+                    }}
+                    onClearAlias={
+                      accountAliases[g.id]
+                        ? () => saveAlias(g.id, "")
+                        : undefined
+                    }
+                    saving={savingAlias}
+                  />
                 )}
                 {!isCollapsed && (
                   <div className="overflow-x-auto">
@@ -744,6 +868,189 @@ function Stat({
       {hint && (
         <div className="mt-0.5 text-[10px] text-muted-foreground">{hint}</div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Group header — renders the collapsing label/value strip at the top
+ * of each portfolio bucket. For the per-account view it also exposes
+ * an inline rename affordance: pencil icon on hover → text input →
+ * Enter/check saves, Esc/X cancels, an "x" next to the saved alias
+ * clears back to the auto-detected type.
+ *
+ * Split out from the parent so the rename input can own its own
+ * focus / keyboard handling without needing portals or refs into the
+ * massive PortfolioBody render. The collapse toggle lives on a
+ * dedicated button now (not the whole row) so clicking the rename
+ * controls doesn't accidentally fold the section.
+ */
+function GroupHeader({
+  group,
+  weight,
+  isCollapsed,
+  onToggleCollapse,
+  groupBy,
+  canRename,
+  isEditing,
+  onStartEdit,
+  editingValue,
+  onEditingValueChange,
+  onSave,
+  onCancel,
+  onClearAlias,
+  saving,
+}: {
+  group: Group;
+  weight: number;
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
+  groupBy: GroupKey;
+  canRename: boolean;
+  isEditing: boolean;
+  onStartEdit: () => void;
+  editingValue: string;
+  onEditingValueChange: (v: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+  onClearAlias?: () => void;
+  saving: boolean;
+}) {
+  return (
+    <div
+      className="group/header flex w-full items-center gap-3 border-b border-border px-4 py-3"
+      // Click anywhere outside the rename controls to toggle collapse.
+      // The rename button + input call stopPropagation so they don't
+      // accidentally fold the row when clicked.
+      onClick={(e) => {
+        if (isEditing) return;
+        const target = e.target as HTMLElement;
+        if (target.closest("[data-rename-control]")) return;
+        onToggleCollapse();
+      }}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (isEditing) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onToggleCollapse();
+        }
+      }}
+    >
+      <ChevronRight
+        className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
+          isCollapsed ? "" : "rotate-90"
+        }`}
+      />
+      <GroupIcon by={groupBy} />
+      <div className="min-w-0 flex-1">
+        {isEditing ? (
+          <div
+            data-rename-control
+            className="flex items-center gap-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <input
+              autoFocus
+              type="text"
+              value={editingValue}
+              onChange={(e) => onEditingValueChange(e.target.value.slice(0, 80))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  onSave();
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  onCancel();
+                }
+              }}
+              placeholder="e.g. Sang's IRA"
+              maxLength={80}
+              className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 text-[14px] outline-none focus:border-foreground/40"
+              disabled={saving}
+            />
+            <button
+              type="button"
+              data-rename-control
+              onClick={onSave}
+              disabled={saving}
+              className="rounded-md p-1 text-foreground hover:bg-secondary/60"
+              aria-label="Save alias"
+            >
+              {saving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CheckIcon className="h-4 w-4" />
+              )}
+            </button>
+            <button
+              type="button"
+              data-rename-control
+              onClick={onCancel}
+              disabled={saving}
+              className="rounded-md p-1 text-muted-foreground hover:bg-secondary/60"
+              aria-label="Cancel rename"
+            >
+              <XIcon className="h-4 w-4" />
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-baseline gap-2">
+            <span className="truncate text-[14px] font-semibold text-foreground">
+              {group.label}
+            </span>
+            {canRename && (
+              <button
+                type="button"
+                data-rename-control
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onStartEdit();
+                }}
+                className="shrink-0 rounded-md p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-secondary/60 hover:text-foreground group-hover/header:opacity-100 focus:opacity-100"
+                aria-label={
+                  onClearAlias ? "Edit account name" : "Rename this account"
+                }
+                title={onClearAlias ? "Edit account name" : "Rename"}
+              >
+                <Pencil className="h-3 w-3" />
+              </button>
+            )}
+            {canRename && onClearAlias && (
+              <button
+                type="button"
+                data-rename-control
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClearAlias();
+                }}
+                className="shrink-0 rounded-md p-0.5 text-[10px] uppercase tracking-wide text-muted-foreground opacity-0 hover:bg-secondary/60 hover:text-foreground group-hover/header:opacity-100"
+                aria-label="Clear custom name"
+                title="Reset to auto-detected name"
+              >
+                reset
+              </button>
+            )}
+            {group.sublabel && (
+              <span className="truncate text-[12px] text-muted-foreground">
+                · {group.sublabel}
+              </span>
+            )}
+          </div>
+        )}
+        <div className="mt-0.5 text-[11px] text-muted-foreground">
+          {group.holdings.length} position{group.holdings.length === 1 ? "" : "s"}
+        </div>
+      </div>
+      <div className="shrink-0 text-right">
+        <div className="font-mono text-[14px] font-semibold text-foreground">
+          {money(group.totalValue)}
+        </div>
+        <div className="text-[11px] text-muted-foreground">
+          {pct(weight)} of filtered
+        </div>
+      </div>
     </div>
   );
 }
