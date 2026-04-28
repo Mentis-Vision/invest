@@ -11,40 +11,212 @@ import { log, errorInfo } from "@/lib/log";
 import { getTickerMetadataBatch } from "@/lib/data/ticker-metadata";
 import { sumMoney } from "@/lib/money";
 
+type Holding = {
+  ticker: string;
+  name: string;
+  shares: number;
+  price: number;
+  value: number;
+  costBasis: number | null;
+  institutionName: string | null;
+  accountName: string | null;
+  sector: string | null;
+  industry: string | null;
+  assetClass: string;
+};
+
+/**
+ * Load Plaid-sourced holdings for this user from the `holding` table.
+ *
+ * Plaid rows land here via syncHoldings() in lib/plaid.ts at link time
+ * (and webhook updates). Reading them here is what makes brokerages
+ * routed through Plaid — Schwab in particular — visible to users who
+ * never registered with SnapTrade. Without this, /api/snaptrade/holdings
+ * silently returns `{ connected: false }` for Plaid-only users despite
+ * their holdings sitting in the DB.
+ *
+ * Joins to plaid_item for the institution name; falls back to ticker
+ * metadata for display-name / sector / industry when the holding row
+ * didn't store them.
+ */
+async function loadPlaidHoldings(userId: string): Promise<Holding[]> {
+  const { rows } = await pool.query<{
+    ticker: string;
+    shares: string | number;
+    costBasis: string | number | null;
+    price: string | number;
+    value: string | number;
+    accountName: string | null;
+    sector: string | null;
+    industry: string | null;
+    assetClass: string | null;
+    institutionName: string | null;
+  }>(
+    `SELECT
+       h.ticker,
+       h.shares,
+       h."costBasis",
+       COALESCE(h."lastPrice", 0) AS price,
+       COALESCE(h."lastValue", 0) AS value,
+       h."accountName",
+       h.sector,
+       h.industry,
+       h."assetClass",
+       pi."institutionName"
+     FROM "holding" h
+     LEFT JOIN "plaid_account" pa ON pa."plaidAccountId" = h."plaidAccountId"
+     LEFT JOIN "plaid_item" pi ON pi."itemId" = pa."itemId"
+     WHERE h."userId" = $1 AND h.source = 'plaid'`,
+    [userId]
+  );
+  if (rows.length === 0) return [];
+
+  const uniqueTickers = [...new Set(rows.map((r) => r.ticker))];
+  const metadataMap = await getTickerMetadataBatch(uniqueTickers);
+
+  return rows.map((r) => {
+    const md = metadataMap.get(r.ticker);
+    return {
+      ticker: r.ticker,
+      name: md?.name ?? r.ticker,
+      shares: Number(r.shares ?? 0),
+      price: Number(r.price ?? 0),
+      value: Number(r.value ?? 0),
+      costBasis: r.costBasis != null ? Number(r.costBasis) : null,
+      institutionName: r.institutionName ?? null,
+      accountName: r.accountName ?? null,
+      sector: r.sector ?? md?.sector ?? null,
+      industry: r.industry ?? md?.industry ?? null,
+      assetClass: r.assetClass ?? md?.assetClass ?? "equity",
+    };
+  });
+}
+
+/**
+ * Snapshot-level freshness across ALL sources (SnapTrade + Plaid).
+ * The portfolio header surfaces this as "Updated X ago" — MAX across
+ * sources so Plaid-only users still see a meaningful timestamp.
+ */
+async function loadLastSyncedAt(userId: string): Promise<string | null> {
+  try {
+    const { rows } = await pool.query<{ ts: Date | null }>(
+      `SELECT MAX("lastSyncedAt") AS ts FROM "holding" WHERE "userId" = $1`,
+      [userId]
+    );
+    return rows[0]?.ts?.toISOString() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Distinct accountName count across a Holding[]. */
+function countDistinctAccounts(holdings: Holding[]): number {
+  return new Set(
+    holdings
+      .map((h) => h.accountName)
+      .filter((x): x is string => !!x)
+  ).size;
+}
+
+/**
+ * Build the "connected" response shape from a holdings array. Used by
+ * the Plaid-only branches and as the merged-flow fallback so the
+ * client payload stays identical regardless of which sources
+ * contributed.
+ */
+function buildHoldingsResponse(
+  aggregated: Holding[],
+  accountCount: number,
+  brokerageBalance: number | null,
+  balanceCurrency: string,
+  lastSyncedAt: string | null
+) {
+  const totalValue = sumMoney(...aggregated.map((h) => h.value));
+  const institutions = [
+    ...new Set(
+      aggregated
+        .map((h) => h.institutionName)
+        .filter((x): x is string => !!x)
+    ),
+  ];
+  return NextResponse.json({
+    connected: true,
+    holdings: aggregated,
+    totalValue,
+    brokerageBalance,
+    balanceCurrency,
+    institutions,
+    accountCount,
+    lastSyncedAt,
+  });
+}
+
 /**
  * GET /api/snaptrade/holdings
- * Returns the user's positions across all linked brokerages. Also upserts
- * them into the `holding` table for downstream portfolio-review use.
  *
- * If the user hasn't registered with SnapTrade yet, returns connected=false.
+ * Despite the URL, this endpoint is provider-agnostic — it returns
+ * positions across BOTH SnapTrade (live fetch) and Plaid (read from
+ * the `holding` table where syncHoldings() persisted them at link
+ * time). A Schwab account routed through Plaid appears here even if
+ * the user never registered with SnapTrade.
+ *
+ * (Naming kept for client-compat; rename to /api/holdings is tracked
+ * separately.)
  */
 export async function GET(_req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const userId = session.user.id;
 
+  // Plaid path is the only way some brokerages (Schwab) reach us. Load
+  // those holdings first regardless of SnapTrade state.
+  const plaidHoldings = await loadPlaidHoldings(userId);
+
+  // ── Branch 1: SnapTrade not configured ────────────────────────────
+  // Serve Plaid-only if there's data; otherwise echo the original
+  // "not yet live" message so the UI shows the right CTA.
   if (!snaptradeConfigured()) {
-    return NextResponse.json({
-      holdings: [],
-      connected: false,
-      message: "Brokerage integration is not yet live.",
-    });
+    if (plaidHoldings.length === 0) {
+      return NextResponse.json({
+        holdings: [],
+        connected: false,
+        message: "Brokerage integration is not yet live.",
+      });
+    }
+    return buildHoldingsResponse(
+      plaidHoldings,
+      countDistinctAccounts(plaidHoldings),
+      null,
+      "USD",
+      await loadLastSyncedAt(userId)
+    );
   }
 
-  // If the user has never registered with SnapTrade, they haven't linked.
+  // ── Branch 2: SnapTrade configured but user never registered ──────
+  // Plaid-only users land here. Return their holdings without paying
+  // for the SnapTrade SDK round-trip.
   const { rows: existing } = await pool.query(
     `SELECT 1 FROM "snaptrade_user" WHERE "userId" = $1 LIMIT 1`,
-    [session.user.id]
+    [userId]
   );
   if (existing.length === 0) {
-    return NextResponse.json({ connected: false, holdings: [] });
+    if (plaidHoldings.length === 0) {
+      return NextResponse.json({ connected: false, holdings: [] });
+    }
+    return buildHoldingsResponse(
+      plaidHoldings,
+      countDistinctAccounts(plaidHoldings),
+      null,
+      "USD",
+      await loadLastSyncedAt(userId)
+    );
   }
 
+  // ── Branch 3: SnapTrade registered → live fetch + merge Plaid ─────
   try {
-    const { snaptradeUserId, userSecret } = await ensureSnaptradeUser(
-      session.user.id
-    );
+    const { snaptradeUserId, userSecret } = await ensureSnaptradeUser(userId);
     const client = snaptradeClient();
 
     // 1. List all accounts (one per linked brokerage connection)
@@ -82,6 +254,17 @@ export async function GET(_req: NextRequest) {
     }
 
     if (accounts.length === 0) {
+      // No SnapTrade accounts but Plaid may still have data — return
+      // whichever side has rows so the user sees something.
+      if (plaidHoldings.length > 0) {
+        return buildHoldingsResponse(
+          plaidHoldings,
+          countDistinctAccounts(plaidHoldings),
+          null,
+          "USD",
+          await loadLastSyncedAt(userId)
+        );
+      }
       return NextResponse.json({ connected: true, holdings: [], totalValue: 0 });
     }
 
@@ -112,7 +295,7 @@ export async function GET(_req: NextRequest) {
              "updatedAt"        = NOW()`,
           [
             crypto.randomUUID(),
-            session.user.id,
+            userId,
             authId,
             brokerageName,
             brokerageSlug,
@@ -126,20 +309,6 @@ export async function GET(_req: NextRequest) {
         });
       }
     }
-
-    type Holding = {
-      ticker: string;
-      name: string;
-      shares: number;
-      price: number;
-      value: number;
-      costBasis: number | null;
-      institutionName: string | null;
-      accountName: string | null;
-      sector: string | null;
-      industry: string | null;
-      assetClass: string;
-    };
 
     type PendingUpsert = {
       ticker: string;
@@ -214,7 +383,7 @@ export async function GET(_req: NextRequest) {
     const uniqueTickers = [...new Set(pending.map((p) => p.ticker))];
     const metadataMap = await getTickerMetadataBatch(uniqueTickers);
 
-    const aggregated: Holding[] = [];
+    const snaptradeHoldings: Holding[] = [];
     for (const p of pending) {
       const md = metadataMap.get(p.ticker) ?? {
         ticker: p.ticker,
@@ -226,7 +395,7 @@ export async function GET(_req: NextRequest) {
       const displayName = md.name ?? p.ticker;
       const acct = accounts.find((a) => a.id === p.accountId);
 
-      aggregated.push({
+      snaptradeHoldings.push({
         ticker: p.ticker,
         name: displayName,
         shares: p.shares,
@@ -257,7 +426,7 @@ export async function GET(_req: NextRequest) {
              "lastSyncedAt" = NOW()`,
           [
             crypto.randomUUID(),
-            session.user.id,
+            userId,
             p.ticker,
             p.shares,
             p.costBasis,
@@ -280,15 +449,20 @@ export async function GET(_req: NextRequest) {
       }
     }
 
-    // Update last sync timestamp
+    // Update last sync timestamp on the snaptrade user row.
     try {
       await pool.query(
         `UPDATE "snaptrade_user" SET "lastSyncedAt" = NOW() WHERE "userId" = $1`,
-        [session.user.id]
+        [userId]
       );
     } catch {
       /* ignore */
     }
+
+    // Merge: SnapTrade live + Plaid persisted. Plaid trails so its
+    // accountName ordering is stable across calls (snaptrade order
+    // can shift when accounts are added/removed).
+    const aggregated: Holding[] = [...snaptradeHoldings, ...plaidHoldings];
 
     // sumMoney (cents-integer) rather than float reduce — drift across
     // a multi-position portfolio otherwise surfaces as a total that
@@ -296,18 +470,24 @@ export async function GET(_req: NextRequest) {
     // which reads as a correctness problem even though no money is
     // actually wrong.
     const totalValue = sumMoney(...aggregated.map((h) => h.value));
+
+    // Institution list spans both providers so the user sees every
+    // brokerage they've linked, regardless of how it got there.
     const institutions = [
-      ...new Set(
-        accounts.map((a) => a.institution_name).filter((x): x is string => !!x)
-      ),
+      ...new Set([
+        ...accounts.map((a) => a.institution_name).filter((x): x is string => !!x),
+        ...plaidHoldings
+          .map((h) => h.institutionName)
+          .filter((x): x is string => !!x),
+      ]),
     ];
 
-    // Sum broker-reported balances across accounts — this is the
-    // authoritative "total in your brokerage including cash/settlements"
-    // number, whereas `totalValue` above is just positions × price.
-    // The delta is cash drag; both are useful to surface. sumMoney
-    // silently skips non-finite entries so a broken balance field
-    // on one account doesn't poison the aggregate.
+    // Sum broker-reported balances across SnapTrade accounts — this is
+    // the authoritative "total in your brokerage including
+    // cash/settlements" number for SnapTrade-linked accounts. Plaid
+    // doesn't expose an equivalent aggregate via this path; we surface
+    // its positions only, so totalValue is the trustworthy number for
+    // Plaid-side holdings. sumMoney silently skips non-finite entries.
     const brokerageBalance = sumMoney(
       ...accounts.map((a) => Number(a.balance?.total?.amount ?? 0))
     );
@@ -315,21 +495,7 @@ export async function GET(_req: NextRequest) {
       accounts.find((a) => a.balance?.total?.currency)?.balance?.total
         ?.currency ?? "USD";
 
-    // Snapshot-level freshness — max lastSyncedAt across all sources
-    // (SnapTrade rows just stamped NOW() above; Plaid rows stamped
-    // whenever the most recent webhook / exchange-initiated sync ran).
-    // Users see this as "Updated X ago" in the portfolio header so they
-    // can judge whether to act on the current numbers.
-    let lastSyncedAt: string | null = null;
-    try {
-      const { rows: syncRows } = await pool.query<{ ts: Date | null }>(
-        `SELECT MAX("lastSyncedAt") AS ts FROM "holding" WHERE "userId" = $1`,
-        [session.user.id]
-      );
-      lastSyncedAt = syncRows[0]?.ts?.toISOString() ?? null;
-    } catch {
-      /* ignore — freshness is cosmetic, not required */
-    }
+    const lastSyncedAt = await loadLastSyncedAt(userId);
 
     return NextResponse.json({
       connected: true,
@@ -338,14 +504,25 @@ export async function GET(_req: NextRequest) {
       brokerageBalance: brokerageBalance > 0 ? brokerageBalance : null,
       balanceCurrency,
       institutions,
-      accountCount: accounts.length,
+      accountCount: accounts.length + countDistinctAccounts(plaidHoldings),
       lastSyncedAt,
     });
   } catch (err) {
     log.error("snaptrade.holdings", "unexpected failure", {
-      userId: session.user.id,
+      userId,
       ...errorInfo(err),
     });
+    // SnapTrade fetch failed — degrade to Plaid-only rather than
+    // black-holing the whole portfolio view if Plaid has data.
+    if (plaidHoldings.length > 0) {
+      return buildHoldingsResponse(
+        plaidHoldings,
+        countDistinctAccounts(plaidHoldings),
+        null,
+        "USD",
+        await loadLastSyncedAt(userId)
+      );
+    }
     return NextResponse.json({ error: "Could not load holdings." }, { status: 500 });
   }
 }

@@ -30,11 +30,18 @@ type TapeItem = {
   kind: "index" | "holding";
 };
 
+// Use real index symbols (^GSPC / ^IXIC / ^DJI / ^RUT) rather than the
+// tracking ETFs (SPY / QQQ / DIA / IWM). The ETFs trade at ~1/100th of
+// the underlying index level, so labelling QQQ "$664" as "NASDAQ" was
+// misleading next to a real stock price like NVDA "$216" — users had
+// no way to tell whether the value was an index level, an ETF price,
+// or a daily change. Real indices give a value the user can reconcile
+// against any other quote source.
 const INDEXES: Array<{ symbol: string; label: string }> = [
-  { symbol: "SPY", label: "S&P 500" },
-  { symbol: "QQQ", label: "NASDAQ" },
-  { symbol: "DIA", label: "DOW" },
-  { symbol: "IWM", label: "RUT" },
+  { symbol: "^GSPC", label: "S&P 500" },
+  { symbol: "^IXIC", label: "NASDAQ" },
+  { symbol: "^DJI", label: "DOW" },
+  { symbol: "^RUT", label: "RUT" },
   { symbol: "^TNX", label: "10Y" },
   { symbol: "^VIX", label: "VIX" },
 ];
