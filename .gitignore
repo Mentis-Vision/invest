@@ -44,3 +44,9 @@ next-env.d.ts
 # macOS Finder metadata — Icon\r files in folders that have a custom icon set
 Icon?
 **/Icon?
+
+# Finder/browser "filename (N).ext" duplicates — drag-and-drop or
+# repeated-download artifacts. Almost always 0-byte placeholders that
+# clutter `git status` (we cleaned up 42 of these once already).
+* \(*\).*
+**/* \(*\).*
