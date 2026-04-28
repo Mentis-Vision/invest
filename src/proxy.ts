@@ -32,6 +32,10 @@ function requiresAuth(pathname: string): boolean {
   if (pathname.startsWith("/api/plaid/items")) return true;
   // NOTE: /api/plaid/webhook is NOT auth-gated — Plaid signs it
   // with its own key and we verify that via Plaid-Verification JWT.
+  // Same pattern for /api/stripe/webhook below: signed by Stripe,
+  // verified in-route, must remain public so Stripe can deliver.
+  if (pathname.startsWith("/api/stripe/checkout")) return true;
+  if (pathname.startsWith("/api/stripe/portal")) return true;
   if (pathname.startsWith("/api/alerts")) return true;
   if (pathname.startsWith("/api/user/")) return true;
   if (pathname.startsWith("/api/history/")) return true;

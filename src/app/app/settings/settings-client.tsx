@@ -5,7 +5,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Check, Info, Trash2, AlertTriangle, Mail, Leaf } from "lucide-react";
+import {
+  Loader2,
+  Check,
+  Info,
+  Trash2,
+  AlertTriangle,
+  Mail,
+  Leaf,
+  CreditCard,
+  ArrowUpRight,
+} from "lucide-react";
 import TwoFactorSection from "./two-factor-section";
 import type {
   UserProfile,
@@ -13,6 +23,16 @@ import type {
   Horizon,
   InvestmentGoal,
 } from "@/lib/user-profile";
+
+export type BillingProps = {
+  tier: "trial" | "free" | "individual" | "active" | "advisor";
+  effectiveTier: "individual" | "active" | "advisor" | "free";
+  status: "trialing" | "active" | "past_due" | "canceled" | "incomplete";
+  trialEndsAt: string | null;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  stripeConfigured: boolean;
+};
 
 const RISK_OPTIONS: { value: RiskTolerance; label: string; desc: string }[] = [
   {
@@ -51,12 +71,14 @@ export default function SettingsClient({
   twoFactorEnabled,
   weeklyDigestOptOut,
   weeklyBriefOptOut,
+  billing,
   user,
 }: {
   initialProfile: UserProfile;
   twoFactorEnabled: boolean;
   weeklyDigestOptOut: boolean;
   weeklyBriefOptOut: boolean;
+  billing: BillingProps;
   user: { name: string; email: string };
 }) {
   const [profile, setProfile] = useState<UserProfile>(initialProfile);
@@ -146,6 +168,11 @@ export default function SettingsClient({
           </div>
         </CardContent>
       </Card>
+
+      {/* Billing — sits up top because trial countdown is the highest-
+          urgency thing on the page when relevant, and "what tier am I
+          on" is what a paying user comes here to confirm. */}
+      <BillingSection billing={billing} />
 
       {/* Row 1 — Account-level controls. Notifications (the most
           frequently touched card) on the left so it's first to land
@@ -719,6 +746,257 @@ function InvestmentValuesSection({
       className={className}
     />
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// BillingSection — current plan + trial countdown + upgrade / manage
+// CTAs.
+//
+// Three states:
+//   1. Trial active (tier='trial', timer in the future) — show days
+//      left and an "Upgrade" CTA that creates a Checkout Session.
+//   2. Paid (status='active' on individual/active/advisor) — show
+//      tier + next renewal date + "Manage billing" portal CTA.
+//   3. Free (trial expired, no paid sub) — show "Trial ended"
+//      headline and a primary "Upgrade" CTA.
+//
+// All buttons POST to our API routes which return Stripe-hosted URLs
+// we redirect to. We never collect card data ourselves.
+// ─────────────────────────────────────────────────────────────────────
+
+function BillingSection({ billing }: { billing: BillingProps }) {
+  const [busy, setBusy] = useState<"checkout" | "portal" | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const trialActive =
+    billing.tier === "trial" &&
+    billing.trialEndsAt &&
+    new Date(billing.trialEndsAt).getTime() > Date.now();
+
+  const trialDaysLeft = billing.trialEndsAt
+    ? Math.max(
+        0,
+        Math.ceil(
+          (new Date(billing.trialEndsAt).getTime() - Date.now()) /
+            (1000 * 60 * 60 * 24)
+        )
+      )
+    : 0;
+
+  const isPaid =
+    billing.status === "active" &&
+    (billing.tier === "individual" ||
+      billing.tier === "active" ||
+      billing.tier === "advisor");
+
+  async function startCheckout(tier: "individual" | "active") {
+    setBusy("checkout");
+    setErr(null);
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tier, interval: "monthly" }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.url) {
+        setErr(data.error ?? "Could not start checkout.");
+        setBusy(null);
+        return;
+      }
+      window.location.href = data.url as string;
+    } catch {
+      setErr("Network error. Try again.");
+      setBusy(null);
+    }
+  }
+
+  async function openPortal() {
+    setBusy("portal");
+    setErr(null);
+    try {
+      const res = await fetch("/api/stripe/portal", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok || !data.url) {
+        setErr(data.error ?? "Could not open billing portal.");
+        setBusy(null);
+        return;
+      }
+      window.location.href = data.url as string;
+    } catch {
+      setErr("Network error. Try again.");
+      setBusy(null);
+    }
+  }
+
+  // Stripe-not-configured state — show the card but with a disabled
+  // CTA so user knows where billing will live, and ops sees we're
+  // pre-launch on this surface.
+  if (!billing.stripeConfigured) {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <CreditCard className="h-4 w-4 text-primary" />
+            Billing
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground">
+          Billing isn&rsquo;t live yet — you&rsquo;re on the early-access
+          plan with full feature access. We&rsquo;ll prompt you here when
+          paid plans turn on.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <CreditCard className="h-4 w-4 text-primary" />
+          Billing
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4 text-sm">
+        {/* Status row */}
+        <div className="flex flex-wrap items-baseline gap-3">
+          <span className="font-medium">Current plan:</span>
+          <span className="font-mono uppercase text-foreground">
+            {tierLabel(billing.tier)}
+          </span>
+          {trialActive && (
+            <Badge
+              variant="outline"
+              className="border-[var(--buy)]/40 text-[var(--buy)]"
+            >
+              Trial · {trialDaysLeft}{" "}
+              {trialDaysLeft === 1 ? "day" : "days"} left
+            </Badge>
+          )}
+          {isPaid && billing.cancelAtPeriodEnd && (
+            <Badge
+              variant="outline"
+              className="border-[var(--sell)]/40 text-[var(--sell)]"
+            >
+              Cancels {formatDate(billing.currentPeriodEnd)}
+            </Badge>
+          )}
+          {billing.status === "past_due" && (
+            <Badge
+              variant="outline"
+              className="border-[var(--sell)]/40 text-[var(--sell)]"
+            >
+              Past due
+            </Badge>
+          )}
+        </div>
+
+        {/* Context line */}
+        <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+          {trialActive ? (
+            <>
+              Your free 30-day trial of every Individual-tier feature is
+              active until{" "}
+              <strong className="text-foreground">
+                {formatDate(billing.trialEndsAt)}
+              </strong>
+              . No credit card on file — you won&rsquo;t be charged
+              automatically.
+            </>
+          ) : isPaid ? (
+            <>
+              Renews on{" "}
+              <strong className="text-foreground">
+                {formatDate(billing.currentPeriodEnd)}
+              </strong>
+              . Update payment method, switch tiers, or cancel anytime
+              from the billing portal.
+            </>
+          ) : billing.status === "past_due" ? (
+            <>
+              Your most recent payment failed. Update your card to
+              restore full access.
+            </>
+          ) : (
+            <>
+              Trial ended. You&rsquo;re on the Free plan — limited
+              research access. Upgrade to restore the full three-lens
+              pipeline.
+            </>
+          )}
+        </p>
+
+        {/* CTAs */}
+        <div className="flex flex-wrap gap-2 pt-1">
+          {isPaid ? (
+            <Button onClick={openPortal} disabled={busy !== null}>
+              {busy === "portal" && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Manage billing
+              <ArrowUpRight className="ml-1.5 h-3.5 w-3.5" />
+            </Button>
+          ) : (
+            <>
+              <Button
+                onClick={() => startCheckout("individual")}
+                disabled={busy !== null}
+              >
+                {busy === "checkout" && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Upgrade to Individual · $29/mo
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => startCheckout("active")}
+                disabled={busy !== null}
+              >
+                Upgrade to Active · $79/mo
+              </Button>
+              {/* Even non-paid users should be able to open the
+                  portal once a Stripe customer exists — handy if a
+                  prior subscription was canceled and the user wants
+                  to view past invoices. */}
+              <Button
+                variant="outline"
+                onClick={openPortal}
+                disabled={busy !== null}
+              >
+                Billing portal
+              </Button>
+            </>
+          )}
+        </div>
+        {err && <p className="text-xs text-destructive">{err}</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
+function tierLabel(tier: BillingProps["tier"]): string {
+  switch (tier) {
+    case "trial":
+      return "Free trial";
+    case "free":
+      return "Free";
+    case "individual":
+      return "Individual";
+    case "active":
+      return "Active";
+    case "advisor":
+      return "Advisor";
+  }
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 /**
