@@ -4,6 +4,8 @@ import { auth } from "@/lib/auth";
 import { getClientIp, checkRateLimit, RULES } from "@/lib/rate-limit";
 import { log, errorInfo } from "@/lib/log";
 import {
+  getPersistedRadarAlertsForTicker,
+  getPersistedRadarAlertsForUser,
   scanTickerForRadarAlerts,
   scanUserHoldingsForRadarAlerts,
 } from "@/lib/decision-engine/radar";
@@ -52,7 +54,10 @@ export async function GET(req: NextRequest) {
 
   const ticker = req.nextUrl.searchParams.get("ticker")?.toUpperCase().trim();
   const limitParam = Number(req.nextUrl.searchParams.get("limit") ?? 12);
-  const limit = Number.isFinite(limitParam) ? limitParam : 12;
+  const limit = Math.max(
+    1,
+    Math.min(Number.isFinite(limitParam) ? limitParam : 12, 50)
+  );
 
   if (ticker && !TICKER_PATTERN.test(ticker)) {
     return NextResponse.json(
@@ -62,12 +67,20 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const alerts = ticker
-      ? await scanTickerForRadarAlerts({ userId, ticker })
-      : await scanUserHoldingsForRadarAlerts({ userId, limit });
+    const persistedAlerts = ticker
+      ? await getPersistedRadarAlertsForTicker({ userId, ticker })
+      : await getPersistedRadarAlertsForUser({ userId, limit });
+    const alerts =
+      persistedAlerts.length > 0
+        ? persistedAlerts
+        : ticker
+          ? await scanTickerForRadarAlerts({ userId, ticker })
+          : await scanUserHoldingsForRadarAlerts({ userId, limit });
+
     return NextResponse.json(
       {
         alerts,
+        source: persistedAlerts.length > 0 ? "persisted" : "live_scan",
         disclosure:
           "Risk Radar is decision support only. Informational only, not investment advice.",
       },

@@ -50,6 +50,29 @@ const REVIEW_ACTIONS: DecisionAction[] = [
   "INSUFFICIENT_DATA",
 ];
 
+const RADAR_ALERT_KINDS = new Set<RadarAlertKind>([
+  "trend_break",
+  "macro_shift",
+  "concentration_risk",
+  "earnings_risk",
+  "valuation_stretch",
+  "relative_strength_break",
+  "source_drift",
+  "thesis_review",
+  "risk_overlay_downgrade",
+]);
+
+const PERSISTED_RADAR_MAX_AGE_HOURS = 36;
+
+type PersistedRadarAlertRow = {
+  ticker: string | null;
+  severity: string | null;
+  title: string | null;
+  body: string | null;
+  metadata: unknown;
+  createdAt: Date | string;
+};
+
 export async function scanTickerForRadarAlerts(args: {
   userId: string;
   ticker: string;
@@ -233,6 +256,100 @@ export async function persistRadarAlertsForAllUsers(args: {
   }
 
   return { usersScanned: rows.length, alertsScanned, created };
+}
+
+export async function getPersistedRadarAlertsForUser(args: {
+  userId: string;
+  limit?: number;
+  maxAgeHours?: number;
+}): Promise<RadarAlert[]> {
+  const limit = Math.max(1, Math.min(args.limit ?? 20, 50));
+  const since = new Date(
+    Date.now() -
+      Math.max(1, args.maxAgeHours ?? PERSISTED_RADAR_MAX_AGE_HOURS) *
+        60 *
+        60 *
+        1000
+  );
+
+  try {
+    const { rows } = await pool.query<PersistedRadarAlertRow>(
+      `SELECT ticker, severity, title, body, metadata, "createdAt"
+         FROM "alert_event"
+        WHERE "userId" = $1
+          AND kind = 'risk_radar'
+          AND "dismissedAt" IS NULL
+          AND "createdAt" >= $2
+          AND EXISTS (
+            SELECT 1
+              FROM "holding" h
+             WHERE h."userId" = "alert_event"."userId"
+               AND h.ticker = "alert_event".ticker
+               AND COALESCE(
+                     h."lastValue",
+                     h.shares * COALESCE(h."lastPrice", h."avgPrice", 0)
+                   ) > 0
+          )
+        ORDER BY CASE severity
+                   WHEN 'action' THEN 3
+                   WHEN 'warn' THEN 2
+                   ELSE 1
+                 END DESC,
+                 "createdAt" DESC
+        LIMIT $3`,
+      [args.userId, since, limit]
+    );
+
+    return rows.map(persistedRowToRadarAlert);
+  } catch (err) {
+    log.warn("decision-engine.radar", "persisted alerts unavailable", {
+      ...errorInfo(err),
+    });
+    return [];
+  }
+}
+
+export async function getPersistedRadarAlertsForTicker(args: {
+  userId: string;
+  ticker: string;
+  maxAgeHours?: number;
+}): Promise<RadarAlert[]> {
+  const ticker = args.ticker.toUpperCase();
+  const since = new Date(
+    Date.now() -
+      Math.max(1, args.maxAgeHours ?? PERSISTED_RADAR_MAX_AGE_HOURS) *
+        60 *
+        60 *
+        1000
+  );
+
+  try {
+    const { rows } = await pool.query<PersistedRadarAlertRow>(
+      `SELECT ticker, severity, title, body, metadata, "createdAt"
+         FROM "alert_event"
+        WHERE "userId" = $1
+          AND kind = 'risk_radar'
+          AND ticker = $2
+          AND "dismissedAt" IS NULL
+          AND "createdAt" >= $3
+        ORDER BY CASE severity
+                   WHEN 'action' THEN 3
+                   WHEN 'warn' THEN 2
+                   ELSE 1
+                 END DESC,
+                 "createdAt" DESC
+        LIMIT 20`,
+      [args.userId, ticker, since]
+    );
+
+    return rows.map(persistedRowToRadarAlert);
+  } catch (err) {
+    log.warn("decision-engine.radar", "persisted ticker alerts unavailable", {
+      ticker,
+      ...errorInfo(err),
+    });
+    return [];
+  }
 }
 
 function buildRadarAlerts(args: {
@@ -582,6 +699,56 @@ function severityRank(severity: RadarAlert["severity"]): number {
   if (severity === "action") return 3;
   if (severity === "warn") return 2;
   return 1;
+}
+
+function persistedRowToRadarAlert(row: PersistedRadarAlertRow): RadarAlert {
+  const metadata =
+    row.metadata && typeof row.metadata === "object"
+      ? (row.metadata as Record<string, unknown>)
+      : {};
+  const radarKind = metadata.radarKind;
+  const createdAt =
+    row.createdAt instanceof Date
+      ? row.createdAt.toISOString()
+      : String(row.createdAt);
+  const body =
+    typeof row.body === "string" && row.body.trim().length > 0
+      ? row.body
+      : "Risk Radar found a condition that may deserve review.";
+
+  return {
+    ticker: (row.ticker ?? "UNKNOWN").toUpperCase(),
+    kind:
+      typeof radarKind === "string" &&
+      RADAR_ALERT_KINDS.has(radarKind as RadarAlertKind)
+        ? (radarKind as RadarAlertKind)
+        : "thesis_review",
+    severity:
+      row.severity === "action" ||
+      row.severity === "warn" ||
+      row.severity === "info"
+        ? row.severity
+        : "info",
+    title:
+      typeof row.title === "string" && row.title.trim().length > 0
+        ? row.title
+        : `${row.ticker ?? "Ticker"} needs review`,
+    body: body.toLowerCase().includes("not investment advice")
+      ? body
+      : `${body} Informational only, not investment advice.`,
+    triggeredAt:
+      typeof metadata.triggeredAt === "string" ? metadata.triggeredAt : createdAt,
+    dataPoints: Array.isArray(metadata.dataPoints)
+      ? metadata.dataPoints.filter(
+          (point): point is string => typeof point === "string"
+        )
+      : [],
+    recommendedReview:
+      typeof metadata.recommendedReview === "string" &&
+      metadata.recommendedReview.trim().length > 0
+        ? metadata.recommendedReview
+        : "Review the current risk overlay before making any portfolio decision.",
+  };
 }
 
 type MarketPoint = {

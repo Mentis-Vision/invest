@@ -31,20 +31,20 @@ If sitemap is still <100 URLs on Monday, the warehouse refresh isn't picking up 
 
 ### Remaining post-release hardening follow-ups
 
-- Decide whether to enable HSTS. Production is HTTPS on Vercel, but HSTS is
-  sticky in browsers; start with a short max-age only after confirming every
-  production domain and subdomain is HTTPS-ready.
+- HSTS is now enabled conservatively for production builds
+  (`Strict-Transport-Security: max-age=86400`, no `includeSubDomains`, no
+  `preload`). Future hardening should raise max-age and consider
+  `includeSubDomains`/preload only after confirming every production domain and
+  subdomain is HTTPS-ready.
 - Review CSP report-only findings before enforcement. The current policy is
   intentionally report-only because Next.js App Router injects framework
   scripts and existing JSON-LD blocks use `dangerouslySetInnerHTML`.
-- Adopt a real test runner for pure TypeScript modules. Current deterministic
-  coverage uses `scripts/decision-engine-smoke.ts`; Vitest would let us split
-  decision engine, safe navigation, logging redaction, and API helper tests
-  without overloading one smoke script.
-- Move Risk Radar dashboard reads to a persisted/latest-alerts path if the
-  holdings scan grows beyond the current low-latency path. `/api/radar` now
-  returns a short private browser cache, but larger portfolios should render
-  recent `alert_event` rows first and scan on cron/background refresh.
+- Vitest is now available for pure TypeScript module tests. Keep fast coverage
+  focused on deterministic modules; avoid turning this into a slow integration
+  suite that needs live broker, AI, or warehouse credentials.
+- `/api/radar` now reads recent persisted `risk_radar` rows from `alert_event`
+  first and falls back to a live scan. If portfolio scale grows, move toward a
+  fully persisted dashboard model with scheduled refresh and freshness metadata.
 - Re-test Turbopack dev after Next/Tailwind updates. Local `npm run dev` uses
   Webpack because Turbopack/PostCSS currently resolves the Tailwind package
   from the parent SSD folder when that parent has its own `package.json`.
@@ -261,11 +261,13 @@ Open items / known gaps:
 ### Schema constraint incompatibility across providers
 - **Fixed:** removed `.min(N > 1)` and `.max(N)` from Zod schemas; guidance moved to `.describe()`. Claude's tool-use schema doesn't support `minItems > 1` and Gemini is strict about multi-item mins.
 
-### npm audit — remaining vulnerabilities
-- 4 moderate + 3 high, all in `@better-auth/cli` transitive dev deps (`drizzle-orm <0.45.2`, `lodash`, `chevrotain`, `@mrleebo/prisma-ast`).
-- **Scope:** dev-tooling only. Does not affect runtime / prod bundle.
-- **Fix path:** `npm audit fix --force` downgrades `@better-auth/cli` to 0.0.1 which is a breaking change to its CLI surface. Deferred until we have a clean upgrade path or the upstream ships a patched version.
-- **Also pinned:** `axios@1.15.0` as a top-level dep to neutralize the critical `snaptrade-typescript-sdk`→axios<1.15 vulnerability. Re-evaluate after each `snaptrade-typescript-sdk` upgrade.
+### npm audit — current status
+- **Fixed 2026-04-29:** removed unused `@better-auth/cli` from the dependency
+  graph and added a narrow `postcss@8.5.10` override for Next's nested PostCSS
+  dependency. `npm audit` now reports 0 vulnerabilities.
+- **Still pinned:** `axios@1.15.0` as a top-level dep to neutralize the critical
+  `snaptrade-typescript-sdk`→axios<1.15 vulnerability. Re-evaluate after each
+  `snaptrade-typescript-sdk` upgrade.
 
 ---
 

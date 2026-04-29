@@ -33,6 +33,11 @@ const securityHeaders = [
   },
 ];
 
+const hstsHeaders =
+  process.env.NODE_ENV === "production" || process.env.ENABLE_HSTS === "1"
+    ? [{ key: "Strict-Transport-Security", value: "max-age=86400" }]
+    : [];
+
 const frameProtectionHeaders = [
   { key: "X-Frame-Options", value: "SAMEORIGIN" },
   { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
@@ -47,7 +52,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/:path*",
-        headers: securityHeaders,
+        headers: [...securityHeaders, ...hstsHeaders],
       },
       {
         source: "/",
