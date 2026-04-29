@@ -7,6 +7,7 @@ import { authClient } from "@/lib/auth-client";
 import AuthLayout from "@/components/auth-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { safeInternalRedirectPath } from "@/lib/client/safe-navigation";
 import { Loader2, ShieldCheck } from "lucide-react";
 
 /**
@@ -36,7 +37,7 @@ export default function VerifyTwoFactorPage() {
 
 function VerifyTwoFactorInner() {
   const sp = useSearchParams();
-  const next = sp.get("next") ?? "/app";
+  const next = safeInternalRedirectPath(sp.get("next"));
 
   const [mode, setMode] = useState<"totp" | "backup">("totp");
   const [code, setCode] = useState("");
@@ -80,7 +81,7 @@ function VerifyTwoFactorInner() {
       }
       // Full reload so the session cookie is re-read and any stale
       // client-cached state is discarded.
-      window.location.href = next;
+      window.location.assign(next);
     } catch {
       setError("Network error. Try again.");
       setLoading(false);

@@ -5,6 +5,11 @@ import {
   type DecisionEngineInput,
   type DecisionAction,
 } from "../src/lib/decision-engine";
+import {
+  safeExternalHttpsUrl,
+  safeInternalRedirectPath,
+} from "../src/lib/client/safe-navigation";
+import { redactLogPayload } from "../src/lib/log";
 
 function actionRank(action: DecisionAction): number {
   const order: DecisionAction[] = [
@@ -255,5 +260,54 @@ const sparse = runDecisionEngineForInput(
   })
 );
 assert.equal(sparse.confidence, "LOW");
+
+assert.equal(safeInternalRedirectPath("/app?view=research"), "/app?view=research");
+assert.equal(safeInternalRedirectPath("https://evil.example/phish"), "/app");
+assert.equal(safeInternalRedirectPath("//evil.example/phish"), "/app");
+
+assert.equal(
+  safeExternalHttpsUrl("https://checkout.stripe.com/c/pay/test", [
+    "checkout.stripe.com",
+  ]),
+  "https://checkout.stripe.com/c/pay/test"
+);
+assert.equal(
+  safeExternalHttpsUrl("http://checkout.stripe.com/c/pay/test", [
+    "checkout.stripe.com",
+  ]),
+  null
+);
+assert.equal(
+  safeExternalHttpsUrl("https://evil.example/c/pay/test", [
+    "checkout.stripe.com",
+  ]),
+  null
+);
+
+assert.deepEqual(
+  redactLogPayload({
+    email: "investor@example.com",
+    ip: "203.0.113.10",
+    to: "ops@example.com",
+    seenAt: new Date("2026-04-29T00:00:00.000Z"),
+    count: BigInt(1),
+    nested: { accessToken: "secret", ticker: "SPY" },
+  }),
+  {
+    email: "[redacted]",
+    ip: "[redacted]",
+    to: "[redacted]",
+    seenAt: "2026-04-29T00:00:00.000Z",
+    count: "1",
+    nested: { accessToken: "[redacted]", ticker: "SPY" },
+  }
+);
+
+const circularLogPayload: Record<string, unknown> = { ticker: "SPY" };
+circularLogPayload.self = circularLogPayload;
+assert.deepEqual(redactLogPayload(circularLogPayload), {
+  ticker: "SPY",
+  self: "[circular]",
+});
 
 console.log("decision-engine smoke checks passed");

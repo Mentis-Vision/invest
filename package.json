@@ -2,10 +2,15 @@
   "name": "invest",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22",
+    "npm": ">=10"
+  },
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "PATH=/usr/local/bin:$PATH next dev --webpack",
+    "dev:turbo": "PATH=/usr/local/bin:$PATH next dev --turbopack",
+    "build": "PATH=/usr/local/bin:$PATH next build",
+    "start": "PATH=/usr/local/bin:$PATH next start",
     "lint": "eslint"
   },
   "dependencies": {

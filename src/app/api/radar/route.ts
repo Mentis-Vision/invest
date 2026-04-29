@@ -65,13 +65,20 @@ export async function GET(req: NextRequest) {
     const alerts = ticker
       ? await scanTickerForRadarAlerts({ userId, ticker })
       : await scanUserHoldingsForRadarAlerts({ userId, limit });
-    return NextResponse.json({
-      alerts,
-      disclosure:
-        "Risk Radar is decision support only. Informational only, not investment advice.",
-    });
+    return NextResponse.json(
+      {
+        alerts,
+        disclosure:
+          "Risk Radar is decision support only. Informational only, not investment advice.",
+      },
+      {
+        headers: {
+          "Cache-Control": "private, max-age=30",
+        },
+      }
+    );
   } catch (err) {
-    log.warn("radar", "scan failed", { userId, ...errorInfo(err) });
+    log.warn("radar", "scan failed", errorInfo(err));
     return NextResponse.json({ alerts: [] });
   }
 }

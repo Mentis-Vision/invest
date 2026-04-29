@@ -12,13 +12,53 @@ type Level = "error" | "warn" | "info" | "debug";
 
 type Payload = Record<string, unknown>;
 
+const REDACTED = "[redacted]";
+const CIRCULAR = "[circular]";
+const TRUNCATED = "[truncated]";
+const MAX_LOG_DEPTH = 8;
+const SENSITIVE_KEY_RE =
+  /(^ip$|^to$|authorization|cookie|email|ipaddress|password|secret|token|usersecret)/i;
+
+export function redactLogPayload(
+  value: unknown,
+  seen = new WeakSet<object>(),
+  depth = 0
+): unknown {
+  if (depth > MAX_LOG_DEPTH) return TRUNCATED;
+  if (value instanceof Error) {
+    return {
+      name: value.name,
+      message: value.message,
+      stack: value.stack,
+    };
+  }
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "bigint") return value.toString();
+  if (typeof value === "function") return "[function]";
+  if (Array.isArray(value)) {
+    return value.map((item) => redactLogPayload(item, seen, depth + 1));
+  }
+  if (value && typeof value === "object") {
+    if (seen.has(value)) return CIRCULAR;
+    seen.add(value);
+    const out: Record<string, unknown> = {};
+    for (const [key, nested] of Object.entries(value)) {
+      out[key] = SENSITIVE_KEY_RE.test(key)
+        ? REDACTED
+        : redactLogPayload(nested, seen, depth + 1);
+    }
+    return out;
+  }
+  return value;
+}
+
 function emit(level: Level, scope: string, msg: string, data?: Payload) {
   const entry = {
     ts: new Date().toISOString(),
     level,
     scope,
     msg,
-    ...(data ?? {}),
+    ...((redactLogPayload(data ?? {}) as Payload) ?? {}),
   };
   const json = JSON.stringify(entry, (_k, v) => {
     if (v instanceof Error) {
@@ -28,6 +68,7 @@ function emit(level: Level, scope: string, msg: string, data?: Payload) {
         stack: v.stack,
       };
     }
+    if (typeof v === "bigint") return v.toString();
     return v;
   });
 

@@ -2,6 +2,7 @@
 
 import { createAuthClient } from "better-auth/react";
 import { twoFactorClient } from "better-auth/client/plugins";
+import { safeInternalRedirectPath } from "@/lib/client/safe-navigation";
 
 export const authClient = createAuthClient({
   plugins: [
@@ -16,7 +17,9 @@ export const authClient = createAuthClient({
         // the default landing; a ?next= query survives the round trip.
         const next =
           typeof window !== "undefined"
-            ? new URLSearchParams(window.location.search).get("next") ?? "/app"
+            ? safeInternalRedirectPath(
+                new URLSearchParams(window.location.search).get("next")
+              )
             : "/app";
         window.location.href = `/verify-2fa?next=${encodeURIComponent(next)}&methods=${methods.join(",")}`;
       },

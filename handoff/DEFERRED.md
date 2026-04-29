@@ -29,6 +29,32 @@ If sitemap is still <100 URLs on Monday, the warehouse refresh isn't picking up 
 - Add a real watchlist table. Current Risk Radar scans holdings and an
   explicitly provided ticker because no watchlist system of record exists yet.
 
+### Post-release hardening follow-ups
+
+- Add a targeted frame policy for non-embed pages. `/embed/[ticker]` is
+  intentionally iframe-friendly, so a blanket `X-Frame-Options` or
+  `frame-ancestors 'self'` header would break the public widget. The safe
+  next step is a route-aware CSP that protects app/marketing pages while
+  preserving `/embed/*`.
+- Add a CSP in report-only mode first. Next.js App Router injects framework
+  scripts and existing JSON-LD blocks use `dangerouslySetInnerHTML`, so a
+  strict CSP should be measured before enforcement.
+- Decide whether to enable HSTS. Production is HTTPS on Vercel, but HSTS is
+  sticky in browsers; start with a short max-age only after confirming every
+  production domain and subdomain is HTTPS-ready.
+- Adopt a real test runner for pure TypeScript modules. Current deterministic
+  coverage uses `scripts/decision-engine-smoke.ts`; Vitest would let us split
+  decision engine, safe navigation, logging redaction, and API helper tests
+  without overloading one smoke script.
+- Move Risk Radar dashboard reads to a persisted/latest-alerts path if the
+  holdings scan grows beyond the current low-latency path. `/api/radar` now
+  returns a short private browser cache, but larger portfolios should render
+  recent `alert_event` rows first and scan on cron/background refresh.
+- Re-test Turbopack dev after Next/Tailwind updates. Local `npm run dev` uses
+  Webpack because Turbopack/PostCSS currently resolves the Tailwind package
+  from the parent SSD folder when that parent has its own `package.json`.
+  Production `npm run build` still uses Next's Turbopack build path.
+
 ### ~2026-05-25 — evaluate paid SEO instrumentation
 
 Optional: add Lighthouse score checks + keyword position tracking to the E2E smoke suite. Both require paid API access (Vercel Speed Insights API and SerpAPI / Ahrefs API respectively).
