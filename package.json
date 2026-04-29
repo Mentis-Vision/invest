@@ -11,7 +11,9 @@
     "dev:turbo": "PATH=/usr/local/bin:$PATH next dev --turbopack",
     "build": "PATH=/usr/local/bin:$PATH next build",
     "start": "PATH=/usr/local/bin:$PATH next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "PATH=/usr/local/bin:$PATH vitest run",
+    "test:watch": "PATH=/usr/local/bin:$PATH vitest"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.69",
@@ -19,7 +21,6 @@
     "@ai-sdk/openai": "^3.0.53",
     "@ai-sdk/react": "^3.0.164",
     "@base-ui/react": "^1.4.0",
-    "@better-auth/cli": "^1.4.21",
     "@neondatabase/serverless": "^1.0.2",
     "@vercel/functions": "^3.4.3",
     "ai": "^6.0.162",
@@ -54,12 +55,14 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.5"
   },
   "overrides": {
     "snaptrade-typescript-sdk": {
       "axios": "1.15.0"
     },
-    "axios": "1.15.0"
+    "axios": "1.15.0",
+    "postcss": "8.5.10"
   }
 }

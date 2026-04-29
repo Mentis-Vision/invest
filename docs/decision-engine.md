@@ -148,7 +148,8 @@ Risk Radar uses a read-only user API and does not call AI. Alerts say "Review," 
 Radar alert persistence runs from `/api/cron/risk-radar` into the existing
 `alert_event` table with the same dedup pattern used by existing alerts.
 The interactive `/api/radar` route remains read-only and never writes alerts
-during page load.
+during page load. It reads recent persisted `risk_radar` rows first and falls
+back to a live scan when no recent persisted alert exists.
 
 ## Compliance-Sensitive Language
 
