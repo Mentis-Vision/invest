@@ -29,19 +29,14 @@ If sitemap is still <100 URLs on Monday, the warehouse refresh isn't picking up 
 - Add a real watchlist table. Current Risk Radar scans holdings and an
   explicitly provided ticker because no watchlist system of record exists yet.
 
-### Post-release hardening follow-ups
+### Remaining post-release hardening follow-ups
 
-- Add a targeted frame policy for non-embed pages. `/embed/[ticker]` is
-  intentionally iframe-friendly, so a blanket `X-Frame-Options` or
-  `frame-ancestors 'self'` header would break the public widget. The safe
-  next step is a route-aware CSP that protects app/marketing pages while
-  preserving `/embed/*`.
-- Add a CSP in report-only mode first. Next.js App Router injects framework
-  scripts and existing JSON-LD blocks use `dangerouslySetInnerHTML`, so a
-  strict CSP should be measured before enforcement.
 - Decide whether to enable HSTS. Production is HTTPS on Vercel, but HSTS is
   sticky in browsers; start with a short max-age only after confirming every
   production domain and subdomain is HTTPS-ready.
+- Review CSP report-only findings before enforcement. The current policy is
+  intentionally report-only because Next.js App Router injects framework
+  scripts and existing JSON-LD blocks use `dangerouslySetInnerHTML`.
 - Adopt a real test runner for pure TypeScript modules. Current deterministic
   coverage uses `scripts/decision-engine-smoke.ts`; Vitest would let us split
   decision engine, safe navigation, logging redaction, and API helper tests
