@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import {
@@ -15,7 +15,7 @@ import { log, errorInfo } from "@/lib/log";
  * and upserts them into the `trade` table (keyed by broker transaction id for
  * idempotency).
  */
-export async function POST(_req: NextRequest) {
+export async function POST() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

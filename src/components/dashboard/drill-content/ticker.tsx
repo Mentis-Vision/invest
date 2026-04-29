@@ -163,7 +163,9 @@ export function DrillTicker({ ticker }: { ticker: string }) {
 
   useEffect(() => {
     let alive = true;
-    setLoading(true);
+    const loadingTimer = setTimeout(() => {
+      if (alive) setLoading(true);
+    }, 0);
     fetch(`/api/warehouse/ticker/${encodeURIComponent(ticker)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d: WarehouseBundle | null) => {
@@ -198,6 +200,7 @@ export function DrillTicker({ ticker }: { ticker: string }) {
       .catch(() => {});
     return () => {
       alive = false;
+      clearTimeout(loadingTimer);
     };
   }, [ticker]);
 

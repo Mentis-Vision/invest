@@ -47,7 +47,7 @@ function genId(): string {
  * Insert an alert; idempotent via (userId, kind, ticker, dedupKey) index.
  * Returns true if it was a fresh insert.
  */
-async function upsertAlert(input: {
+export async function upsertAlert(input: {
   userId: string;
   kind: string;
   ticker?: string | null;

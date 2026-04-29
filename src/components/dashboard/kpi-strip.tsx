@@ -30,6 +30,23 @@ export default function KpiStrip({
   activeAlerts: number | null;
   loading?: boolean;
 }) {
+  const positionCount = holdings.length;
+  const { cashValue, cashShare } = useMemo(() => {
+    const cashClasses = new Set(["cash", "money_market", "mmf"]);
+    const cash = holdings.reduce((sum, h) => {
+      const cls = (h.assetClass ?? "").toLowerCase();
+      const isCash =
+        cashClasses.has(cls) ||
+        h.ticker.toUpperCase().endsWith("CASH") ||
+        h.ticker.toUpperCase() === "CASH";
+      return isCash ? sum + (Number(h.value) || 0) : sum;
+    }, 0);
+    return {
+      cashValue: cash,
+      cashShare: totalValue > 0 ? cash / totalValue : 0,
+    };
+  }, [holdings, totalValue]);
+
   if (loading) {
     return (
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -46,24 +63,6 @@ export default function KpiStrip({
       </div>
     );
   }
-
-  const positionCount = holdings.length;
-
-  const { cashValue, cashShare } = useMemo(() => {
-    const cashClasses = new Set(["cash", "money_market", "mmf"]);
-    const cash = holdings.reduce((sum, h) => {
-      const cls = (h.assetClass ?? "").toLowerCase();
-      const isCash =
-        cashClasses.has(cls) ||
-        h.ticker.toUpperCase().endsWith("CASH") ||
-        h.ticker.toUpperCase() === "CASH";
-      return isCash ? sum + (Number(h.value) || 0) : sum;
-    }, 0);
-    return {
-      cashValue: cash,
-      cashShare: totalValue > 0 ? cash / totalValue : 0,
-    };
-  }, [holdings, totalValue]);
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">

@@ -37,6 +37,12 @@ export type PublicTrackRecord = {
     medium: { evaluated: number; winRate: number | null };
     low: { evaluated: number; winRate: number | null };
   };
+  benchmark?: {
+    benchmarkTicker: "SPY";
+    evaluated: number;
+    averageAlphaPct: number | null;
+    note: string;
+  };
   /** Window in days for all figures. */
   windowDays: number;
   /** As-of ISO timestamp for the snapshot. */
@@ -54,6 +60,12 @@ const EMPTY: PublicTrackRecord = {
     medium: { evaluated: 0, winRate: null },
     low: { evaluated: 0, winRate: null },
   },
+  benchmark: {
+    benchmarkTicker: "SPY",
+    evaluated: 0,
+    averageAlphaPct: null,
+    note: "SPY benchmark data unavailable; alpha was not calculated.",
+  },
   windowDays: 30,
   asOf: new Date().toISOString(),
 };
@@ -62,7 +74,7 @@ export async function getPublicTrackRecord(
   days = 30
 ): Promise<PublicTrackRecord> {
   try {
-    const [totals, outcomes, byConf] = await Promise.all([
+    const [totals, outcomes, byConf, benchmark] = await Promise.all([
       pool.query(
         `SELECT COUNT(*)::int AS total,
                 COUNT(*) FILTER (WHERE recommendation = 'BUY')::int  AS buys,
@@ -104,6 +116,55 @@ export async function getPublicTrackRecord(
           GROUP BY r.confidence`,
         [`${days} days`]
       ),
+      pool.query(
+        `WITH evaluated AS (
+           SELECT r."createdAt",
+                  r."priceAtRec"::float AS start_price,
+                  o."priceAtCheck"::float AS end_price,
+                  o."evaluatedAt"
+             FROM "recommendation_outcome" o
+             JOIN "recommendation" r ON r.id = o."recommendationId"
+            WHERE o.status = 'completed'
+              AND o."window" = '30d'
+              AND r."priceAtRec" > 0
+              AND o."priceAtCheck" IS NOT NULL
+              AND r."createdAt" > NOW() - $1::interval
+         )
+         SELECT COUNT(*) FILTER (
+                  WHERE b_start.close IS NOT NULL
+                    AND b_end.close IS NOT NULL
+                    AND b_start.close > 0
+                )::int AS evaluated,
+                AVG(
+                  ((e.end_price - e.start_price) / e.start_price * 100)
+                  -
+                  ((b_end.close - b_start.close) / b_start.close * 100)
+                ) FILTER (
+                  WHERE b_start.close IS NOT NULL
+                    AND b_end.close IS NOT NULL
+                    AND b_start.close > 0
+                )::numeric(10,2) AS average_alpha_pct
+           FROM evaluated e
+           LEFT JOIN LATERAL (
+             SELECT close
+               FROM "ticker_market_daily"
+              WHERE ticker = 'SPY'
+                AND captured_at <= e."createdAt"::date
+                AND close IS NOT NULL
+              ORDER BY captured_at DESC
+              LIMIT 1
+           ) b_start ON TRUE
+           LEFT JOIN LATERAL (
+             SELECT close
+               FROM "ticker_market_daily"
+              WHERE ticker = 'SPY'
+                AND captured_at <= COALESCE(e."evaluatedAt", NOW())::date
+                AND close IS NOT NULL
+              ORDER BY captured_at DESC
+              LIMIT 1
+           ) b_end ON TRUE`,
+        [`${days} days`]
+      ),
     ]);
 
     const t = totals.rows[0] ?? { total: 0, buys: 0, sells: 0, holds: 0 };
@@ -136,6 +197,14 @@ export async function getPublicTrackRecord(
       const r = confMap.get(key) ?? { evaluated: 0, wins: 0 };
       return { evaluated: r.evaluated, winRate: pct(r.wins, r.evaluated) };
     };
+    const benchRow = benchmark.rows[0] as
+      | { evaluated: number; average_alpha_pct: string | number | null }
+      | undefined;
+    const benchmarkEvaluated = Number(benchRow?.evaluated ?? 0);
+    const averageAlphaPct =
+      benchRow?.average_alpha_pct == null
+        ? null
+        : Number(benchRow.average_alpha_pct);
 
     return {
       totalBriefs: t.total,
@@ -152,6 +221,18 @@ export async function getPublicTrackRecord(
         high: confBucket("HIGH"),
         medium: confBucket("MEDIUM"),
         low: confBucket("LOW"),
+      },
+      benchmark: {
+        benchmarkTicker: "SPY",
+        evaluated: benchmarkEvaluated,
+        averageAlphaPct:
+          benchmarkEvaluated > 0 && Number.isFinite(averageAlphaPct)
+            ? averageAlphaPct
+            : null,
+        note:
+          benchmarkEvaluated > 0
+            ? "Average alpha versus SPY is retrospective and informational only."
+            : "SPY benchmark data unavailable for evaluated rows; alpha was not calculated.",
       },
       windowDays: days,
       asOf: new Date().toISOString(),

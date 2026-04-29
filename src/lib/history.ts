@@ -3,6 +3,7 @@ import { log, errorInfo } from "./log";
 import type { ModelResult } from "./ai/consensus";
 import type { SupervisorOutput } from "./ai/schemas";
 import type { StockSnapshot } from "./data/yahoo";
+import type { DecisionEngineOutput } from "./decision-engine";
 
 /**
  * Historical tracking for recommendations.
@@ -34,6 +35,7 @@ export type SaveRecommendationInput = {
     bullTokens: number;
     bearTokens: number;
   } | null;
+  decisionEngine?: DecisionEngineOutput | null;
 };
 
 /**
@@ -66,6 +68,7 @@ export async function saveRecommendationAndSchedule(
     supervisorModel: input.supervisorModel,
     sources: input.sources,
     debate: input.debate ?? null,
+    decisionEngine: input.decisionEngine ?? null,
   });
 
   try {

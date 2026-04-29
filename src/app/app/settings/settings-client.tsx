@@ -17,6 +17,7 @@ import {
   ArrowUpRight,
 } from "lucide-react";
 import TwoFactorSection from "./two-factor-section";
+import { useClientNowMs } from "@/lib/client/use-client-now";
 import type {
   UserProfile,
   RiskTolerance,
@@ -767,17 +768,19 @@ function InvestmentValuesSection({
 function BillingSection({ billing }: { billing: BillingProps }) {
   const [busy, setBusy] = useState<"checkout" | "portal" | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const nowMs = useClientNowMs();
 
   const trialActive =
+    nowMs != null &&
     billing.tier === "trial" &&
     billing.trialEndsAt &&
-    new Date(billing.trialEndsAt).getTime() > Date.now();
+    new Date(billing.trialEndsAt).getTime() > nowMs;
 
-  const trialDaysLeft = billing.trialEndsAt
+  const trialDaysLeft = billing.trialEndsAt && nowMs != null
     ? Math.max(
         0,
         Math.ceil(
-          (new Date(billing.trialEndsAt).getTime() - Date.now()) /
+          (new Date(billing.trialEndsAt).getTime() - nowMs) /
             (1000 * 60 * 60 * 24)
         )
       )

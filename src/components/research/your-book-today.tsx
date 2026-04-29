@@ -73,7 +73,7 @@ export function YourBookToday({
             Movers in your book
           </div>
           <div className="mt-0.5 text-[11px] text-muted-foreground/80">
-            Today's biggest gainer and loser across your holdings.
+            Today&rsquo;s biggest gainer and loser across your holdings.
           </div>
         </div>
         {onSeeAll ? (

@@ -92,7 +92,6 @@ export async function getFinancialsSummary(
     const balance = s.balanceSheetHistory?.balanceSheetStatements?.[0];
     const cash = s.cashflowStatementHistory?.cashflowStatements?.[0];
     const fd = s.financialData ?? {};
-    const stats = s.defaultKeyStatistics ?? {};
 
     return {
       ticker,

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Clock } from "lucide-react";
+import { useClientNowMs } from "@/lib/client/use-client-now";
 
 /**
  * Inline freshness indicator.
@@ -51,6 +52,7 @@ export function WarehouseFreshness({
   variant?: "compact" | "card" | "pill";
 }) {
   const [data, setData] = useState<Freshness | null>(null);
+  const nowMs = useClientNowMs();
 
   useEffect(() => {
     let alive = true;
@@ -68,10 +70,10 @@ export function WarehouseFreshness({
     };
   }, []);
 
-  if (!data || !data.asOf) return null;
+  if (!data || !data.asOf || nowMs == null) return null;
 
   const ageHr =
-    (Date.now() - new Date(data.asOf).getTime()) / (1000 * 60 * 60);
+    (nowMs - new Date(data.asOf).getTime()) / (1000 * 60 * 60);
   if (ageHr > 48) return null;
 
   const label = buildLabel(data);
@@ -116,10 +118,13 @@ export function WarehouseFreshness({
  * somewhere else (a warehouse row, a dossier, etc.) — no API call.
  */
 export function FreshnessTag({ asOf }: { asOf: string | null | undefined }) {
+  const nowMs = useClientNowMs();
+
   if (!asOf) return null;
+  if (nowMs == null) return null;
   const d = new Date(asOf);
   if (Number.isNaN(d.getTime())) return null;
-  const ageHr = (Date.now() - d.getTime()) / (1000 * 60 * 60);
+  const ageHr = (nowMs - d.getTime()) / (1000 * 60 * 60);
   if (ageHr > 48) return null;
   const today = new Date().toISOString().slice(0, 10);
   const isToday = d.toISOString().slice(0, 10) === today;

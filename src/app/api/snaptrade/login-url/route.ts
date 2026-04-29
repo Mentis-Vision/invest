@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import {
@@ -15,7 +15,7 @@ import { isDemoUser } from "@/lib/admin";
  * Ensures the user exists in SnapTrade, then returns a one-time Connection
  * Portal URL the client opens in a popup. The URL expires in ~5 minutes.
  */
-export async function POST(_req: NextRequest) {
+export async function POST() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

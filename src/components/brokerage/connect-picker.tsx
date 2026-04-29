@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import {
   Building2,
   X,
@@ -59,12 +60,17 @@ export function ConnectPicker({
   // Reset transient state every time the modal opens fresh.
   useEffect(() => {
     if (open) {
-      setQuery("");
-      setSelectedId(null);
-      setError(null);
+      const resetTimer = setTimeout(() => {
+        setQuery("");
+        setSelectedId(null);
+        setError(null);
+      }, 0);
       // Autofocus search on open — most users will type immediately.
-      const t = setTimeout(() => searchRef.current?.focus(), 50);
-      return () => clearTimeout(t);
+      const focusTimer = setTimeout(() => searchRef.current?.focus(), 50);
+      return () => {
+        clearTimeout(resetTimer);
+        clearTimeout(focusTimer);
+      };
     }
   }, [open]);
 
@@ -96,10 +102,12 @@ export function ConnectPicker({
         {/* Header */}
         <div className="px-6 pb-3 pt-6">
           <div className="flex items-center gap-2.5">
-            <img
+            <Image
               src="/logo.png"
               alt=""
               aria-hidden="true"
+              width={32}
+              height={32}
               className="h-8 w-8 flex-shrink-0 rounded-md object-contain"
             />
             <h2

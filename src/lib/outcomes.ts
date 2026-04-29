@@ -19,6 +19,11 @@ const yahooFinance = new YahooFinanceCtor({
  *
  * Reads `recommendation.priceAtRec` as baseline. Caches prices in
  * `price_snapshot` keyed by (ticker, CURRENT_DATE).
+ *
+ * Important limitation: the win/loss/flat label is an absolute outcome
+ * bucket, not a risk-adjusted performance measure. It may exclude
+ * slippage, taxes, transaction costs, dividends, and corporate actions.
+ * Past outcomes do not guarantee future performance.
  */
 
 const THRESHOLD = 3; // percent — below which we call it "flat"
@@ -221,6 +226,8 @@ export function categorize(
   action: string | undefined,
   move: number
 ): string {
+  // This categorization is intentionally simple and not risk-adjusted.
+  // Benchmark/alpha context is computed separately where data exists.
   if (rec === "BUY") {
     if (action === "BUY") {
       return move > THRESHOLD

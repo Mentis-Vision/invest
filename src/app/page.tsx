@@ -2,7 +2,7 @@ import Link from "next/link";
 import MarketingNav from "@/components/marketing/nav";
 import MarketingFooter from "@/components/marketing/footer";
 import DemoVerdict from "@/components/marketing/demo-verdict";
-import { Check, ArrowUpRight, Database, FileText, LineChart, ShieldCheck, Scale, Landmark } from "lucide-react";
+import { Check, ArrowUpRight, Database, FileText, LineChart, Scale, Landmark } from "lucide-react";
 
 // Landing-page JSON-LD: SoftwareApplication + ItemList of data sources.
 // XSS-safe — all content is server-side static constants (see note in

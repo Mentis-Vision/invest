@@ -204,6 +204,33 @@ function HasDataView({ tr }: { tr: PublicTrackRecord }) {
         </div>
       </div>
 
+      {tr.benchmark && (
+        <div className="rounded-xl border border-border bg-card p-6 md:p-8">
+          <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+            Benchmark context
+          </div>
+          <div className="grid gap-4 md:grid-cols-[220px_1fr]">
+            <div className="rounded-md border border-border bg-background/60 p-4">
+              <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                Avg alpha vs {tr.benchmark.benchmarkTicker}
+              </div>
+              <div className="mt-2 font-heading text-[26px] leading-none tracking-tight">
+                {tr.benchmark.averageAlphaPct == null
+                  ? "—"
+                  : `${tr.benchmark.averageAlphaPct > 0 ? "+" : ""}${tr.benchmark.averageAlphaPct}%`}
+              </div>
+              <div className="mt-1.5 text-[11px] text-muted-foreground">
+                {tr.benchmark.evaluated.toLocaleString()} benchmarked
+              </div>
+            </div>
+            <p className="self-center text-[13px] leading-relaxed text-muted-foreground">
+              {tr.benchmark.note} Benchmark comparison is backward-looking
+              context, not a forecast or promise.
+            </p>
+          </div>
+        </div>
+      )}
+
       <p className="text-center text-[11px] text-muted-foreground/70">
         Stats as of {new Date(tr.asOf).toLocaleString()}. Aggregate only.
         No individual briefs, tickers, or user data are surfaced on this
@@ -273,10 +300,10 @@ function MethodologySection() {
             <h3 className="font-heading text-[18px]">2. Win / loss / flat</h3>
             <p className="mt-1 text-muted-foreground">
               A BUY wins if the ticker closes higher than the price at the
-              time of the brief, by more than the sector benchmark&rsquo;s
-              move over the same window. SELL is the mirror. HOLD wins when
-              the ticker stays within a narrow band — we reward correct
-              inaction. Flat is an outcome inside the neutral zone.
+              time of the brief by more than the neutral threshold. SELL is
+              the mirror. HOLD wins when the ticker stays within a narrow
+              band. Flat is an outcome inside the neutral zone. Benchmark
+              comparison is shown separately when SPY data is available.
             </p>
           </div>
 

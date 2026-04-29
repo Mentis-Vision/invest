@@ -75,13 +75,19 @@ export async function GET() {
     // Earnings in the next 7 days — intersected with the user's holdings
     // so the list is personally-relevant.
     const earnings = await pool.query(
-      `SELECT DISTINCT e.ticker, e.event_date::text AS event_date
-       FROM "ticker_events" e
-       JOIN "holding" h ON h.ticker = e.ticker AND h."userId" = $1
-       WHERE e.event_type = 'earnings'
-         AND e.event_date >= CURRENT_DATE
-         AND e.event_date <= CURRENT_DATE + INTERVAL '7 days'
-       ORDER BY e.event_date ASC
+      `SELECT ticker, event_date::text AS event_date
+       FROM (
+         SELECT DISTINCT ON (e.ticker)
+           e.ticker,
+           e.event_date
+         FROM "ticker_events" e
+         JOIN "holding" h ON h.ticker = e.ticker AND h."userId" = $1
+         WHERE e.event_type = 'earnings'
+           AND e.event_date >= CURRENT_DATE
+           AND e.event_date <= CURRENT_DATE + INTERVAL '7 days'
+         ORDER BY e.ticker, e.event_date ASC
+       ) upcoming
+       ORDER BY event_date ASC, ticker ASC
        LIMIT 10`,
       [session.user.id]
     );

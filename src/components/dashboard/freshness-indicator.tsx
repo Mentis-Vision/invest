@@ -30,10 +30,15 @@ export function FreshnessIndicator({
   className?: string;
 }) {
   // Re-render every minute so the relative-time text stays accurate.
-  const [, setTick] = useState(0);
+  const [nowMs, setNowMs] = useState<number | null>(null);
   useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 60_000);
-    return () => clearInterval(id);
+    const update = () => setNowMs(Date.now());
+    const timer = setTimeout(update, 0);
+    const interval = setInterval(update, 60_000);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
   }, []);
 
   if (!lastSyncedAt) {
@@ -48,7 +53,9 @@ export function FreshnessIndicator({
     );
   }
 
-  const ageMs = Date.now() - new Date(lastSyncedAt).getTime();
+  if (nowMs == null) return null;
+
+  const ageMs = nowMs - new Date(lastSyncedAt).getTime();
   // Clamp negative (client clock drift) to 0 so we don't show "in 5s".
   const age = Math.max(0, ageMs);
   const label = formatRelative(age);

@@ -15,7 +15,8 @@ export default function ThemeToggle() {
   const { theme, resolvedTheme, setTheme } = useTheme();
 
   useEffect(() => {
-    setMounted(true);
+    const timer = setTimeout(() => setMounted(true), 0);
+    return () => clearTimeout(timer);
   }, []);
 
   // resolvedTheme gives us the effective theme even when `theme === "system"`.

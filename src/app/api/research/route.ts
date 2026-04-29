@@ -31,10 +31,41 @@ import {
   getCachedRecommendation,
 } from "@/lib/history";
 import { getUserProfile, buildProfileRider } from "@/lib/user-profile";
+import {
+  formatDecisionAction,
+  runDecisionEngine,
+  type DecisionEngineOutput,
+} from "@/lib/decision-engine";
 
 export const maxDuration = 120;
 
 const TICKER_PATTERN = /^[A-Z][A-Z0-9.\-]{0,9}$/;
+
+function formatDecisionEngineOverlayForAI(
+  decisionEngine: DecisionEngineOutput
+): string {
+  const triggered = decisionEngine.riskGates
+    .filter((gate) => gate.triggered)
+    .map((gate) => `${gate.severity.toUpperCase()}: ${gate.title}`)
+    .slice(0, 5);
+  const rewardRisk =
+    decisionEngine.positionSizing.rewardRiskRatio == null
+      ? "Unknown"
+      : `${decisionEngine.positionSizing.rewardRiskRatio.toFixed(2)}:1`;
+  return [
+    "[DECISION ENGINE RISK OVERLAY]",
+    `- Trade Quality Score: ${decisionEngine.tradeQualityScore}/100`,
+    `- Action: ${decisionEngine.action} (${formatDecisionAction(decisionEngine.action)})`,
+    `- Confidence: ${decisionEngine.confidence}`,
+    `- Risk Level: ${decisionEngine.riskLevel}`,
+    `- Market Regime: ${decisionEngine.marketRegime}`,
+    `- Key Risk Gates: ${triggered.length > 0 ? triggered.join("; ") : "None triggered"}`,
+    `- Suggested Max Allocation: ${decisionEngine.positionSizing.suggestedMaxPositionPct}%`,
+    `- Max Risk Per Trade: ${decisionEngine.positionSizing.maxRiskPerTradePct}%`,
+    `- Reward/Risk: ${rewardRisk}`,
+    "- Note: This is a deterministic internal risk-control overlay, not an external market fact.",
+  ].join("\n");
+}
 
 /**
  * Streaming research pipeline.
@@ -44,6 +75,7 @@ const TICKER_PATTERN = /^[A-Z][A-Z0-9.\-]{0,9}$/;
  *
  *   { type: "snapshot",  ticker, snapshot }
  *   { type: "sources",   sources }
+ *   { type: "decision_engine", decisionEngine }
  *   { type: "analyst",   analyst: ModelResult }  (×3, in completion order)
  *   { type: "verdict",   supervisor, supervisorModel, recommendationId,
  *                        toolCalls, usage }
@@ -140,6 +172,7 @@ export async function POST(req: NextRequest) {
         supervisor?: Record<string, unknown>;
         supervisorModel?: string;
         sources?: Record<string, unknown>;
+        decisionEngine?: unknown;
       };
       const ageMs = Date.now() - cached.createdAt.getTime();
       const payload = {
@@ -148,6 +181,7 @@ export async function POST(req: NextRequest) {
         analyses: a.analyses ?? [],
         supervisor: a.supervisor ?? {},
         supervisorModel: a.supervisorModel ?? null,
+        decisionEngine: a.decisionEngine ?? null,
         recommendationId: cached.id,
         toolCalls: 0,
         sources: a.sources ?? {},
@@ -167,6 +201,12 @@ export async function POST(req: NextRequest) {
             controller.enqueue(encoder.encode(JSON.stringify(evt) + "\n"));
           send({ type: "snapshot", ticker, snapshot: payload.snapshot });
           send({ type: "sources", sources: payload.sources });
+          if (payload.decisionEngine) {
+            send({
+              type: "decision_engine",
+              decisionEngine: payload.decisionEngine,
+            });
+          }
           // Replay each stored analyst as its own event so the UI
           // renders identically to a live run.
           for (const a of payload.analyses as unknown[]) {
@@ -243,6 +283,15 @@ export async function POST(req: NextRequest) {
       };
       emit({ type: "sources", sources });
 
+      const decisionEngine = await runDecisionEngine({
+        userId,
+        ticker: ticker!,
+        snapshot: snap,
+        macroRaw: macro,
+        riskProfileHint: profile.riskTolerance,
+      });
+      emit({ type: "decision_engine", decisionEngine });
+
       // Warehouse-enhanced DATA block: pulls valuation/technicals/fundamentals
       // from ticker_market_daily + ticker_fundamentals when populated, falling
       // back to live Yahoo fields when the warehouse hasn't seen the ticker.
@@ -253,6 +302,8 @@ export async function POST(req: NextRequest) {
         formatFilingsForAI(filings),
         "",
         formatMacroForAI(macro),
+        "",
+        formatDecisionEngineOverlayForAI(decisionEngine),
       ].join("\n");
 
       const profileRider = buildProfileRider(profile);
@@ -312,6 +363,7 @@ export async function POST(req: NextRequest) {
         sources,
         supervisorModel: supervisor.supervisorModel,
         debate,
+        decisionEngine,
       }).catch((err) => {
         log.error("research", "saveRecommendation failed", {
           userId,
@@ -334,6 +386,7 @@ export async function POST(req: NextRequest) {
         snapshot: snap,
         analyses,
         debate,
+        decisionEngine,
         supervisor: supervisor.output,
         supervisorModel: supervisor.supervisorModel,
         recommendationId: recordId,

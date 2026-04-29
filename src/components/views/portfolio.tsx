@@ -234,7 +234,6 @@ function PortfolioBody() {
   const [loadingHoldings, setLoadingHoldings] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [holdings, setHoldings] = useState<Holding[]>([]);
-  const [totalValue, setTotalValue] = useState(0);
   const [brokerageBalance, setBrokerageBalance] = useState<number | null>(null);
   const [connected, setConnected] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
@@ -271,7 +270,6 @@ function PortfolioBody() {
         setNotConfiguredMessage(data.message);
       }
       setHoldings(data.holdings ?? []);
-      setTotalValue(data.totalValue ?? 0);
       setBrokerageBalance(data.brokerageBalance ?? null);
       setConnected(!!data.connected);
       setLastSyncedAt(data.lastSyncedAt ?? null);
@@ -446,11 +444,7 @@ function PortfolioBody() {
   }, []);
 
   const handlePlaidSuccess = useCallback(
-    async (_: {
-      itemId: string;
-      institutionName: string | null;
-      holdings: number;
-    }) => {
+    async () => {
       // Holdings are already synced on the server by /api/plaid/exchange-
       // public-token. Just refresh the client cache to render them.
       await loadHoldings(true);

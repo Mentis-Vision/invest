@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Clock } from "lucide-react";
+import { useClientNowMs } from "@/lib/client/use-client-now";
 
 type PastCall = {
   id: string;
@@ -14,6 +15,7 @@ type PastCall = {
 
 export function PastCallsStrip({ ticker }: { ticker: string }) {
   const [items, setItems] = useState<PastCall[]>([]);
+  const nowMs = useClientNowMs();
   useEffect(() => {
     let alive = true;
     fetch(`/api/research/past-calls/${encodeURIComponent(ticker)}`)
@@ -25,7 +27,7 @@ export function PastCallsStrip({ ticker }: { ticker: string }) {
     };
   }, [ticker]);
 
-  if (items.length === 0) return null;
+  if (items.length === 0 || nowMs == null) return null;
 
   return (
     <div className="mb-4 rounded-md border border-[var(--hold)]/30 bg-[var(--hold)]/5 px-4 py-3">
@@ -35,7 +37,7 @@ export function PastCallsStrip({ ticker }: { ticker: string }) {
       <ul className="space-y-1 text-[12px]">
         {items.map((it) => {
           const daysAgo = Math.floor(
-            (Date.now() - new Date(it.date).getTime()) / 864e5
+            (nowMs - new Date(it.date).getTime()) / 864e5
           );
           const stale = daysAgo >= 7;
           return (
