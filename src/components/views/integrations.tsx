@@ -363,25 +363,21 @@ function CompactCard({
   status: "linked" | "not_linked" | "unknown";
   action?: ReactNode;
 }) {
-  const StatusBadge = () => {
-    if (status === "linked")
-      return (
-        <span className="inline-flex items-center gap-1 text-[10px] text-[var(--buy)]">
-          <CheckCircle2 className="h-3 w-3" /> Linked
-        </span>
-      );
-    if (status === "not_linked")
-      return (
-        <span className="inline-flex items-center gap-1 text-[10px] text-[var(--muted-foreground)]">
-          <AlertCircle className="h-3 w-3" /> Not linked
-        </span>
-      );
-    return (
+  const statusBadge =
+    status === "linked" ? (
+      <span className="inline-flex items-center gap-1 text-[10px] text-[var(--buy)]">
+        <CheckCircle2 className="h-3 w-3" /> Linked
+      </span>
+    ) : status === "not_linked" ? (
+      <span className="inline-flex items-center gap-1 text-[10px] text-[var(--muted-foreground)]">
+        <AlertCircle className="h-3 w-3" /> Not linked
+      </span>
+    ) : (
       <span className="inline-flex items-center gap-1 text-[10px] text-[var(--muted-foreground)]">
         <Loader2 className="h-3 w-3 animate-spin" />
       </span>
     );
-  };
+
   return (
     <div className="flex items-center justify-between gap-3 rounded-md border border-[var(--border)] bg-[var(--card)] px-3 py-3">
       <div className="flex min-w-0 items-center gap-2.5">
@@ -395,7 +391,7 @@ function CompactCard({
           </div>
         </div>
       </div>
-      <div className="shrink-0">{action ?? <StatusBadge />}</div>
+      <div className="shrink-0">{action ?? statusBadge}</div>
     </div>
   );
 }

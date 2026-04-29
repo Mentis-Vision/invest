@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import {
@@ -124,7 +124,10 @@ type Holding = {
  * metadata for display-name / sector / industry when the holding row
  * didn't store them.
  */
-async function loadPlaidHoldings(userId: string): Promise<Holding[]> {
+async function loadPersistedHoldings(
+  userId: string,
+  source?: "plaid"
+): Promise<Holding[]> {
   const { rows } = await pool.query<{
     ticker: string;
     shares: string | number;
@@ -151,8 +154,9 @@ async function loadPlaidHoldings(userId: string): Promise<Holding[]> {
      FROM "holding" h
      LEFT JOIN "plaid_account" pa ON pa."plaidAccountId" = h."plaidAccountId"
      LEFT JOIN "plaid_item" pi ON pi."itemId" = pa."itemId"
-     WHERE h."userId" = $1 AND h.source = 'plaid'`,
-    [userId]
+     WHERE h."userId" = $1
+       AND ($2::text IS NULL OR h.source = $2)`,
+    [userId, source ?? null]
   );
   if (rows.length === 0) return [];
 
@@ -251,7 +255,7 @@ async function buildHoldingsResponse(
  * (Naming kept for client-compat; rename to /api/holdings is tracked
  * separately.)
  */
-export async function GET(_req: NextRequest) {
+export async function GET() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -260,7 +264,7 @@ export async function GET(_req: NextRequest) {
 
   // Plaid path is the only way some brokerages (Schwab) reach us. Load
   // those holdings first regardless of SnapTrade state.
-  const plaidHoldings = await loadPlaidHoldings(userId);
+  const plaidHoldings = await loadPersistedHoldings(userId, "plaid");
 
   // ── Branch 1: SnapTrade not configured ────────────────────────────
   // Serve Plaid-only if there's data; otherwise echo the original
@@ -605,21 +609,33 @@ export async function GET(_req: NextRequest) {
       lastSyncedAt,
     });
   } catch (err) {
-    log.error("snaptrade.holdings", "unexpected failure", {
-      userId,
-      ...errorInfo(err),
-    });
-    // SnapTrade fetch failed — degrade to Plaid-only rather than
-    // black-holing the whole portfolio view if Plaid has data.
-    if (plaidHoldings.length > 0) {
+    // SnapTrade fetch failed — degrade to persisted holdings rather
+    // than black-holing the whole portfolio view if cached positions
+    // are available. This also protects local mirrors when encrypted
+    // SnapTrade secrets cannot be decrypted with the local key.
+    const persistedHoldings = await loadPersistedHoldings(userId);
+    if (persistedHoldings.length > 0) {
+      const safeError =
+        err instanceof Error
+          ? { errName: err.name, errMessage: err.message }
+          : { errMessage: String(err) };
+      log.warn("snaptrade.holdings", "live refresh failed; served persisted holdings", {
+        ...safeError,
+      });
       return buildHoldingsResponse(
-        plaidHoldings,
-        countDistinctAccounts(plaidHoldings),
+        persistedHoldings,
+        countDistinctAccounts(persistedHoldings),
         null,
         "USD",
         await loadLastSyncedAt(userId)
       );
     }
-    return NextResponse.json({ error: "Could not load holdings." }, { status: 500 });
+    log.error("snaptrade.holdings", "unexpected failure", errorInfo(err));
+    return NextResponse.json({
+      connected: false,
+      holdings: [],
+      error: "holdings_refresh_failed",
+      message: "Could not refresh live holdings. Reconnect if this persists.",
+    });
   }
 }

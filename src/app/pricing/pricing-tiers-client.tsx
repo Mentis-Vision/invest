@@ -63,12 +63,13 @@ export default function PricingTiersClient({
         body: JSON.stringify({ tier, interval }),
       });
       const data = await res.json();
-      if (!res.ok || !data.url) {
+      const checkoutUrl = typeof data.url === "string" ? data.url : null;
+      if (!res.ok || !checkoutUrl) {
         setErr(data.error ?? "Could not start checkout. Try again.");
         setBusyTier(null);
         return;
       }
-      window.location.href = data.url as string;
+      window.location.assign(checkoutUrl);
     } catch {
       setErr("Network error. Try again.");
       setBusyTier(null);

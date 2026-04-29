@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { useClientNowMs } from "@/lib/client/use-client-now";
 
 type Result = {
   ticker: string;
@@ -18,6 +19,7 @@ type Horizon = "7d" | "30d" | "90d" | "all";
 export function CounterfactualChart({ recId }: { recId: string }) {
   const [data, setData] = useState<Result | null>(null);
   const [loading, setLoading] = useState(true);
+  const nowMs = useClientNowMs();
   const [horizon, setHorizon] = useState<Horizon>("all");
 
   useEffect(() => {
@@ -49,7 +51,8 @@ export function CounterfactualChart({ recId }: { recId: string }) {
   }
 
   // Slice the series by horizon
-  const now = Date.now();
+  if (nowMs == null) return null;
+  const now = nowMs;
   const horizonMs =
     horizon === "7d"
       ? 7 * 864e5

@@ -28,7 +28,6 @@ import { getHoldings } from "@/lib/client/holdings-cache";
 import ResearchStarter from "@/components/research/research-starter";
 import { DossierHero } from "@/components/research/dossier-hero";
 import { SectorRail } from "@/components/research/sector-rail";
-import { WarehouseFreshness } from "@/components/warehouse-freshness";
 import { MarketPulse } from "@/components/research/market-pulse";
 import { MiniSparkline } from "@/components/research/mini-sparkline";
 import { WorthReading } from "@/components/research/worth-reading";
@@ -36,6 +35,8 @@ import { YourBookToday } from "@/components/research/your-book-today";
 import { EventsThisWeek } from "@/components/research/events-this-week";
 import { PastCallsStrip } from "@/components/research/past-calls-strip";
 import { RecentSearchesStrip } from "@/components/research/recent-searches-strip";
+import { DecisionEngineCard } from "@/components/research/decision-engine-card";
+import type { DecisionEngineOutput } from "@/lib/decision-engine/types";
 
 type ModelKey = "claude" | "gpt" | "gemini";
 type ToolCallTrace = {
@@ -111,6 +112,7 @@ type ResearchResponse = {
   analyses: ModelResult[];
   /** Adversarial bull/bear debate that ran between analyst panel and supervisor. */
   debate?: DebateResult | null;
+  decisionEngine?: DecisionEngineOutput | null;
   supervisor: SupervisorOutput;
   supervisorModel?: string;
   recommendationId?: string | null;
@@ -372,16 +374,10 @@ export default function ResearchView({
   // (e.g. user already holds the ticker and has prior research on it).
   // Users can manually override via the "Adjust depth" toggle below.
   const [mode, setMode] = useState<"quick" | "standard" | "full">("quick");
-  const [showDepthPicker, setShowDepthPicker] = useState(false);
   const [quickResult, setQuickResult] = useState<QuickScanResponse | null>(null);
   const [standardResult, setStandardResult] = useState<StandardResponse | null>(
     null
   );
-  // Context for smart-routing. Filled once on mount from holdings + recent
-  // research history. Empty arrays are fine; routing falls back to "quick"
-  // (safe default) if the data isn't loaded yet.
-  const [userHoldings, setUserHoldings] = useState<string[]>([]);
-  const [recentlyResearched, setRecentlyResearched] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [disclaimerOpen, setDisclaimerOpen] = useState(false);
   const [disclaimerChecked, setDisclaimerChecked] = useState(false);
@@ -439,27 +435,12 @@ export default function ResearchView({
   // assembly is ~instant instead of ~3–6s of upstream HTTP.
   // Safe by construction: server-side endpoint is auth-gated, rate-limited,
   // and never calls any AI models.
-  // Also captures userHoldings + recentlyResearched for smart-routing —
-  // on submit we decide quick vs deep based on whether the user already
-  // holds the ticker and whether they've researched it before.
   useEffect(() => {
     let cancelled = false;
     const t = setTimeout(async () => {
       try {
-        const [snap, starterRes] = await Promise.all([
-          getHoldings().catch(() => null),
-          fetch("/api/research/starter")
-            .then((r) => (r.ok ? r.json() : null))
-            .catch(() => null),
-        ]);
+        const snap = await getHoldings().catch(() => null);
         if (cancelled) return;
-        const heldTickers = (snap?.holdings ?? []).map((h) =>
-          h.ticker.toUpperCase()
-        );
-        setUserHoldings(heldTickers);
-        const recent = (starterRes?.recent ?? []) as Array<{ ticker: string }>;
-        setRecentlyResearched(recent.map((r) => r.ticker.toUpperCase()));
-
         const topTickers = (snap?.holdings ?? [])
           .slice()
           .sort((a, b) => b.value - a.value)
@@ -635,6 +616,15 @@ export default function ResearchView({
               setResult((prev) => {
                 if (!prev) return prev;
                 return { ...prev, debate: d };
+              });
+              break;
+            }
+            case "decision_engine": {
+              const decisionEngine = evt.decisionEngine as DecisionEngineOutput;
+              partial.decisionEngine = decisionEngine;
+              setResult((prev) => {
+                if (!prev) return prev;
+                return { ...prev, decisionEngine };
               });
               break;
             }
@@ -1767,6 +1757,13 @@ export default function ResearchView({
               </div>
             </CardContent>
           </Card>
+
+          {result.decisionEngine && (
+            <DecisionEngineCard
+              decisionEngine={result.decisionEngine}
+              aiRecommendation={result.supervisor.finalRecommendation}
+            />
+          )}
 
           {/* Adversarial debate — bull/bear cards. Renders only when the
               debate ran (Full Panel mode). The "what would change my mind"

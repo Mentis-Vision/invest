@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useClientNowMs } from "@/lib/client/use-client-now";
 
 type Result = {
   ticker: string;
@@ -17,6 +18,7 @@ type Result = {
  */
 export function CompactCounterfactual({ recId }: { recId: string }) {
   const [data, setData] = useState<Result | null>(null);
+  const nowMs = useClientNowMs();
   useEffect(() => {
     let alive = true;
     fetch(`/api/journal/counterfactual/${recId}`)
@@ -28,9 +30,9 @@ export function CompactCounterfactual({ recId }: { recId: string }) {
     };
   }, [recId]);
 
-  if (!data) return null;
+  if (!data || nowMs == null) return null;
   const days = Math.floor(
-    (Date.now() - new Date(data.recDate).getTime()) / 864e5
+    (nowMs - new Date(data.recDate).getTime()) / 864e5
   );
   const delta = data.deltaActual - data.deltaIgnored;
   const sign = delta >= 0 ? "+" : "−";

@@ -18,6 +18,10 @@
       "schedule": "0 9 * * *"
     },
     {
+      "path": "/api/cron/risk-radar",
+      "schedule": "30 14 * * *"
+    },
+    {
       "path": "/api/cron/weekly-bull-bear",
       "schedule": "0 10 * * 1"
     },

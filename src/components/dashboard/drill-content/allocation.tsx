@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import type { Holding } from "@/lib/client/holdings-cache";
 import { DrillHeader, DrillBody, DrillSection } from "./panel-shell";
-import { money, moneyFull, pct } from "../format";
+import { moneyFull, pct } from "../format";
 import { Drillable } from "../drill-context";
 import { sumMoney } from "@/lib/money";
 

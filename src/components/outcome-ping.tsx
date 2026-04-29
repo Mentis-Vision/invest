@@ -55,13 +55,16 @@ export default function OutcomePing() {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    setDismissed(loadDismissed());
+    const dismissedTimer = setTimeout(() => {
+      setDismissed(loadDismissed());
+    }, 0);
     fetch("/api/outcome-ping")
       .then((r) => (r.ok ? r.json() : null))
       .then((data: { items: PingItem[] } | null) => {
         setItems(data?.items ?? []);
       })
       .catch(() => setItems([]));
+    return () => clearTimeout(dismissedTimer);
   }, []);
 
   if (!items) return null;

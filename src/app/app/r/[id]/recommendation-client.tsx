@@ -16,6 +16,8 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import type { FullRecommendation } from "@/lib/history";
+import { DecisionEngineCard } from "@/components/research/decision-engine-card";
+import type { DecisionEngineOutput } from "@/lib/decision-engine/types";
 
 const REC_STYLE: Record<string, string> = {
   BUY: "bg-[var(--buy)]/10 text-[var(--buy)] border-[var(--buy)]/25",
@@ -58,6 +60,7 @@ type AnalysisJson = {
     redFlags?: string[];
   };
   supervisorModel?: string;
+  decisionEngine?: DecisionEngineOutput | null;
 };
 
 const LENS: Record<string, string> = {
@@ -193,6 +196,12 @@ export default function RecommendationClient({
           </div>
         </CardContent>
       </Card>
+
+      <DecisionEngineCard
+        decisionEngine={analysis.decisionEngine ?? null}
+        aiRecommendation={rec.recommendation}
+        showMissingFallback
+      />
 
       {rec.outcomes.length > 0 && (
         <Card>

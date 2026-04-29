@@ -21,6 +21,14 @@ Both tests have inline comments noting the escalation. ~5 min, one PR. Re-run th
 
 If sitemap is still <100 URLs on Monday, the warehouse refresh isn't picking up the new seed list — investigate `src/lib/warehouse/refresh.ts` orchestrator + `src/lib/warehouse/universe.ts` `getTickerUniverse()` before raising the floor.
 
+### Decision engine follow-ups
+
+- Persist benchmark alpha fields on `recommendation_outcome` after a future
+  migration. First version computes SPY comparison dynamically where warehouse
+  rows exist and does not fake missing benchmark data.
+- Add a real watchlist table. Current Risk Radar scans holdings and an
+  explicitly provided ticker because no watchlist system of record exists yet.
+
 ### ~2026-05-25 — evaluate paid SEO instrumentation
 
 Optional: add Lighthouse score checks + keyword position tracking to the E2E smoke suite. Both require paid API access (Vercel Speed Insights API and SerpAPI / Ahrefs API respectively).

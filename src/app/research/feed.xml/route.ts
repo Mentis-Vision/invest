@@ -27,7 +27,6 @@ function esc(s: string): string {
 }
 
 export async function GET() {
-  const started = Date.now();
   let briefs: Awaited<ReturnType<typeof listRecentBriefs>> = [];
   try {
     briefs = await listRecentBriefs(40);

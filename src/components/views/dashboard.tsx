@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { NextMoveHero, type Review } from "@/components/dashboard/next-move-hero";
 import { StrategyFullBrief } from "@/components/views/strategy";
 import { CompactCounterfactual } from "@/components/dashboard/compact-counterfactual";
+import { RiskRadarCard } from "@/components/dashboard/risk-radar-card";
 import {
   ReviewStatusBanner,
   type ReviewStatus,
@@ -211,16 +212,19 @@ function DashboardBody({
   }, []);
 
   useEffect(() => {
-    setGreeting(timeGreeting());
-    setDayString(
-      new Date().toLocaleDateString("en-US", {
-        weekday: "long",
-        month: "short",
-        day: "numeric",
-      })
-    );
-
     let alive = true;
+    const timeTimer = setTimeout(() => {
+      if (!alive) return;
+      setGreeting(timeGreeting());
+      setDayString(
+        new Date().toLocaleDateString("en-US", {
+          weekday: "long",
+          month: "short",
+          day: "numeric",
+        })
+      );
+    }, 0);
+
     // Day change comes from the holdings endpoint now — it computes
     // per-position price moves so the number stays correct on days
     // when an account is added or removed. The old snapshot-diff
@@ -235,6 +239,7 @@ function DashboardBody({
       .catch(() => {});
     return () => {
       alive = false;
+      clearTimeout(timeTimer);
     };
   }, []);
 
@@ -305,6 +310,10 @@ function DashboardBody({
           <CompactCounterfactual recId={latestStrategyRecId} />
         </WidgetBoundary>
       )}
+
+      <WidgetBoundary name="Risk Radar">
+        <RiskRadarCard />
+      </WidgetBoundary>
 
       {/* Header row: greeting (left) · date + Customize (right) */}
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 pb-2">

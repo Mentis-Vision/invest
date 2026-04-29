@@ -10,7 +10,7 @@ import {
   StatRow,
   DrillFooterLink,
 } from "./panel-shell";
-import { money, moneyFull, pct, pctRawSigned } from "../format";
+import { money, moneyFull, pctRawSigned } from "../format";
 
 /**
  * Shows the user's specific position for this ticker — shares, cost

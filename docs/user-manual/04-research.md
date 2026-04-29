@@ -42,6 +42,22 @@ Same header shape as Quick read. Body adds:
   challenges its own thesis with a bull and bear argument before
   settling. The quick read is a first-glance triage."
 
+## Trade Quality Score and Risk Overlay
+
+Full research also includes a deterministic Trade Quality Score and Risk
+Overlay. This is separate from the AI research verdict.
+
+- The AI research verdict summarizes the analyst panel.
+- The deterministic risk overlay checks data quality, trend, macro,
+  liquidity, concentration, reward/risk, and near-term event risk.
+- The risk overlay may be more conservative than the AI verdict.
+- Conservative overrides are intentional. They are review prompts, not
+  trade instructions.
+- Position sizing is shown as suggested max allocation and max risk per
+  trade. It never computes an order or share count.
+
+The output is informational only and not investment advice.
+
 ## Freshness + same-day caching
 
 - If you run a Quick or Deep read on a ticker you've already read

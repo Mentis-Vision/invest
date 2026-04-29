@@ -38,9 +38,13 @@ export function QuickScanStrip({
 
   useEffect(() => {
     if (!ticker) {
-      setLoading(false);
-      return;
+      const timer = setTimeout(() => setLoading(false), 0);
+      return () => clearTimeout(timer);
     }
+    const loadingTimer = setTimeout(() => {
+      setLoading(true);
+      setData(null);
+    }, 0);
     let alive = true;
     fetch(`${apiPath}/${encodeURIComponent(ticker)}`)
       .then((r) => (r.ok ? r.json() : null))
@@ -54,6 +58,7 @@ export function QuickScanStrip({
       });
     return () => {
       alive = false;
+      clearTimeout(loadingTimer);
     };
   }, [ticker, apiPath]);
 

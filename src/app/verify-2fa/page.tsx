@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
 import AuthLayout from "@/components/auth-layout";
@@ -35,7 +35,6 @@ export default function VerifyTwoFactorPage() {
 }
 
 function VerifyTwoFactorInner() {
-  const router = useRouter();
   const sp = useSearchParams();
   const next = sp.get("next") ?? "/app";
 
@@ -47,8 +46,11 @@ function VerifyTwoFactorInner() {
   // Keep the TOTP input tight to 6 digits. Backup codes are longer
   // and allow letters — separate input mask via the mode state.
   useEffect(() => {
-    setCode("");
-    setError(null);
+    const timer = setTimeout(() => {
+      setCode("");
+      setError(null);
+    }, 0);
+    return () => clearTimeout(timer);
   }, [mode]);
 
   async function verify(e: React.FormEvent) {

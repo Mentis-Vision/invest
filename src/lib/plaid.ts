@@ -13,7 +13,7 @@ import crypto from "node:crypto";
 import { pool } from "./db";
 import { log, errorInfo } from "./log";
 import { encryptSecret, decryptSecret } from "./snaptrade";
-import { TIER_LIMITS, type Tier } from "./usage";
+import type { Tier } from "./usage";
 
 /**
  * Plaid client — Investments product only.

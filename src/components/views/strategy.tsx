@@ -1,28 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Lightbulb, AlertTriangle } from "lucide-react";
 import {
-  Lightbulb,
-  Loader2,
-  TrendingUp,
-  AlertTriangle,
-  CalendarClock,
-  PieChart,
-  History as HistoryIcon,
-  Clock,
-  ChevronDown,
-  ChevronUp,
-} from "lucide-react";
-import { getHoldings, type Holding } from "@/lib/client/holdings-cache";
-import { WarehouseFreshness } from "@/components/warehouse-freshness";
-import {
-  NextMoveHero,
   ACTION_ICON,
-  HEALTH_STYLE,
   personaLabel,
   type Review,
   type NextMoveState,
@@ -30,35 +13,6 @@ import {
 
 // Re-export so consumers that imported from here still work.
 export type { Review, NextMoveState };
-
-type Macro = Array<{
-  indicator: string;
-  value: string;
-  date: string;
-  deltaLabel?: string;
-}>;
-
-type RecentRec = {
-  id: string;
-  ticker: string;
-  recommendation: string;
-  confidence: string;
-  createdAt: string;
-};
-
-type UpcomingEvent = {
-  ticker: string;
-  eventType: string;
-  eventDate: string;
-};
-
-function money(n: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: n >= 10000 ? 0 : 2,
-  }).format(n);
-}
 
 // ── Exported "full brief" body ────────────────────────────────────────────────
 // The per-lens grid, agreed-points card, red-flags card, and secondary-actions
