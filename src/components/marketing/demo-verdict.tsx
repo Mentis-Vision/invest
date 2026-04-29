@@ -6,18 +6,23 @@ import { ShieldCheck, Sparkles } from "lucide-react";
 /**
  * Interactive demo verdict — landing-page centerpiece.
  *
- * Replaces the static NVDA mock with a 4-ticker selector that swaps
- * the verdict card on click. Sample data is curated and hardcoded
- * (no real backend hit) so the demo is instant and deterministic.
- * The TSLA case deliberately shows lens *disagreement* (Quality SELL
- * vs Momentum BUY vs Context HOLD) so visitors see what the
- * three-lens differentiator actually buys them — that's the moment
- * of "oh, this is different."
+ * Four-ticker selector (NVDA, TSLA, AAPL, NFLX) that swaps the
+ * verdict card on click. The verdict TEXT (BUY/HOLD/SELL + thesis +
+ * per-lens scores) is curated marketing copy — running real
+ * three-lens panels for the demo would burn API budget without
+ * changing the marketing pitch. The TSLA case deliberately shows
+ * lens disagreement (Quality SELL / Momentum BUY / Context HOLD)
+ * so visitors see what the three-lens differentiator actually
+ * changes — that's the wedge moment.
  *
- * Numbers chosen to be plausible at the time of writing; if they go
- * stale, swap to fresher figures or wire this up to a cached backend
- * snapshot. The text label "Illustrative example" already disclaims
- * the data is illustrative.
+ * Prices + change-percent come from the optional `liveQuotes` prop,
+ * which the parent server component fetches from the `demo_snapshot`
+ * table (refreshed nightly by /api/cron/demo-snapshot). When a
+ * ticker has a live quote the card overlays today's actual price;
+ * when it doesn't (cron hasn't run, ticker missing, fetch failed),
+ * we fall back to the hardcoded price string in BRIEFS so visitors
+ * always see something. The "Illustrative example" disclaimer
+ * stays on every card regardless of source.
  */
 
 type Lens = "quality" | "momentum" | "context";
@@ -103,9 +108,48 @@ const verdictColor: Record<Verdict, string> = {
   SELL: "var(--sell)",
 };
 
-export default function DemoVerdict() {
+export type LiveQuote = {
+  price: number;
+  changePct: number;
+};
+
+/** Format a numeric price into the `$xxx.xx` style the rest of the
+ *  site uses. Falls back to the hardcoded string if input is bad. */
+function formatLivePrice(price: number, fallback: string): string {
+  if (!Number.isFinite(price) || price <= 0) return fallback;
+  return `$${price.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+/** Format a percent like "+1.2%" / "−2.4%". Uses a real minus sign
+ *  (U+2212) for visual symmetry with the plus sign — that matches
+ *  the original hardcoded strings. */
+function formatLiveDelta(changePct: number): string {
+  const abs = Math.abs(changePct).toFixed(2);
+  return changePct >= 0 ? `+${abs}%` : `−${abs}%`;
+}
+
+export default function DemoVerdict({
+  liveQuotes,
+}: {
+  /** Optional ticker → live quote map. Missing tickers fall back to
+   *  hardcoded values in BRIEFS. */
+  liveQuotes?: Record<string, LiveQuote>;
+} = {}) {
   const [selectedTicker, setSelectedTicker] = useState<string>("NVDA");
   const brief = BRIEFS.find((b) => b.ticker === selectedTicker) ?? BRIEFS[0];
+
+  // Override price + delta when a live quote is available. Three
+  // pieces have to flip together (display string, sign-driven color,
+  // arrow) so the up/down state stays internally consistent.
+  const live = liveQuotes?.[brief.ticker];
+  const displayPrice = live
+    ? formatLivePrice(live.price, brief.price)
+    : brief.price;
+  const displayDelta = live ? formatLiveDelta(live.changePct) : brief.delta;
+  const displayDeltaUp = live ? live.changePct >= 0 : brief.deltaUp;
 
   return (
     <div className="relative mx-auto max-w-3xl px-6 pb-16">
@@ -160,13 +204,15 @@ export default function DemoVerdict() {
                 {brief.name}
               </div>
               <div className="mt-0.5 font-mono text-sm text-foreground">
-                {brief.price}{" "}
+                {displayPrice}{" "}
                 <span
                   className={
-                    brief.deltaUp ? "text-[var(--buy)]" : "text-[var(--sell)]"
+                    displayDeltaUp
+                      ? "text-[var(--buy)]"
+                      : "text-[var(--sell)]"
                   }
                 >
-                  {brief.delta}
+                  {displayDelta}
                 </span>
               </div>
             </div>

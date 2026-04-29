@@ -1,8 +1,18 @@
 import Link from "next/link";
 import MarketingNav from "@/components/marketing/nav";
 import MarketingFooter from "@/components/marketing/footer";
-import DemoVerdict from "@/components/marketing/demo-verdict";
+import DemoVerdict, {
+  type LiveQuote,
+} from "@/components/marketing/demo-verdict";
+import { readDemoSnapshots } from "@/lib/demo-snapshot";
 import { Check, ArrowUpRight, Database, FileText, LineChart, Scale, Landmark } from "lucide-react";
+
+// Refresh the server render once an hour so cron-updated demo prices
+// flow through without needing every visitor to trigger a fresh
+// Yahoo fetch. The cron runs nightly; an hourly revalidate keeps
+// the served HTML reasonably close to current without bleeding cost
+// on demo refreshes that don't actually exist between cron runs.
+export const revalidate = 3600;
 
 // Landing-page JSON-LD: SoftwareApplication + ItemList of data sources.
 // XSS-safe — all content is server-side static constants (see note in
@@ -62,7 +72,18 @@ const clearPathPros = [
   "Tells you exactly what it needs to be more confident",
 ];
 
-export default function Landing() {
+export default async function Landing() {
+  // Server-fetch the nightly snapshot map so the demo card overlays
+  // today's actual prices when available. Empty map (first deploy /
+  // cron failed) → demo falls back to its hardcoded BRIEFS prices,
+  // so visitors always see something even if the snapshot path is
+  // broken.
+  const snapshots = await readDemoSnapshots();
+  const liveQuotes: Record<string, LiveQuote> = {};
+  for (const [ticker, snap] of snapshots) {
+    liveQuotes[ticker] = { price: snap.price, changePct: snap.changePct };
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* JSON-LD structured data. The dangerouslySetInnerHTML below is
@@ -126,7 +147,7 @@ export default function Landing() {
             disagreement so visitors see what the three-lens
             differentiator actually changes. Component is client-side
             with hardcoded data — zero backend cost. */}
-        <DemoVerdict />
+        <DemoVerdict liveQuotes={liveQuotes} />
 
         {/* Brokerage social proof — names the brokers we've actually
             verified as working today (Schwab + Coinbase user-tested),
