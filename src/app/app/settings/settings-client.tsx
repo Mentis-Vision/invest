@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import TwoFactorSection from "./two-factor-section";
 import { useClientNowMs } from "@/lib/client/use-client-now";
+import { safeExternalHttpsUrl } from "@/lib/client/safe-navigation";
 import type {
   UserProfile,
   RiskTolerance,
@@ -802,12 +803,15 @@ function BillingSection({ billing }: { billing: BillingProps }) {
         body: JSON.stringify({ tier, interval: "monthly" }),
       });
       const data = await res.json();
-      if (!res.ok || !data.url) {
+      const checkoutUrl = safeExternalHttpsUrl(data.url, [
+        "checkout.stripe.com",
+      ]);
+      if (!res.ok || !checkoutUrl) {
         setErr(data.error ?? "Could not start checkout.");
         setBusy(null);
         return;
       }
-      window.location.href = data.url as string;
+      window.location.assign(checkoutUrl);
     } catch {
       setErr("Network error. Try again.");
       setBusy(null);
@@ -820,12 +824,13 @@ function BillingSection({ billing }: { billing: BillingProps }) {
     try {
       const res = await fetch("/api/stripe/portal", { method: "POST" });
       const data = await res.json();
-      if (!res.ok || !data.url) {
+      const portalUrl = safeExternalHttpsUrl(data.url, ["billing.stripe.com"]);
+      if (!res.ok || !portalUrl) {
         setErr(data.error ?? "Could not open billing portal.");
         setBusy(null);
         return;
       }
-      window.location.href = data.url as string;
+      window.location.assign(portalUrl);
     } catch {
       setErr("Network error. Try again.");
       setBusy(null);

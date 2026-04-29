@@ -122,7 +122,6 @@ export async function checkRateLimit(
   } catch (err) {
     log.error("rate-limit", "check failed, failing open", {
       rule: rule.name,
-      key: fullKey,
       ...errorInfo(err),
     });
     return {

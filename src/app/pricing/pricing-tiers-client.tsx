@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Check, Loader2, Sparkles } from "lucide-react";
+import { safeExternalHttpsUrl } from "@/lib/client/safe-navigation";
 
 /**
  * Client tier grid with monthly/annual toggle + auth-aware CTAs.
@@ -63,7 +64,9 @@ export default function PricingTiersClient({
         body: JSON.stringify({ tier, interval }),
       });
       const data = await res.json();
-      const checkoutUrl = typeof data.url === "string" ? data.url : null;
+      const checkoutUrl = safeExternalHttpsUrl(data.url, [
+        "checkout.stripe.com",
+      ]);
       if (!res.ok || !checkoutUrl) {
         setErr(data.error ?? "Could not start checkout. Try again.");
         setBusyTier(null);
