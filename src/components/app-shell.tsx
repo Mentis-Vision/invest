@@ -32,6 +32,7 @@ import {
   KeyRound,
   HelpCircle,
   ChevronDown,
+  CreditCard,
 } from "lucide-react";
 import TickerTape from "@/components/ticker-tape";
 import TrialBanner from "@/components/trial-banner";
@@ -147,6 +148,15 @@ function AccountMenu({
           >
             <SettingsIcon className="mr-2.5 h-3.5 w-3.5" />
             Settings &amp; preferences
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => {
+              window.location.href = "/app/upgrade";
+            }}
+            className="cursor-pointer"
+          >
+            <CreditCard className="mr-2.5 h-3.5 w-3.5" />
+            Billing &amp; upgrade
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => {

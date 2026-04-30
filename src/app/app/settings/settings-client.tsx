@@ -852,7 +852,7 @@ function BillingSection({ billing }: { billing: BillingProps }) {
   // pre-launch on this surface.
   if (!billing.stripeConfigured) {
     return (
-      <Card>
+      <Card id="billing">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <CreditCard className="h-4 w-4 text-primary" />
@@ -869,7 +869,7 @@ function BillingSection({ billing }: { billing: BillingProps }) {
   }
 
   return (
-    <Card>
+    <Card id="billing">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <CreditCard className="h-4 w-4 text-primary" />
