@@ -10,13 +10,14 @@ import { Sparkles, AlertTriangle, Clock, X, Loader2 } from "lucide-react";
  * AppShell). Mounts client-side, fetches /api/user/subscription
  * once on mount, decides which (if any) state to surface:
  *
+ *   - Trial running → calm "X days left" status with an in-app
+ *     billing/upgrade link so new users always know they are in a trial.
  *   - Trial running, ≤7 days left → amber "X days left" with
- *     founder-pricing CTA (the highest-leverage window).
+ *     stronger founder-pricing CTA (the highest-leverage window).
  *   - Trial running, ≤1 day left → orange urgency variant.
  *   - Trial expired AND no paid sub → red "trial ended" banner.
  *   - Subscription past_due → red "card declined, update payment".
- *   - Otherwise (≥8 days trial left, or active paid sub, or
- *     unauthenticated) → renders nothing.
+ *   - Otherwise (active paid sub or unauthenticated) → renders nothing.
  *
  * Dismissible per session — once you click X, the banner stays
  * gone for that tab. Storage is sessionStorage (not localStorage)
@@ -34,7 +35,7 @@ type SubscriptionState = {
   cancelAtPeriodEnd: boolean;
 };
 
-type BannerVariant = "soft" | "urgent" | "expired" | "past_due";
+type BannerVariant = "active" | "soft" | "urgent" | "expired" | "past_due";
 
 function pickVariant(s: SubscriptionState): {
   variant: BannerVariant;
@@ -60,6 +61,7 @@ function pickVariant(s: SubscriptionState): {
     if (daysLeft <= 7) {
       return { variant: "soft", daysLeft: Math.ceil(daysLeft) };
     }
+    return { variant: "active", daysLeft: Math.ceil(daysLeft) };
   }
 
   return null;
@@ -69,23 +71,20 @@ const STORAGE_KEY = "clearpath:trial-banner-dismissed";
 
 export default function TrialBanner() {
   const [state, setState] = useState<SubscriptionState | null>(null);
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return (
+        typeof window !== "undefined" &&
+        window.sessionStorage.getItem(STORAGE_KEY) === "1"
+      );
+    } catch {
+      return false;
+    }
+  });
   const [busy, setBusy] = useState(false);
   const [busyError, setBusyError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Only check sessionStorage in the browser — SSR has no window.
-    try {
-      if (
-        typeof window !== "undefined" &&
-        window.sessionStorage.getItem(STORAGE_KEY) === "1"
-      ) {
-        setDismissed(true);
-      }
-    } catch {
-      /* sessionStorage can throw in some sandboxed contexts; ignore */
-    }
-
     let alive = true;
     fetch("/api/user/subscription", { credentials: "same-origin" })
       .then((r) => (r.ok ? r.json() : null))
@@ -114,19 +113,24 @@ export default function TrialBanner() {
 
   const { variant, daysLeft } = decision;
   const variantStyles: Record<BannerVariant, string> = {
+    active: "border-primary/20 bg-primary/5 text-foreground",
     soft: "border-[var(--hold)]/40 bg-[var(--hold)]/10 text-foreground",
     urgent: "border-[var(--sell)]/40 bg-[var(--sell)]/10 text-foreground",
     expired: "border-[var(--sell)]/50 bg-[var(--sell)]/15 text-foreground",
     past_due: "border-[var(--sell)]/50 bg-[var(--sell)]/15 text-foreground",
   };
   const Icon =
-    variant === "soft"
+    variant === "active" || variant === "soft"
       ? Sparkles
       : variant === "urgent"
         ? Clock
         : AlertTriangle;
   const iconColor =
-    variant === "soft" ? "text-[var(--hold)]" : "text-[var(--sell)]";
+    variant === "active"
+      ? "text-primary"
+      : variant === "soft"
+        ? "text-[var(--hold)]"
+        : "text-[var(--sell)]";
 
   // Most banner CTAs go DIRECT to Stripe Checkout (no /pricing detour)
   // — the user is already in-app, signed in, and has signaled intent
@@ -135,6 +139,7 @@ export default function TrialBanner() {
   // portal flow, not a checkout flow). Expired-trial users still hit
   // checkout because they have no active subscription to manage.
   type CtaAction =
+    | { kind: "settings" }
     | { kind: "checkout"; tier: "individual" | "active" }
     | { kind: "portal" };
 
@@ -143,6 +148,17 @@ export default function TrialBanner() {
   let ctaAction: CtaAction = { kind: "checkout", tier: "individual" };
 
   switch (variant) {
+    case "active":
+      message = (
+        <>
+          <strong className="font-medium">Free trial active.</strong>{" "}
+          {daysLeft} {daysLeft === 1 ? "day" : "days"} left with full access.
+          Upgrade any time to keep access after the trial.
+        </>
+      );
+      ctaLabel = "Upgrade options";
+      ctaAction = { kind: "settings" };
+      break;
     case "soft":
       message = (
         <>
@@ -193,6 +209,10 @@ export default function TrialBanner() {
   }
 
   async function handleCta() {
+    if (ctaAction.kind === "settings") {
+      window.location.href = "/app/upgrade";
+      return;
+    }
     setBusy(true);
     setBusyError(null);
     try {
