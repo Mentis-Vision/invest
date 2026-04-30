@@ -221,8 +221,15 @@ export default function PricingTiersClient({
                   Upgrade to {t.name}
                 </button>
               ) : (
+                /* Unauthed user clicking Individual / Active — go to
+                   /sign-up but thread next=checkout params so we
+                   POST /api/stripe/checkout automatically once their
+                   account is created. Saves them the manual
+                   /app/settings → upgrade hop. (The trial card hit
+                   the earlier ctaKind==="trial" branch and never
+                   reaches this code path.) */
                 <Link
-                  href={`/sign-up?src=pricing-${t.slug}-${interval}`}
+                  href={`/sign-up?src=pricing-${t.slug}-${interval}&next=checkout&tier=${t.slug}&interval=${interval}`}
                   className="flex w-full items-center justify-center rounded-md bg-foreground px-4 py-2.5 text-[12px] font-semibold text-background transition-colors hover:bg-foreground/85"
                 >
                   Start with {t.name}
