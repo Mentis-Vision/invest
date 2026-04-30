@@ -228,18 +228,18 @@ function templateFor(
       return {
         subject: "Your ClearPath trial has ended",
         html: renderEmailTemplate({
-          preview: "Trial ended. You're on the Free plan now.",
+          preview: "Trial ended. Research access is paused until you upgrade.",
           body: `
             <p>${greeting}</p>
-            <p>Your 30-day trial wrapped up. You&rsquo;re now on the Free plan — most surfaces still work, just with research limits.</p>
-            <p>Linked brokerages, dashboards, account aliases, ticker bar, holdings — all still here. The full three-lens panel + on-demand briefs are gated behind the paid tiers.</p>
-            <p>Whenever you&rsquo;re ready to upgrade, the founder-pricing window is closed but standard prices still apply. No pressure.</p>
+            <p>Your 30-day trial wrapped up. Research access is paused until you upgrade — your account, linked brokerages, dashboards, account aliases, and ticker bar all stay exactly where you left them.</p>
+            <p>The three-lens panels, on-demand briefs, and overnight portfolio review come back the moment you start a plan.</p>
+            <p>The founder-pricing window has closed; standard prices apply. No pressure to act today.</p>
           `,
           ctaLabel: "View plans",
           ctaUrl: pricingUrl,
           footnote: "If you tried ClearPath and it wasn't a fit, I'd love to know why. Just reply.",
         }),
-        text: `Your trial ended. Free plan applies now. Upgrade anytime at ${pricingUrl}`,
+        text: `Your trial ended. Research access is paused until you upgrade. ${pricingUrl}`,
       };
 
     case "WINBACK_D7":

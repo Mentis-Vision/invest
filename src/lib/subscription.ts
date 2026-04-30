@@ -168,24 +168,50 @@ export async function getSubscription(userId: string): Promise<UserSubscription 
  * UIs that show "what tier am I on" still want the raw tier; gating
  * code wants this effective tier.
  */
-export type EffectiveTier = "individual" | "active" | "advisor" | "free";
+/**
+ * Effective tier — what gating logic should treat the user as right
+ * now. Distinct from `subscription.tier` which records what the user
+ * is *paying for* (or 'trial' if they haven't paid). Use this for
+ * cap enforcement; use `subscription.tier` + status for billing UI.
+ *
+ * Hard wall: post-trial users with no paid sub get 'expired' here,
+ * which usage.ts maps to zero AI budget. There's no "Free plan" with
+ * limited research — trial expires → upgrade or stop.
+ */
+export type EffectiveTier =
+  | "trial"
+  | "individual"
+  | "active"
+  | "advisor"
+  | "expired";
 
 export function effectiveTierFor(sub: UserSubscription | null): EffectiveTier {
-  if (!sub) return "free";
+  if (!sub) return "expired";
   const now = Date.now();
   const trialEnd = new Date(sub.trialEndsAt).getTime();
 
   // Active paid subscription wins regardless of trial state.
-  if (sub.status === "active" && (sub.tier === "individual" || sub.tier === "active" || sub.tier === "advisor")) {
+  if (
+    sub.status === "active" &&
+    (sub.tier === "individual" ||
+      sub.tier === "active" ||
+      sub.tier === "advisor")
+  ) {
     return sub.tier;
   }
 
-  // Trial still running — effectively Individual access.
+  // Trial timer still running — apply the dedicated trial budget,
+  // NOT individual. Previously returned 'individual' which over-
+  // budgeted trial users by ~7× ($14 vs the intended $2 trial budget
+  // sized to fit "100 quick / 10 deep / 3 panels per month").
   if (sub.tier === "trial" && trialEnd > now) {
-    return "individual";
+    return "trial";
   }
 
-  return "free";
+  // Trial expired without upgrade, paid sub past_due, or paid sub
+  // canceled. All collapse to the hard wall — research access pauses
+  // until the user upgrades or updates their card.
+  return "expired";
 }
 
 /** Minutes-until-trial-ends helper for UI banners. Returns 0 if expired. */

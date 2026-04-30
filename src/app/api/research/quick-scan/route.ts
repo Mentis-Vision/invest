@@ -8,7 +8,12 @@ import {
   type QuickScanOutput,
 } from "@/lib/ai/schemas";
 import { checkRateLimit, RULES, getClientIp } from "@/lib/rate-limit";
-import { checkUsageCap, recordUsage, TIER_LIMITS } from "@/lib/usage";
+import {
+  checkUsageCap,
+  recordUsage,
+  TIER_LIMITS,
+  usageBlockedJson,
+} from "@/lib/usage";
 import {
   getStockSnapshot,
   formatWarehouseEnhancedDataBlock,
@@ -76,16 +81,11 @@ export async function POST(req: NextRequest) {
   // $29 tier without bumping the ceiling.
   const usage = await checkUsageCap(session.user.id);
   if (!usage.ok) {
-    const limits = TIER_LIMITS[usage.tier] ?? TIER_LIMITS.beta;
-    return NextResponse.json(
-      {
-        error: "monthly_limit",
-        message: `You've reached your monthly AI budget (${limits.label} tier). Resets ${usage.resetAt.toISOString()}.`,
-        tier: usage.tier,
-        resetAt: usage.resetAt,
-      },
-      { status: 402 }
-    );
+    // Hard wall (expired/past_due) → 402 trial_ended; over-cap →
+    // 429 monthly_limit. Single helper formats both so the wire
+    // shape stays identical across all gated routes.
+    const blocked = usageBlockedJson(usage);
+    return NextResponse.json(blocked.body, { status: blocked.status });
   }
 
   let ticker: string;

@@ -100,10 +100,18 @@ export function plaidClient(): PlaidApi {
  * Gross margin on infra stays >93% across all tiers.
  */
 export const PLAID_ITEM_CAPS: Record<Tier, number> = {
+  // "trial" matches the legacy "beta" allocation — same loss-leader
+  // budget, just renamed for the post-Stripe model. "beta" stays in
+  // for legacy user.tier='beta' rows that haven't been migrated.
+  trial: 3,
   beta: 3,
   individual: 5,
   active: 10,
   advisor: 50,
+  // Hard wall: no NEW Plaid Items can be linked in the expired
+  // state. Existing Items keep working — this only gates link-token
+  // creation, not data sync.
+  expired: 0,
 };
 
 /**
