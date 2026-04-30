@@ -1,6 +1,10 @@
 import { pool } from "./db";
 import { log, errorInfo } from "./log";
-import { effectiveTierFor, getSubscription } from "./subscription";
+import {
+  effectiveAccessFor,
+  getSubscription,
+  type AccessBlockedReason,
+} from "./subscription";
 
 /**
  * Per-user monthly usage + cost cap.
@@ -135,23 +139,39 @@ export function estimateCostCents(model: string, tokens: number): number {
 
 export type UsageCheck =
   | { ok: true; tier: Tier; remainingTokens: number; remainingCents: number; resetAt: Date }
-  | { ok: false; reason: "tokens" | "cost" | "expired"; tier: Tier; resetAt: Date };
+  | {
+      ok: false;
+      reason: "tokens" | "cost" | "expired";
+      tier: Tier;
+      resetAt: Date;
+      /**
+       * Only populated when `reason === "expired"`. Distinguishes the
+       * three hard-wall states so `usageBlockedJson` can emit the right
+       * error code + CTA. Undefined for "tokens"/"cost" reasons.
+       */
+      blockedReason?: AccessBlockedReason;
+    };
+
+type ResolvedAccess = {
+  tier: Tier;
+  blockedReason: AccessBlockedReason | null;
+};
 
 /**
- * Resolve the user's effective tier from the subscription system.
- * Falls back to legacy `user.tier` if no subscription row exists yet
- * (users created before the Stripe integration). Always returns
- * something — we never throw, since downstream gating depends on
- * having a definitive tier value.
+ * Resolve the user's effective tier and (if blocked) the reason from
+ * the subscription system. Falls back to legacy `user.tier` if no
+ * subscription row exists yet (users created before the Stripe
+ * integration). Always returns something — we never throw, since
+ * downstream gating depends on having a definitive value.
  */
-async function resolveUserTier(userId: string): Promise<Tier> {
+async function resolveUserAccess(userId: string): Promise<ResolvedAccess> {
   try {
     const sub = await getSubscription(userId);
     if (sub) {
-      const eff = effectiveTierFor(sub);
-      // effectiveTierFor returns an EffectiveTier — every value is a
-      // valid Tier in this module's union, so the cast is safe.
-      return eff as Tier;
+      const access = effectiveAccessFor(sub);
+      // EffectiveTier values are all valid Tier values in this
+      // module's union, so the cast is safe.
+      return { tier: access.tier as Tier, blockedReason: access.blockedReason };
     }
   } catch (err) {
     // Subscription read failed — fall through to legacy path. Don't
@@ -181,13 +201,18 @@ async function resolveUserTier(userId: string): Promise<Tier> {
       t === "advisor" ||
       t === "expired"
     ) {
-      return t;
+      return {
+        tier: t,
+        // Legacy `user.tier === "expired"` rows have no Stripe state
+        // to inspect — assume trial-expired (the historical cause).
+        blockedReason: t === "expired" ? "trial_expired" : null,
+      };
     }
   } catch {
     /* fall through */
   }
   // Default to trial — the cheapest budget, least dangerous default.
-  return "trial";
+  return { tier: "trial", blockedReason: null };
 }
 
 /**
@@ -201,30 +226,61 @@ async function resolveUserTier(userId: string): Promise<Tier> {
  * counters carry over if they upgrade to Active mid-month).
  */
 export async function checkUsageCap(userId: string): Promise<UsageCheck> {
-  const tier = await resolveUserTier(userId);
+  // Tier resolution and counter read are independent — they query
+  // different tables (`user_subscription` vs `user`) and neither needs
+  // the other's result as input. Run them in parallel to halve the
+  // pre-flight latency on the hot path (every research request hits
+  // this). Worst case for an expired user we did one wasted SELECT;
+  // the latency win for the common paying-customer case is worth it.
+  let access: ResolvedAccess;
+  let counterRows: Array<{
+    monthlyTokens: string | number;
+    monthlyCostCents: number;
+    monthlyResetAt: Date | null;
+  }>;
+  try {
+    const [accessResult, counterResult] = await Promise.all([
+      resolveUserAccess(userId),
+      pool.query<{
+        monthlyTokens: string | number;
+        monthlyCostCents: number;
+        monthlyResetAt: Date | null;
+      }>(
+        `SELECT "monthlyTokens", "monthlyCostCents", "monthlyResetAt"
+         FROM "user" WHERE id = $1`,
+        [userId]
+      ),
+    ]);
+    access = accessResult;
+    counterRows = counterResult.rows;
+  } catch (err) {
+    log.error("usage", "checkUsageCap failed", { userId, ...errorInfo(err) });
+    // Fail closed on errors — we cannot verify the cap, so block.
+    // Better to show an error than to accidentally burn the wallet.
+    return { ok: false, reason: "cost", tier: "trial", resetAt: new Date() };
+  }
 
-  // Hard-wall tiers — short-circuit before touching counters. Routes
-  // surface this with "trial ended, upgrade to continue" copy rather
-  // than the generic "you hit your monthly limit" message.
+  const { tier, blockedReason } = access;
+
+  // Hard-wall tiers — short-circuit before evaluating counters. Routes
+  // surface this with the right CTA based on `blockedReason`
+  // (upgrade vs update card vs reactivate).
   if (tier === "expired") {
-    return { ok: false, reason: "expired", tier, resetAt: new Date() };
+    return {
+      ok: false,
+      reason: "expired",
+      tier,
+      resetAt: new Date(),
+      blockedReason: blockedReason ?? "trial_expired",
+    };
   }
 
   try {
-    const { rows } = await pool.query(
-      `SELECT "monthlyTokens", "monthlyCostCents", "monthlyResetAt"
-       FROM "user" WHERE id = $1`,
-      [userId]
-    );
-    if (rows.length === 0) {
+    if (counterRows.length === 0) {
       return { ok: false, reason: "cost", tier, resetAt: new Date() };
     }
 
-    const row = rows[0] as {
-      monthlyTokens: string | number;
-      monthlyCostCents: number;
-      monthlyResetAt: Date | null;
-    };
+    const row = counterRows[0];
     const limits = TIER_LIMITS[tier] ?? TIER_LIMITS.trial;
     const now = new Date();
     // First-time users (post-Stripe) won't have monthlyResetAt set —
@@ -270,7 +326,10 @@ export async function checkUsageCap(userId: string): Promise<UsageCheck> {
       resetAt,
     };
   } catch (err) {
-    log.error("usage", "checkUsageCap failed", { userId, ...errorInfo(err) });
+    log.error("usage", "checkUsageCap counter eval failed", {
+      userId,
+      ...errorInfo(err),
+    });
     // Fail closed on errors — we cannot verify the cap, so block.
     // Better to show an error than to accidentally burn the wallet.
     return { ok: false, reason: "cost", tier, resetAt: new Date() };
@@ -283,11 +342,13 @@ export async function checkUsageCap(userId: string): Promise<UsageCheck> {
  * shape stays consistent across surfaces — the client-side handlers
  * branch on `error` to pick the right CTA copy.
  *
- * Three possible `error` values surface to the client:
+ * Four possible `error` values surface to the client:
  *   - "trial_ended"  — hard wall (expired trial, no paid sub).
  *                      CTA: "Upgrade to continue."
  *   - "past_due"     — paid sub with failed renewal payment.
  *                      CTA: "Update payment method."
+ *   - "canceled"     — paid sub canceled, period ended.
+ *                      CTA: "Reactivate to continue."
  *   - "monthly_limit"— actual usage cap hit (tokens or cost).
  *                      CTA: "Resets [date]."
  *
@@ -302,9 +363,32 @@ export function usageBlockedJson(check: Extract<UsageCheck, { ok: false }>): {
   const limits = TIER_LIMITS[check.tier] ?? TIER_LIMITS.trial;
 
   if (check.reason === "expired") {
-    // Differentiate trial-expired vs paid-but-past_due in copy.
-    // Both currently return tier="expired" but a future refinement
-    // could split them — leaving the door open here.
+    // Branch on the underlying billing state so paying customers with
+    // a failed renewal don't get told their "trial" ended — that copy
+    // is wrong for them and routes them to the wrong action (upgrade
+    // page instead of update-payment portal).
+    if (check.blockedReason === "past_due") {
+      return {
+        body: {
+          error: "past_due",
+          message:
+            "Your last payment didn't go through. Update your card to continue.",
+          tier: check.tier,
+        },
+        status: 402,
+      };
+    }
+    if (check.blockedReason === "canceled") {
+      return {
+        body: {
+          error: "canceled",
+          message:
+            "Your subscription was canceled. Reactivate to continue running research.",
+          tier: check.tier,
+        },
+        status: 402,
+      };
+    }
     return {
       body: {
         error: "trial_ended",

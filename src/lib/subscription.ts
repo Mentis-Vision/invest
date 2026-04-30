@@ -185,33 +185,67 @@ export type EffectiveTier =
   | "advisor"
   | "expired";
 
-export function effectiveTierFor(sub: UserSubscription | null): EffectiveTier {
-  if (!sub) return "expired";
+/**
+ * Why the user is on the hard wall — feeds the right CTA copy
+ * downstream (upgrade vs update card vs reactivate). `null` when the
+ * user has access. Distinct from the tier itself because all three
+ * blocked states collapse to `tier="expired"` for budget purposes
+ * but need different UX.
+ */
+export type AccessBlockedReason = "trial_expired" | "past_due" | "canceled";
+
+export type EffectiveAccess = {
+  tier: EffectiveTier;
+  blockedReason: AccessBlockedReason | null;
+};
+
+export function effectiveAccessFor(
+  sub: UserSubscription | null
+): EffectiveAccess {
+  if (!sub) return { tier: "expired", blockedReason: "trial_expired" };
   const now = Date.now();
   const trialEnd = new Date(sub.trialEndsAt).getTime();
 
-  // Active paid subscription wins regardless of trial state.
+  // Active paid subscription wins regardless of trial state. Stripe
+  // emits status="trialing" while a paid plan is in its trial window
+  // (e.g. an individual sub created with a 14-day Stripe trial); the
+  // user is already paying intent and should get full tier access.
   if (
-    sub.status === "active" &&
+    (sub.status === "active" || sub.status === "trialing") &&
     (sub.tier === "individual" ||
       sub.tier === "active" ||
       sub.tier === "advisor")
   ) {
-    return sub.tier;
+    return { tier: sub.tier, blockedReason: null };
   }
 
-  // Trial timer still running — apply the dedicated trial budget,
-  // NOT individual. Previously returned 'individual' which over-
-  // budgeted trial users by ~7× ($14 vs the intended $2 trial budget
-  // sized to fit "100 quick / 10 deep / 3 panels per month").
+  // No-card trial timer still running — apply the dedicated trial
+  // budget, NOT individual. Previously returned 'individual' which
+  // over-budgeted trial users by ~7× ($14 vs the intended $2 trial
+  // budget sized to fit "100 quick / 10 deep / 3 panels per month").
   if (sub.tier === "trial" && trialEnd > now) {
-    return "trial";
+    return { tier: "trial", blockedReason: null };
   }
 
-  // Trial expired without upgrade, paid sub past_due, or paid sub
-  // canceled. All collapse to the hard wall — research access pauses
-  // until the user upgrades or updates their card.
-  return "expired";
+  // Hard wall — research access pauses until the user takes action.
+  // Distinguish the reason so callers (usage.ts, banners) can show
+  // upgrade vs update-payment-method vs reactivate copy.
+  const blockedReason: AccessBlockedReason =
+    sub.status === "past_due"
+      ? "past_due"
+      : sub.status === "canceled"
+        ? "canceled"
+        : "trial_expired";
+  return { tier: "expired", blockedReason };
+}
+
+/**
+ * Tier-only convenience for callers that don't need the block reason
+ * (e.g. UI that shows "what tier am I on"). Gating code that needs to
+ * branch CTA copy should call `effectiveAccessFor` instead.
+ */
+export function effectiveTierFor(sub: UserSubscription | null): EffectiveTier {
+  return effectiveAccessFor(sub).tier;
 }
 
 /** Minutes-until-trial-ends helper for UI banners. Returns 0 if expired. */
