@@ -8,7 +8,11 @@ import { log, errorInfo } from "@/lib/log";
 /**
  * POST /api/stripe/checkout
  *
- * Body: { tier: "individual" | "active" | "advisor", interval: "monthly" | "annual" }
+ * Body: {
+ *   tier: "individual" | "active" | "advisor",
+ *   interval: "monthly" | "annual",
+ *   returnTo?: "/app/settings..."
+ * }
  *
  * Returns: { url: string }  — Stripe-hosted Checkout URL the client redirects to.
  *
@@ -18,6 +22,28 @@ import { log, errorInfo } from "@/lib/log";
  * payment, Stripe redirects them back to /app/settings?upgraded=1
  * and our webhook updates the user_subscription row.
  */
+function safeSettingsReturnPath(value: unknown): string {
+  if (typeof value !== "string") return "/app/settings#billing";
+  try {
+    const parsed = new URL(value, "https://clearpath.local");
+    if (
+      parsed.origin !== "https://clearpath.local" ||
+      parsed.pathname !== "/app/settings"
+    ) {
+      return "/app/settings#billing";
+    }
+    return `${parsed.pathname}${parsed.search}${parsed.hash || "#billing"}`;
+  } catch {
+    return "/app/settings#billing";
+  }
+}
+
+function withReturnFlag(path: string, flag: "upgraded" | "canceled"): string {
+  const [pathAndSearch, hash] = path.split("#", 2);
+  const separator = pathAndSearch.includes("?") ? "&" : "?";
+  return `${pathAndSearch}${separator}${flag}=1${hash ? `#${hash}` : ""}`;
+}
+
 export async function POST(req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) {
@@ -31,7 +57,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let body: { tier?: Tier; interval?: Interval } = {};
+  let body: { tier?: Tier; interval?: Interval; returnTo?: string } = {};
   try {
     body = await req.json();
   } catch {
@@ -77,6 +103,7 @@ export async function POST(req: NextRequest) {
     }
 
     const baseUrl = process.env.BETTER_AUTH_URL || req.nextUrl.origin;
+    const returnTo = safeSettingsReturnPath(body.returnTo);
     const checkout = await stripe().checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
@@ -84,8 +111,8 @@ export async function POST(req: NextRequest) {
       // Allow a coupon at checkout — handy for the "founder pricing"
       // 25%-off lock-in. Codes are managed in the Stripe dashboard.
       allow_promotion_codes: true,
-      success_url: `${baseUrl}/app/settings?upgraded=1`,
-      cancel_url: `${baseUrl}/pricing?canceled=1`,
+      success_url: `${baseUrl}${withReturnFlag(returnTo, "upgraded")}`,
+      cancel_url: `${baseUrl}${withReturnFlag(returnTo, "canceled")}`,
       // Mirror the user/tier/interval into the session metadata so
       // we can correlate the resulting Checkout event with our DB
       // even if customer metadata gets out of sync.
