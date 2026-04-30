@@ -192,213 +192,207 @@ export default function SettingsClient({
         />
       </div>
 
-      {/* User controls — Notifications and Preferences are the two
-          recurring settings cards. They share a row on desktop so the
-          investment-values checks live with the rest of the profile
-          preferences, not as a detached card. */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <NotificationsSection
-          initialOptOuts={{
-            weeklyDigestOptOut,
-            weeklyBriefOptOut,
-          }}
-          className="h-full"
-        />
-        <Card className="flex h-full flex-col">
+      <NotificationsSection
+        initialOptOuts={{
+          weeklyDigestOptOut,
+          weeklyBriefOptOut,
+        }}
+        layout="grid"
+      />
+
+      {/* Investment profile — Preferences carries the broader research
+          context on the left. The right column holds risk, horizon, and
+          goals as one scan path, keeping profile decisions together. */}
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(360px,0.92fr)]">
+        <Card className="h-full">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Preferences</CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-1 flex-col space-y-4">
-          <div>
-            <label className="mb-1.5 block text-xs font-medium">
-              Dashboard density
-            </label>
-            <div className="grid gap-2 sm:grid-cols-3">
-              {(
-                [
-                  {
-                    value: "basic",
-                    label: "Basic",
-                    desc: "Price, P/E, yield, top headlines — calm and digestible.",
-                  },
-                  {
-                    value: "standard",
-                    label: "Standard",
-                    desc: "Adds forward P/E, P/B, 50d/200d MA, beta, sentiment %.",
-                  },
-                  {
-                    value: "advanced",
-                    label: "Advanced",
-                    desc: "Everything — RSI/MACD/Bollinger, full fundamentals, Form 4 trail.",
-                  },
-                ] as const
-              ).map((opt) => {
-                const active =
-                  (profile.preferences.density ?? "basic") === opt.value;
+          <CardContent className="space-y-4">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium">
+                Dashboard density
+              </label>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {(
+                  [
+                    {
+                      value: "basic",
+                      label: "Basic",
+                      desc: "Price, P/E, yield, top headlines — calm and digestible.",
+                    },
+                    {
+                      value: "standard",
+                      label: "Standard",
+                      desc: "Adds forward P/E, P/B, 50d/200d MA, beta, sentiment %.",
+                    },
+                    {
+                      value: "advanced",
+                      label: "Advanced",
+                      desc: "Everything — RSI/MACD/Bollinger, full fundamentals, Form 4 trail.",
+                    },
+                  ] as const
+                ).map((opt) => {
+                  const active =
+                    (profile.preferences.density ?? "basic") === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() =>
+                        setProfile((p) => ({
+                          ...p,
+                          preferences: {
+                            ...p.preferences,
+                            density: opt.value,
+                          },
+                        }))
+                      }
+                      className={`flex flex-col items-start rounded-md border p-3 text-left text-sm transition-colors ${
+                        active
+                          ? "border-[var(--buy)]/40 bg-[var(--buy)]/5"
+                          : "border-border hover:bg-accent/40"
+                      }`}
+                    >
+                      <span className="font-medium">{opt.label}</span>
+                      <span className="mt-1 text-xs text-muted-foreground">
+                        {opt.desc}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                Analyst prompts always receive the full warehouse view —
+                this only changes what you see on the dashboard.
+              </p>
+            </div>
+
+            <div>
+              <div className="mb-1.5 flex items-center gap-2 text-xs font-medium">
+                <Leaf className="h-3.5 w-3.5 text-primary" />
+                Investment values
+              </div>
+              <div className="grid gap-2 lg:grid-cols-2">
+                {INVESTMENT_VALUE_FLAGS.map((item) => {
+                  const checked = !!profile.preferences[item.key];
+                  return (
+                    <label
+                      key={item.key}
+                      htmlFor={`preference-${item.key}`}
+                      className="flex cursor-pointer items-start gap-3 rounded-md border border-border bg-background/60 px-3 py-3 text-sm hover:border-primary/40"
+                    >
+                      <input
+                        id={`preference-${item.key}`}
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() =>
+                          setProfile((p) => ({
+                            ...p,
+                            preferences: {
+                              ...p.preferences,
+                              [item.key]: !checked,
+                            },
+                          }))
+                        }
+                        className="mt-0.5 h-4 w-4 cursor-pointer accent-primary"
+                      />
+                      <span className="min-w-0">
+                        <span className="block font-medium text-foreground">
+                          {item.title}
+                        </span>
+                        <span className="mt-0.5 block text-[12px] leading-relaxed text-muted-foreground">
+                          {item.description}
+                        </span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                These are context settings, not filters. ClearPath still
+                surfaces the full analysis and flags preference mismatches.
+              </p>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium">
+                Excluded sectors
+                <span className="ml-2 font-normal text-muted-foreground">
+                  comma-separated, e.g. <em>Tobacco, Firearms, Gambling</em>
+                </span>
+              </label>
+              <Input
+                value={excludedInput}
+                onChange={(e) => setExcludedInput(e.target.value)}
+                placeholder="Leave blank for no exclusions"
+              />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Analysts will note when a ticker falls in these sectors.
+                They will <em>not</em> skip the analysis — ClearPath still
+                shows you the full view.
+              </p>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium">
+                Notes for the analysts{" "}
+                <span className="font-normal text-muted-foreground">
+                  (optional, up to 500 chars)
+                </span>
+              </label>
+              <textarea
+                value={notesInput}
+                onChange={(e) => setNotesInput(e.target.value.slice(0, 500))}
+                rows={3}
+                className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm outline-none focus:border-foreground/40"
+                placeholder="Any context that should shade the analysis (e.g. 'retired, rely on dividends', 'concentrated in employer stock')"
+              />
+              <div className="mt-1 text-[10px] text-muted-foreground">
+                {notesInput.length} / 500
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="flex h-full flex-col gap-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Risk tolerance</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {RISK_OPTIONS.map((r) => {
+                const active = profile.riskTolerance === r.value;
                 return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() =>
-                      setProfile((p) => ({
-                        ...p,
-                        preferences: {
-                          ...p.preferences,
-                          density: opt.value,
-                        },
-                      }))
-                    }
-                    className={`flex flex-col items-start rounded-md border p-3 text-left text-sm transition-colors ${
+                  <label
+                    key={r.value}
+                    className={`flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors ${
                       active
                         ? "border-[var(--buy)]/40 bg-[var(--buy)]/5"
                         : "border-border hover:bg-accent/40"
                     }`}
                   >
-                    <span className="font-medium">{opt.label}</span>
-                    <span className="mt-1 text-xs text-muted-foreground">
-                      {opt.desc}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-            <p className="mt-1.5 text-[11px] text-muted-foreground">
-              Analyst prompts always receive the full warehouse view —
-              this only changes what you see on the dashboard.
-            </p>
-          </div>
-
-          <div>
-            <div className="mb-1.5 flex items-center gap-2 text-xs font-medium">
-              <Leaf className="h-3.5 w-3.5 text-primary" />
-              Investment values
-            </div>
-            <div className="grid gap-2 xl:grid-cols-2">
-              {INVESTMENT_VALUE_FLAGS.map((item) => {
-                const checked = !!profile.preferences[item.key];
-                return (
-                  <label
-                    key={item.key}
-                    htmlFor={`preference-${item.key}`}
-                    className="flex cursor-pointer items-start gap-3 rounded-md border border-border bg-background/60 px-3 py-3 text-sm hover:border-primary/40"
-                  >
                     <input
-                      id={`preference-${item.key}`}
-                      type="checkbox"
-                      checked={checked}
+                      type="radio"
+                      name="risk"
+                      className="mt-0.5"
+                      checked={active}
                       onChange={() =>
-                        setProfile((p) => ({
-                          ...p,
-                          preferences: {
-                            ...p.preferences,
-                            [item.key]: !checked,
-                          },
-                        }))
+                        setProfile((p) => ({ ...p, riskTolerance: r.value }))
                       }
-                      className="mt-0.5 h-4 w-4 cursor-pointer accent-primary"
                     />
-                    <span className="min-w-0">
-                      <span className="block font-medium text-foreground">
-                        {item.title}
-                      </span>
-                      <span className="mt-0.5 block text-[12px] leading-relaxed text-muted-foreground">
-                        {item.description}
-                      </span>
-                    </span>
+                    <div>
+                      <div className="text-sm font-medium">{r.label}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {r.desc}
+                      </div>
+                    </div>
                   </label>
                 );
               })}
-            </div>
-            <p className="mt-1.5 text-[11px] text-muted-foreground">
-              These are context settings, not filters. ClearPath still
-              surfaces the full analysis and flags preference mismatches.
-            </p>
-          </div>
+            </CardContent>
+          </Card>
 
-          <div>
-            <label className="mb-1.5 block text-xs font-medium">
-              Excluded sectors
-              <span className="ml-2 font-normal text-muted-foreground">
-                comma-separated, e.g. <em>Tobacco, Firearms, Gambling</em>
-              </span>
-            </label>
-            <Input
-              value={excludedInput}
-              onChange={(e) => setExcludedInput(e.target.value)}
-              placeholder="Leave blank for no exclusions"
-            />
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              Analysts will note when a ticker falls in these sectors.
-              They will <em>not</em> skip the analysis — ClearPath still
-              shows you the full view.
-            </p>
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-xs font-medium">
-              Notes for the analysts{" "}
-              <span className="font-normal text-muted-foreground">
-                (optional, up to 500 chars)
-              </span>
-            </label>
-            <textarea
-              value={notesInput}
-              onChange={(e) => setNotesInput(e.target.value.slice(0, 500))}
-              rows={3}
-              className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm outline-none focus:border-foreground/40"
-              placeholder="Any context that should shade the analysis (e.g. 'retired, rely on dividends', 'concentrated in employer stock')"
-            />
-            <div className="mt-1 text-[10px] text-muted-foreground">
-              {notesInput.length} / 500
-            </div>
-          </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Investing profile — Risk tolerance (tall, 3 stacked options)
-          on the left; Time horizon + Goals stacked on the right so
-          the column heights match. Inner stack uses h-full + flex-1
-          cards so they grow to fill whatever height Risk tolerance
-          establishes — keeps the left/right halves symmetrical
-          regardless of content length. */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Risk tolerance</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {RISK_OPTIONS.map((r) => {
-              const active = profile.riskTolerance === r.value;
-              return (
-                <label
-                  key={r.value}
-                  className={`flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors ${
-                    active
-                      ? "border-[var(--buy)]/40 bg-[var(--buy)]/5"
-                      : "border-border hover:bg-accent/40"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="risk"
-                    className="mt-0.5"
-                    checked={active}
-                    onChange={() =>
-                      setProfile((p) => ({ ...p, riskTolerance: r.value }))
-                    }
-                  />
-                  <div>
-                    <div className="text-sm font-medium">{r.label}</div>
-                    <div className="text-xs text-muted-foreground">{r.desc}</div>
-                  </div>
-                </label>
-              );
-            })}
-          </CardContent>
-        </Card>
-
-        <div className="flex h-full flex-col gap-4">
           <Card className="flex flex-1 flex-col">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Time horizon</CardTitle>
@@ -543,6 +537,7 @@ type ToggleListCardProps<K extends string> = {
   savingKey: K | null;
   /** Inline error string (rendered red below the list). */
   error: string | null;
+  layout?: "stack" | "grid";
   className?: string;
 };
 
@@ -555,6 +550,7 @@ function ToggleListCard<K extends string>({
   onToggle,
   savingKey,
   error,
+  layout = "stack",
   className,
 }: ToggleListCardProps<K>) {
   return (
@@ -565,7 +561,13 @@ function ToggleListCard<K extends string>({
           {cardTitle}
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2.5 text-sm">
+      <CardContent
+        className={
+          layout === "grid"
+            ? "grid gap-2.5 text-sm lg:grid-cols-2"
+            : "space-y-2.5 text-sm"
+        }
+      >
         {items.map((item) => {
           const value = values[item.key];
           // For opt-out flags, "checked" reads "yes I want this email,"
@@ -636,9 +638,11 @@ const NOTIFICATION_FLAGS: ReadonlyArray<ToggleItem<NotificationFlag>> = [
 
 function NotificationsSection({
   initialOptOuts,
+  layout,
   className,
 }: {
   initialOptOuts: Record<NotificationFlag, boolean>;
+  layout?: "stack" | "grid";
   className?: string;
 }) {
   const [optOuts, setOptOuts] = useState(initialOptOuts);
@@ -688,6 +692,7 @@ function NotificationsSection({
       onToggle={handleToggle}
       savingKey={savingKey}
       error={err}
+      layout={layout}
       className={className}
     />
   );
