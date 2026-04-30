@@ -10,16 +10,12 @@ Running list of everything that was tabled during the P1–P5 implementation pus
 
 > Items here have a target date. Check this section first when you sit down to work.
 
-### Monday 2026-04-27 — raise E2E smoke thresholds
+### ~~Monday 2026-04-27 — raise E2E smoke thresholds~~ DONE 2026-04-29
 
-After two warehouse refresh cycles (cron runs daily 14:00 UTC), the seed-universe expansion should have populated `ticker_market_daily` with 600+ rows. Raise the transitional thresholds back to meaningful production floors:
+Raised in the same PR that closed this item. Verified prerequisites first via Vercel + Neon MCP: warehouse had 3,329 rows / 662 tickers, sitemap had 675 URLs — both well above the new 100 floor.
 
-- **`src/lib/e2e-smoke.ts`** — `Sitemap returns valid XML` test: change `urlCount > 5` → `urlCount > 100`
-- **`src/lib/e2e-smoke.ts`** — `Warehouse has fresh market rows` test: change `count >= 5` → `count >= 100`
-
-Both tests have inline comments noting the escalation. ~5 min, one PR. Re-run the smoke cron afterwards (`?dry=1`) to confirm both stay green at the new floor.
-
-If sitemap is still <100 URLs on Monday, the warehouse refresh isn't picking up the new seed list — investigate `src/lib/warehouse/refresh.ts` orchestrator + `src/lib/warehouse/universe.ts` `getTickerUniverse()` before raising the floor.
+- `src/lib/e2e-smoke.ts` `Sitemap returns valid XML`: `urlCount > 5` → `urlCount > 100`
+- `src/lib/e2e-smoke.ts` `Warehouse has fresh market rows`: `count >= 5` → `count >= 100`
 
 ### Decision engine follow-ups
 

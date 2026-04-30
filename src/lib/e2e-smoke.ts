@@ -190,7 +190,7 @@ const TESTS: SmokeTest[] = [
         "sitemap missing <urlset> root element"
       );
       const urlCount = (body.match(/<loc>/g) ?? []).length;
-      assert(urlCount > 5, `sitemap suspiciously small: ${urlCount} URLs`);
+      assert(urlCount > 100, `sitemap suspiciously small: ${urlCount} URLs`);
       return `${urlCount} URLs in sitemap`;
     },
   },
@@ -434,14 +434,9 @@ const TESTS: SmokeTest[] = [
           WHERE as_of >= CURRENT_DATE - INTERVAL '2 days'`
       );
       const count = rows[0]?.count ?? 0;
-      // Floor of 5 keeps the test useful while warehouse-coverage
-      // expansion is still ramping. Once the seed-universe refresh has
-      // run a few cycles and steady-state is ~600 tickers, raise this
-      // to >=100 — that's the real "the cron is firing" signal.
-      // Tracked: handoff/2026-04-24-marketing-visibility.md.
       assert(
-        count >= 5,
-        `only ${count} fresh market rows (expected >=5)`
+        count >= 100,
+        `only ${count} fresh market rows (expected >=100)`
       );
       return `${count} fresh tickers`;
     },
