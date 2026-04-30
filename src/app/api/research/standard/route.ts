@@ -3,7 +3,12 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { runSingleAnalyst, runBullBearDebate } from "@/lib/ai/consensus";
 import { checkRateLimit, RULES, getClientIp } from "@/lib/rate-limit";
-import { checkUsageCap, recordUsage, TIER_LIMITS } from "@/lib/usage";
+import {
+  checkUsageCap,
+  recordUsage,
+  TIER_LIMITS,
+  usageBlockedJson,
+} from "@/lib/usage";
 import {
   getStockSnapshot,
   formatWarehouseEnhancedDataBlock,
@@ -69,16 +74,11 @@ export async function POST(req: NextRequest) {
 
   const usage = await checkUsageCap(session.user.id);
   if (!usage.ok) {
-    const limits = TIER_LIMITS[usage.tier] ?? TIER_LIMITS.beta;
-    return NextResponse.json(
-      {
-        error: "monthly_limit",
-        message: `You've reached your monthly AI budget (${limits.label} tier). Resets ${usage.resetAt.toISOString()}.`,
-        tier: usage.tier,
-        resetAt: usage.resetAt,
-      },
-      { status: 402 }
-    );
+    // Single helper formats both hard-wall (trial_ended, 402) and
+    // over-cap (monthly_limit, 429) responses identically across all
+    // gated routes. See src/lib/usage.ts.
+    const blocked = usageBlockedJson(usage);
+    return NextResponse.json(blocked.body, { status: blocked.status });
   }
 
   let ticker: string;

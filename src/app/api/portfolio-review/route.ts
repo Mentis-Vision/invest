@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { checkRateLimit, RULES, getClientIp } from "@/lib/rate-limit";
-import { checkUsageCap, TIER_LIMITS } from "@/lib/usage";
+import { checkUsageCap, TIER_LIMITS, usageBlockedJson } from "@/lib/usage";
 import {
   generatePortfolioReview,
   getCachedPortfolioReview,
@@ -57,14 +57,10 @@ export async function GET() {
     // most days users hit the cache.
     const cap = await checkUsageCap(session.user.id);
     if (!cap.ok) {
-      return NextResponse.json(
-        {
-          error: "monthly_limit",
-          message: `You've reached your monthly budget (${TIER_LIMITS[cap.tier].label} tier). Tomorrow's nightly run won't count against the cap.`,
-          resetAt: cap.resetAt,
-        },
-        { status: 402 }
-      );
+      // Hard wall (expired/past_due) → 402 trial_ended; over-cap →
+      // 429 monthly_limit. Single helper formats both.
+      const blocked = usageBlockedJson(cap);
+      return NextResponse.json(blocked.body, { status: blocked.status });
     }
     const review = await generatePortfolioReview(session.user.id);
     return NextResponse.json({ ...review, cached: false });
@@ -126,14 +122,10 @@ export async function POST(req: NextRequest) {
 
   const cap = await checkUsageCap(userId);
   if (!cap.ok) {
-    return NextResponse.json(
-      {
-        error: "monthly_limit",
-        message: `You've reached your monthly budget (${TIER_LIMITS[cap.tier].label} tier).`,
-        resetAt: cap.resetAt,
-      },
-      { status: 402 }
-    );
+    // Hard wall (expired/past_due) → 402 trial_ended; over-cap →
+    // 429 monthly_limit. Single helper formats both.
+    const blocked = usageBlockedJson(cap);
+    return NextResponse.json(blocked.body, { status: blocked.status });
   }
 
   try {

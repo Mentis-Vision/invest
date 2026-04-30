@@ -24,6 +24,7 @@ import {
   recordBatchUsage,
   recordUsage,
   TIER_LIMITS,
+  usageBlockedJson,
 } from "@/lib/usage";
 import { log, errorInfo } from "@/lib/log";
 import {
@@ -230,23 +231,18 @@ export async function POST(req: NextRequest) {
 
   const cap = await checkUsageCap(userId);
   if (!cap.ok) {
+    // Telemetry kept on this surface — useful for triaging "why are
+    // users hitting the wall" without grepping multiple routes.
     log.info("research", "usage cap hit", {
       userId,
       reason: cap.reason,
       tier: cap.tier,
     });
-    return NextResponse.json(
-      {
-        error: "monthly_limit",
-        message:
-          cap.reason === "tokens"
-            ? `You've used this month's research allowance (${TIER_LIMITS[cap.tier].label} tier). Resets ${cap.resetAt.toISOString()}.`
-            : `You've reached your monthly research budget (${TIER_LIMITS[cap.tier].label} tier). Resets ${cap.resetAt.toISOString()}.`,
-        resetAt: cap.resetAt,
-        tier: cap.tier,
-      },
-      { status: 402 }
-    );
+    // Hard wall (expired/past_due) → 402 trial_ended; over-cap →
+    // 429 monthly_limit. Single helper formats both so the wire
+    // shape stays identical across all gated routes.
+    const blocked = usageBlockedJson(cap);
+    return NextResponse.json(blocked.body, { status: blocked.status });
   }
   // Capture usage-cap fields into locals so TS keeps the narrowing inside
   // the nested runPipeline closure.

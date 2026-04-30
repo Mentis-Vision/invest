@@ -28,7 +28,17 @@ import type {
 
 export type BillingProps = {
   tier: "trial" | "free" | "individual" | "active" | "advisor";
-  effectiveTier: "individual" | "active" | "advisor" | "free";
+  // Effective tier widened to include "trial" and "expired" alongside
+  // the paid tiers — matches EffectiveTier in subscription.ts after
+  // the hard-wall transition. "free" stays in the union for legacy
+  // compatibility but new code paths emit "expired" instead.
+  effectiveTier:
+    | "trial"
+    | "individual"
+    | "active"
+    | "advisor"
+    | "expired"
+    | "free";
   status: "trialing" | "active" | "past_due" | "canceled" | "incomplete";
   trialEndsAt: string | null;
   currentPeriodEnd: string | null;
