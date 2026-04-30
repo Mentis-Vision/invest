@@ -181,17 +181,22 @@ export default function SettingsClient({
         </CardContent>
       </Card>
 
-      {/* Billing — sits up top because trial countdown is the highest-
-          urgency thing on the page when relevant, and "what tier am I
-          on" is what a paying user comes here to confirm. */}
-      <BillingSection billing={billing} />
+      {/* Account status — billing and 2FA are the highest-signal
+          account controls, so keep them paired above the preference
+          editor instead of letting billing dominate the full row. */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <BillingSection billing={billing} className="h-full" />
+        <TwoFactorSection
+          initialEnabled={twoFactorEnabled}
+          className="h-full"
+        />
+      </div>
 
-      {/* Row 1 — Account-level controls. Notifications (the most
-          frequently touched card) on the left so it's first to land
-          on. The right column stacks 2FA above Investment values —
-          security still sits above the ESG/values toggle so it stays
-          above-the-fold even when the column is narrow. */}
-      <div className="grid gap-4 md:grid-cols-2">
+      {/* User controls — Notifications and Preferences are the two
+          recurring settings cards. They share a row on desktop so the
+          investment-values checks live with the rest of the profile
+          preferences, not as a detached card. */}
+      <div className="grid gap-4 lg:grid-cols-2">
         <NotificationsSection
           initialOptOuts={{
             weeklyDigestOptOut,
@@ -199,25 +204,11 @@ export default function SettingsClient({
           }}
           className="h-full"
         />
-        <div className="flex flex-col gap-4">
-          <TwoFactorSection initialEnabled={twoFactorEnabled} />
-          <InvestmentValuesSection
-            profile={profile}
-            onProfileSaved={(saved) => setProfile(saved)}
-          />
-        </div>
-      </div>
-
-      {/* Preferences — broader research-shaping controls (density,
-          excluded sectors, notes for the analysts). Sits above the
-          investing-profile row so the user can shape "what ClearPath
-          looks at" before drilling into "how aggressive should it
-          be" (risk + horizon) below. */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Preferences</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+        <Card className="flex h-full flex-col">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Preferences</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-1 flex-col space-y-4">
           <div>
             <label className="mb-1.5 block text-xs font-medium">
               Dashboard density
@@ -278,6 +269,53 @@ export default function SettingsClient({
           </div>
 
           <div>
+            <div className="mb-1.5 flex items-center gap-2 text-xs font-medium">
+              <Leaf className="h-3.5 w-3.5 text-primary" />
+              Investment values
+            </div>
+            <div className="grid gap-2 xl:grid-cols-2">
+              {INVESTMENT_VALUE_FLAGS.map((item) => {
+                const checked = !!profile.preferences[item.key];
+                return (
+                  <label
+                    key={item.key}
+                    htmlFor={`preference-${item.key}`}
+                    className="flex cursor-pointer items-start gap-3 rounded-md border border-border bg-background/60 px-3 py-3 text-sm hover:border-primary/40"
+                  >
+                    <input
+                      id={`preference-${item.key}`}
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() =>
+                        setProfile((p) => ({
+                          ...p,
+                          preferences: {
+                            ...p.preferences,
+                            [item.key]: !checked,
+                          },
+                        }))
+                      }
+                      className="mt-0.5 h-4 w-4 cursor-pointer accent-primary"
+                    />
+                    <span className="min-w-0">
+                      <span className="block font-medium text-foreground">
+                        {item.title}
+                      </span>
+                      <span className="mt-0.5 block text-[12px] leading-relaxed text-muted-foreground">
+                        {item.description}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              These are context settings, not filters. ClearPath still
+              surfaces the full analysis and flags preference mismatches.
+            </p>
+          </div>
+
+          <div>
             <label className="mb-1.5 block text-xs font-medium">
               Excluded sectors
               <span className="ml-2 font-normal text-muted-foreground">
@@ -295,11 +333,6 @@ export default function SettingsClient({
               shows you the full view.
             </p>
           </div>
-
-          {/* ESG checkbox previously lived here. Moved to a dedicated
-              "Investment values" card alongside Notifications so the
-              toggle pattern is consistent and the card scales naturally
-              when sin-stock / climate / governance flags get added. */}
 
           <div>
             <label className="mb-1.5 block text-xs font-medium">
@@ -319,8 +352,9 @@ export default function SettingsClient({
               {notesInput.length} / 500
             </div>
           </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Investing profile — Risk tolerance (tall, 3 stacked options)
           on the left; Time horizon + Goals stacked on the right so
@@ -460,9 +494,8 @@ export default function SettingsClient({
         )}
       </div>
 
-      {/* Notifications + 2FA already render in row 1 above — no
-          duplicate render here. Danger zone stays full-width and last
-          so destructive actions are visually isolated. */}
+      {/* Danger zone stays full-width and last so destructive actions
+          are visually isolated from everyday preferences. */}
 
       {/* ─── Danger zone ─────────────────────────────────────────── */}
       <DeleteAccountSection userEmail={user.email} />
@@ -473,11 +506,8 @@ export default function SettingsClient({
 // ─────────────────────────────────────────────────────────────────────
 // ToggleListCard — generic, future-proof toggle pattern.
 //
-// Used by NotificationsSection AND InvestmentValuesSection (and any
-// future "list of boolean prefs" card). Standardises the visual
-// language so toggle UIs stay consistent across the app — adding a
-// new toggle card is one component definition + a typed flag list,
-// no new UI primitives.
+// Used by NotificationsSection. Standardises the visual language for
+// list-style toggle UIs without creating one-off checkbox cards.
 //
 // `interpretation` controls how the checked state maps to the underlying
 // boolean — opt-out flags read CHECKED-meaning-subscribed (so a user
@@ -664,101 +694,43 @@ function NotificationsSection({
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// InvestmentValuesSection — research-shaping preferences (currently
-// just ESG; future: sin-stock filter, climate, governance).
-//
-// These flags shape how the AI lenses analyse, NOT email behaviour —
-// kept distinct from Notifications because mixing those concerns
-// would be misleading to the user.
-//
-// Save semantics: writes back through /api/user/profile with the
-// FULL current `preferences` blob merged with the changed flag —
-// the profile endpoint replaces the whole preferences JSON, so a
-// partial save would wipe excludedSectors / notes / density.
+// Investment-value preference flags. These live inside the broader
+// Preferences card because they shape analysis context, not account
+// security or email delivery.
 // ─────────────────────────────────────────────────────────────────────
 
-type InvestmentValueFlag = "esgPreference";
+type InvestmentValueFlag =
+  | "esgPreference"
+  | "governancePreference"
+  | "climatePreference"
+  | "controversialSectorsPreference";
 
 const INVESTMENT_VALUE_FLAGS: ReadonlyArray<ToggleItem<InvestmentValueFlag>> = [
   {
     key: "esgPreference",
     title: "Prefer ESG-aligned investments",
     description:
-      "Tilts the analysis toward environmental / social / governance signals when scoring tickers. Doesn't filter — analyses still surface non-ESG names; they're just contextualised against this preference.",
+      "Tilts the analysis toward environmental, social, and governance signals when scoring tickers.",
+  },
+  {
+    key: "governancePreference",
+    title: "Emphasize governance quality",
+    description:
+      "Highlights management, accounting quality, shareholder alignment, and governance risks when data is available.",
+  },
+  {
+    key: "climatePreference",
+    title: "Surface climate transition risk",
+    description:
+      "Adds attention to environmental regulation, transition risk, and sector exposure where relevant.",
+  },
+  {
+    key: "controversialSectorsPreference",
+    title: "Flag controversial-sector exposure",
+    description:
+      "Calls out sectors such as tobacco, firearms, gambling, or weapons when relevant without hiding the analysis.",
   },
 ];
-
-function InvestmentValuesSection({
-  profile,
-  onProfileSaved,
-  className,
-}: {
-  profile: UserProfile;
-  /** Called with the saved profile so the parent can update its state. */
-  onProfileSaved: (profile: UserProfile) => void;
-  className?: string;
-}) {
-  // Local mirror so the toggle reflects optimistic state independent of
-  // the parent's save cycle. Re-syncs whenever the parent's profile
-  // updates (e.g. after a "Save preferences" button press elsewhere).
-  const [values, setValues] = useState<Record<InvestmentValueFlag, boolean>>({
-    esgPreference: !!profile.preferences.esgPreference,
-  });
-  const [savingKey, setSavingKey] = useState<InvestmentValueFlag | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-
-  async function handleToggle(key: InvestmentValueFlag, nextValue: boolean) {
-    setSavingKey(key);
-    setErr(null);
-    setValues((prev) => ({ ...prev, [key]: nextValue }));
-    try {
-      // Send the full preferences object — the profile endpoint
-      // overwrites the whole blob, so partial sends would wipe
-      // excludedSectors / notes / density.
-      const body = {
-        preferences: {
-          ...profile.preferences,
-          [key]: nextValue,
-        },
-      };
-      const res = await fetch("/api/user/profile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setErr(data.error ?? "Could not save. Try again.");
-        setValues((prev) => ({ ...prev, [key]: !nextValue }));
-        return;
-      }
-      const data = (await res.json()) as { profile: UserProfile };
-      onProfileSaved(data.profile);
-      setValues({
-        esgPreference: !!data.profile.preferences.esgPreference,
-      });
-    } catch {
-      setErr("Network error. Try again.");
-      setValues((prev) => ({ ...prev, [key]: !nextValue }));
-    } finally {
-      setSavingKey(null);
-    }
-  }
-
-  return (
-    <ToggleListCard
-      cardTitle="Investment values"
-      icon={Leaf}
-      items={INVESTMENT_VALUE_FLAGS}
-      values={values}
-      interpretation="enabled"
-      onToggle={handleToggle}
-      savingKey={savingKey}
-      error={err}
-      className={className}
-    />
-  );
-}
 
 // ─────────────────────────────────────────────────────────────────────
 // BillingSection — current plan + trial countdown + upgrade / manage
@@ -776,7 +748,13 @@ function InvestmentValuesSection({
 // we redirect to. We never collect card data ourselves.
 // ─────────────────────────────────────────────────────────────────────
 
-function BillingSection({ billing }: { billing: BillingProps }) {
+function BillingSection({
+  billing,
+  className,
+}: {
+  billing: BillingProps;
+  className?: string;
+}) {
   const [busy, setBusy] = useState<"checkout" | "portal" | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const nowMs = useClientNowMs();
@@ -852,7 +830,7 @@ function BillingSection({ billing }: { billing: BillingProps }) {
   // pre-launch on this surface.
   if (!billing.stripeConfigured) {
     return (
-      <Card id="billing">
+      <Card id="billing" className={className}>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <CreditCard className="h-4 w-4 text-primary" />
@@ -869,7 +847,7 @@ function BillingSection({ billing }: { billing: BillingProps }) {
   }
 
   return (
-    <Card id="billing">
+    <Card id="billing" className={className}>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <CreditCard className="h-4 w-4 text-primary" />
