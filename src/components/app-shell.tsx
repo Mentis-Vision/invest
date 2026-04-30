@@ -34,6 +34,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import TickerTape from "@/components/ticker-tape";
+import TrialBanner from "@/components/trial-banner";
 
 type View =
   | "dashboard"
@@ -238,6 +239,13 @@ export default function AppShell({
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       {/* ─── Ticker tape (very top) ─── */}
       <TickerTape />
+
+      {/* ─── Trial countdown / past-due banner (slots above the
+          top nav, below the ticker). Self-fetches via
+          /api/user/subscription on mount; renders nothing for
+          users not in any nudge state, so it's safe to mount
+          unconditionally. */}
+      <TrialBanner />
 
       {/* ─── Top nav ─── */}
       <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
