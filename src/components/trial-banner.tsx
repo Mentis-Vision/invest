@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { Sparkles, AlertTriangle, Clock, X } from "lucide-react";
+import { Sparkles, AlertTriangle, Clock, X, Loader2 } from "lucide-react";
 
 /**
  * In-app trial countdown / expiry / past-due banner.
@@ -71,6 +70,8 @@ const STORAGE_KEY = "clearpath:trial-banner-dismissed";
 export default function TrialBanner() {
   const [state, setState] = useState<SubscriptionState | null>(null);
   const [dismissed, setDismissed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [busyError, setBusyError] = useState<string | null>(null);
 
   useEffect(() => {
     // Only check sessionStorage in the browser — SSR has no window.
@@ -127,9 +128,19 @@ export default function TrialBanner() {
   const iconColor =
     variant === "soft" ? "text-[var(--hold)]" : "text-[var(--sell)]";
 
+  // Most banner CTAs go DIRECT to Stripe Checkout (no /pricing detour)
+  // — the user is already in-app, signed in, and has signaled intent
+  // by reaching the banner. Only past_due routes through the Stripe
+  // Portal instead (the user needs to update their card, which is a
+  // portal flow, not a checkout flow). Expired-trial users still hit
+  // checkout because they have no active subscription to manage.
+  type CtaAction =
+    | { kind: "checkout"; tier: "individual" | "active" }
+    | { kind: "portal" };
+
   let message: React.ReactNode;
-  let ctaHref = "/pricing";
   let ctaLabel = "View plans";
+  let ctaAction: CtaAction = { kind: "checkout", tier: "individual" };
 
   switch (variant) {
     case "soft":
@@ -143,6 +154,7 @@ export default function TrialBanner() {
         </>
       );
       ctaLabel = "Lock in 25% off";
+      ctaAction = { kind: "checkout", tier: "individual" };
       break;
     case "urgent":
       message = (
@@ -153,16 +165,20 @@ export default function TrialBanner() {
         </>
       );
       ctaLabel = "Upgrade now";
-      ctaHref = "/app/settings";
+      ctaAction = { kind: "checkout", tier: "individual" };
       break;
     case "expired":
+      // Hard wall: post-trial users with no paid sub have no research
+      // access. Banner messaging matches — we never had a "Free plan"
+      // tier; trial → upgrade or stop.
       message = (
         <>
           <strong className="font-medium">Your trial has ended.</strong>{" "}
-          You&rsquo;re on the Free plan with limited research access.
+          Research access is paused until you upgrade.
         </>
       );
-      ctaLabel = "Restore full access";
+      ctaLabel = "Upgrade to continue";
+      ctaAction = { kind: "checkout", tier: "individual" };
       break;
     case "past_due":
       message = (
@@ -172,8 +188,42 @@ export default function TrialBanner() {
         </>
       );
       ctaLabel = "Update card";
-      ctaHref = "/app/settings";
+      ctaAction = { kind: "portal" };
       break;
+  }
+
+  async function handleCta() {
+    setBusy(true);
+    setBusyError(null);
+    try {
+      const url =
+        ctaAction.kind === "checkout"
+          ? "/api/stripe/checkout"
+          : "/api/stripe/portal";
+      const body =
+        ctaAction.kind === "checkout"
+          ? JSON.stringify({ tier: ctaAction.tier, interval: "monthly" })
+          : undefined;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: body ? { "Content-Type": "application/json" } : undefined,
+        body,
+      });
+      const data = await res.json();
+      if (!res.ok || !data.url) {
+        // Fallback: route to /app/settings where the user can pick a
+        // tier manually rather than getting stuck.
+        setBusyError(data.error ?? "Could not start checkout");
+        setBusy(false);
+        window.location.href = "/app/settings";
+        return;
+      }
+      window.location.href = data.url as string;
+    } catch {
+      setBusyError("Network error");
+      setBusy(false);
+      window.location.href = "/app/settings";
+    }
   }
 
   return (
@@ -183,12 +233,16 @@ export default function TrialBanner() {
     >
       <Icon className={`h-4 w-4 flex-shrink-0 ${iconColor}`} />
       <div className="min-w-0 flex-1">{message}</div>
-      <Link
-        href={ctaHref}
-        className="shrink-0 rounded-md bg-foreground px-3 py-1 text-[12px] font-semibold text-background transition-colors hover:bg-foreground/85"
+      <button
+        type="button"
+        onClick={handleCta}
+        disabled={busy}
+        className="shrink-0 inline-flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1 text-[12px] font-semibold text-background transition-colors hover:bg-foreground/85 disabled:opacity-60"
+        title={busyError ?? undefined}
       >
+        {busy && <Loader2 className="h-3 w-3 animate-spin" />}
         {ctaLabel}
-      </Link>
+      </button>
       <button
         type="button"
         onClick={dismiss}

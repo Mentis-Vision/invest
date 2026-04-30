@@ -1,12 +1,51 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import AuthLayout from "@/components/auth-layout";
 import { Loader2 } from "lucide-react";
 
+/**
+ * Compress the conversion path: when a visitor arrives from the
+ * pricing page after clicking "Start with Individual" / "Start with
+ * Active", we receive `?next=checkout&tier=...&interval=...` query
+ * params. After their account is successfully created and signed in,
+ * we POST `/api/stripe/checkout` ourselves and redirect to the
+ * Stripe-hosted checkout — saving them the manual hop through
+ * `/app/settings → click Upgrade`. Less friction, higher conversion.
+ *
+ * If checkout creation fails (Stripe down, env not set, etc.) we
+ * fall back to landing them at /app — they can retry from the
+ * settings billing card.
+ *
+ * Note: this only works when REQUIRE_EMAIL_VERIFICATION is OFF
+ * (autoSignIn produces a session immediately). When verification
+ * is required, the user lands on the "Check your email" state
+ * and the next= intent is dropped — handling that requires
+ * threading the intent through the verification email's callback
+ * URL, which is a separate change.
+ */
+
+// Wrap the actual page in Suspense so useSearchParams() in this
+// client component plays nicely with Next.js's CSR bailout. Without
+// this wrapper the build complains that useSearchParams() needs to
+// be inside <Suspense>.
 export default function SignUpPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignUpInner />
+    </Suspense>
+  );
+}
+
+function SignUpInner() {
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next");
+  const intentTier = searchParams.get("tier");
+  const intentInterval = searchParams.get("interval");
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -16,6 +55,35 @@ export default function SignUpPage() {
   const [verificationSent, setVerificationSent] = useState(false);
   const [resending, setResending] = useState(false);
   const [resentAt, setResentAt] = useState<number | null>(null);
+
+  /** Post-signup redirect: hit /api/stripe/checkout if the user
+   *  came in with a checkout intent, else /app. Always returns a
+   *  url string the caller can navigate to. */
+  async function postSignupDestination(): Promise<string> {
+    if (
+      next !== "checkout" ||
+      (intentTier !== "individual" && intentTier !== "active")
+    ) {
+      return "/app";
+    }
+    const interval =
+      intentInterval === "annual" ? "annual" : "monthly";
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tier: intentTier, interval }),
+      });
+      const data = await res.json();
+      if (res.ok && data.url) return data.url as string;
+    } catch {
+      /* fall through to /app */
+    }
+    // Failed to create checkout — at least land them in-app where
+    // they can retry from the billing card. Don't trap them on the
+    // sign-up page on a Stripe outage.
+    return "/app";
+  }
 
   async function handleSignUp(e: React.FormEvent) {
     e.preventDefault();
@@ -42,13 +110,14 @@ export default function SignUpPage() {
     }
     // In production, BetterAuth triggers the verification email. Show the
     // "check your email" state. In dev/without verification, the session is
-    // created immediately and we can redirect to /app.
+    // created immediately and we can redirect — to /app, or directly to
+    // Stripe checkout when ?next=checkout is present.
     const { data: session } = await authClient.getSession();
     if (session?.user && session.user.email === email) {
       // Only redirect if the current session truly matches the user we
       // just created — otherwise we're still on a stale session that
       // signOut didn't clear. Falling through to verificationSent is safer.
-      window.location.href = "/app";
+      window.location.href = await postSignupDestination();
     } else {
       setVerificationSent(true);
       setLoading(false);
@@ -63,7 +132,26 @@ export default function SignUpPage() {
     } catch {
       /* no-op */
     }
-    await authClient.signIn.social({ provider: "google", callbackURL: "/app" });
+    // Thread the checkout intent through the OAuth round trip. /app
+    // (which is what callbackURL lands on after Google completes)
+    // reads these params and fires checkout via the same path the
+    // email-signup branch uses. If next= isn't set, callback is just
+    // /app — same as before.
+    let callbackURL = "/app";
+    if (
+      next === "checkout" &&
+      (intentTier === "individual" || intentTier === "active")
+    ) {
+      const interval =
+        intentInterval === "annual" ? "annual" : "monthly";
+      const params = new URLSearchParams({
+        next: "checkout",
+        tier: intentTier,
+        interval,
+      });
+      callbackURL = `/app?${params.toString()}`;
+    }
+    await authClient.signIn.social({ provider: "google", callbackURL });
   }
 
   return (

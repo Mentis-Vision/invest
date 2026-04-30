@@ -1,10 +1,19 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { ensureSubscriptionRecord } from "@/lib/subscription";
+import {
+  ensureSubscriptionRecord,
+  ensureStripeCustomer,
+} from "@/lib/subscription";
+import { stripe, stripeConfigured, priceIdFor } from "@/lib/stripe";
 import DashboardClient from "@/components/dashboard-client";
+import { log, errorInfo } from "@/lib/log";
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const session = await auth.api.getSession({
     headers: await headers(),
   });
@@ -20,6 +29,81 @@ export default async function Home() {
   // app, not the moment they create the account, which is more
   // forgiving for users who sign up days before they verify.
   await ensureSubscriptionRecord(session.user.id);
+
+  // Post-OAuth checkout handoff. When the sign-up page sent a
+  // signed-in-via-Google user back to /app with `?next=checkout&
+  // tier=...&interval=...`, finish what they started: create a
+  // Stripe Checkout Session server-side and redirect them to it,
+  // skipping the dashboard render entirely.
+  //
+  // Email signups handle this client-side in /sign-up/page.tsx
+  // because there's no OAuth round-trip. This server-side branch
+  // exists specifically to catch the OAuth callback case.
+  const params = await searchParams;
+  const next = typeof params.next === "string" ? params.next : null;
+  const intentTier =
+    typeof params.tier === "string" ? params.tier : null;
+  const intentInterval =
+    typeof params.interval === "string" ? params.interval : null;
+
+  if (
+    next === "checkout" &&
+    stripeConfigured() &&
+    (intentTier === "individual" || intentTier === "active")
+  ) {
+    const interval =
+      intentInterval === "annual" ? "annual" : "monthly";
+    const priceId = priceIdFor(intentTier, interval);
+    if (priceId) {
+      // Resolve the URL inside try/catch (so a Stripe outage falls
+      // through to the dashboard render below), then redirect()
+      // OUTSIDE the catch — Next's redirect() throws a special
+      // NEXT_REDIRECT error that user catch-blocks would swallow,
+      // which is the difference between "user lands at Stripe" and
+      // "user sees the dashboard with no idea what happened."
+      let checkoutUrl: string | null = null;
+      try {
+        const customerId = await ensureStripeCustomer(
+          session.user.id,
+          session.user.email,
+          session.user.name
+        );
+        const baseUrl = process.env.BETTER_AUTH_URL || "https://clearpathinvest.app";
+        const checkout = await stripe().checkout.sessions.create({
+          mode: "subscription",
+          customer: customerId,
+          line_items: [{ price: priceId, quantity: 1 }],
+          allow_promotion_codes: true,
+          success_url: `${baseUrl}/app/settings?upgraded=1`,
+          cancel_url: `${baseUrl}/app`,
+          metadata: {
+            userId: session.user.id,
+            tier: intentTier,
+            interval,
+            source: "post_oauth_checkout",
+          },
+          subscription_data: {
+            metadata: {
+              userId: session.user.id,
+              tier: intentTier,
+              interval,
+            },
+          },
+        });
+        checkoutUrl = checkout.url ?? null;
+      } catch (err) {
+        log.warn("app.page", "post-oauth checkout failed", {
+          userId: session.user.id,
+          tier: intentTier,
+          interval,
+          ...errorInfo(err),
+        });
+      }
+      if (checkoutUrl) {
+        redirect(checkoutUrl);
+      }
+    }
+  }
 
   return (
     <DashboardClient
