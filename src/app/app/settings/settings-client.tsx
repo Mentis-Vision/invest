@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -760,7 +760,12 @@ function BillingSection({
   billing: BillingProps;
   className?: string;
 }) {
-  const [busy, setBusy] = useState<"checkout" | "portal" | null>(null);
+  type CheckoutTier = "individual" | "active";
+  type BillingBusy = CheckoutTier | "portal" | null;
+
+  const [busy, setBusy] = useState<BillingBusy>(null);
+  const [highlightedTier, setHighlightedTier] =
+    useState<CheckoutTier | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const nowMs = useClientNowMs();
 
@@ -786,14 +791,137 @@ function BillingSection({
       billing.tier === "active" ||
       billing.tier === "advisor");
 
-  async function startCheckout(tier: "individual" | "active") {
-    setBusy("checkout");
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    type SubscriptionRefresh = Partial<
+      Pick<
+        BillingProps,
+        "tier" | "status" | "currentPeriodEnd" | "cancelAtPeriodEnd"
+      >
+    >;
+
+    const params = new URLSearchParams(window.location.search);
+    const returnedFromBilling =
+      params.has("upgraded") || params.has("billing_return");
+
+    function isPaidSubscription(sub: SubscriptionRefresh): boolean {
+      return (
+        sub.status === "active" &&
+        (sub.tier === "individual" ||
+          sub.tier === "active" ||
+          sub.tier === "advisor")
+      );
+    }
+
+    function shouldReloadForSubscription(sub: SubscriptionRefresh): boolean {
+      if (!isPaidSubscription(sub)) return false;
+      return (
+        returnedFromBilling ||
+        sub.tier !== billing.tier ||
+        sub.status !== billing.status ||
+        sub.currentPeriodEnd !== billing.currentPeriodEnd ||
+        sub.cancelAtPeriodEnd !== billing.cancelAtPeriodEnd
+      );
+    }
+
+    async function refreshBillingState(): Promise<boolean> {
+      try {
+        const res = await fetch("/api/user/subscription", {
+          credentials: "same-origin",
+          cache: "no-store",
+        });
+        if (!res.ok) return false;
+        const data = (await res.json()) as SubscriptionRefresh;
+        if (shouldReloadForSubscription(data)) {
+          window.location.replace("/app/settings#billing");
+          return true;
+        }
+      } catch {
+        /* best-effort refresh only */
+      }
+      return false;
+    }
+
+    if (returnedFromBilling) {
+      let attempts = 0;
+      const poll = async () => {
+        if (cancelled) return;
+        attempts += 1;
+        const reloaded = await refreshBillingState();
+        if (!reloaded && attempts < 12) {
+          timeoutId = setTimeout(poll, 1500);
+        }
+      };
+      void poll();
+    }
+
+    const onFocus = () => {
+      void refreshBillingState();
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") onFocus();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [
+    billing.cancelAtPeriodEnd,
+    billing.currentPeriodEnd,
+    billing.status,
+    billing.tier,
+  ]);
+
+  function currentBillingReturnPath(): string {
+    if (typeof window === "undefined") return "/app/settings#billing";
+    return `${window.location.pathname}${window.location.search}${
+      window.location.hash || "#billing"
+    }`;
+  }
+
+  function openPendingBillingTab(): Window | null {
+    const billingWindow = window.open("", "_blank");
+    if (!billingWindow) return null;
+    billingWindow.document.write(
+      "<!doctype html><title>Opening billing</title><p>Opening secure billing...</p>"
+    );
+    billingWindow.opener = null;
+    return billingWindow;
+  }
+
+  function sendToBillingUrl(
+    billingWindow: Window | null,
+    url: string
+  ): boolean {
+    if (billingWindow && !billingWindow.closed) {
+      billingWindow.location.href = url;
+      return true;
+    }
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    return Boolean(opened);
+  }
+
+  async function startCheckout(tier: CheckoutTier) {
+    setHighlightedTier(tier);
+    setBusy(tier);
     setErr(null);
+    const billingWindow = openPendingBillingTab();
     try {
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tier, interval: "monthly" }),
+        body: JSON.stringify({
+          tier,
+          interval: "monthly",
+          returnTo: currentBillingReturnPath(),
+        }),
       });
       const data = await res.json();
       const checkoutUrl = safeExternalHttpsUrl(data.url, [
@@ -802,33 +930,54 @@ function BillingSection({
       if (!res.ok || !checkoutUrl) {
         setErr(data.error ?? "Could not start checkout.");
         setBusy(null);
+        billingWindow?.close();
         return;
       }
-      window.location.assign(checkoutUrl);
+      if (!sendToBillingUrl(billingWindow, checkoutUrl)) {
+        window.location.assign(checkoutUrl);
+        return;
+      }
+      setBusy(null);
     } catch {
       setErr("Network error. Try again.");
       setBusy(null);
+      billingWindow?.close();
     }
   }
 
   async function openPortal() {
     setBusy("portal");
     setErr(null);
+    const billingWindow = openPendingBillingTab();
     try {
-      const res = await fetch("/api/stripe/portal", { method: "POST" });
+      const res = await fetch("/api/stripe/portal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ returnTo: currentBillingReturnPath() }),
+      });
       const data = await res.json();
       const portalUrl = safeExternalHttpsUrl(data.url, ["billing.stripe.com"]);
       if (!res.ok || !portalUrl) {
         setErr(data.error ?? "Could not open billing portal.");
         setBusy(null);
+        billingWindow?.close();
         return;
       }
-      window.location.assign(portalUrl);
+      if (!sendToBillingUrl(billingWindow, portalUrl)) {
+        window.location.assign(portalUrl);
+        return;
+      }
+      setBusy(null);
     } catch {
       setErr("Network error. Try again.");
       setBusy(null);
+      billingWindow?.close();
     }
   }
+
+  const defaultHighlightedTier: CheckoutTier =
+    billing.tier === "active" ? "active" : "individual";
+  const selectedTier = highlightedTier ?? defaultHighlightedTier;
 
   // Stripe-not-configured state — show the card but with a disabled
   // CTA so user knows where billing will live, and ops sees we're
@@ -931,7 +1080,11 @@ function BillingSection({
         {/* CTAs */}
         <div className="flex flex-wrap gap-2 pt-1">
           {isPaid ? (
-            <Button onClick={openPortal} disabled={busy !== null}>
+            <Button
+              onClick={openPortal}
+              disabled={busy !== null}
+              variant={busy === "portal" ? "default" : "outline"}
+            >
               {busy === "portal" && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
@@ -943,17 +1096,21 @@ function BillingSection({
               <Button
                 onClick={() => startCheckout("individual")}
                 disabled={busy !== null}
+                variant={selectedTier === "individual" ? "default" : "outline"}
               >
-                {busy === "checkout" && (
+                {busy === "individual" && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
                 Upgrade to Individual · $29/mo
               </Button>
               <Button
-                variant="outline"
+                variant={selectedTier === "active" ? "default" : "outline"}
                 onClick={() => startCheckout("active")}
                 disabled={busy !== null}
               >
+                {busy === "active" && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
                 Upgrade to Active · $79/mo
               </Button>
               {/* Even non-paid users should be able to open the
@@ -961,10 +1118,13 @@ function BillingSection({
                   prior subscription was canceled and the user wants
                   to view past invoices. */}
               <Button
-                variant="outline"
+                variant={busy === "portal" ? "default" : "outline"}
                 onClick={openPortal}
                 disabled={busy !== null}
               >
+                {busy === "portal" && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
                 Billing portal
               </Button>
             </>

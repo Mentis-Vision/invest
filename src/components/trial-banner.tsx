@@ -86,15 +86,31 @@ export default function TrialBanner() {
 
   useEffect(() => {
     let alive = true;
-    fetch("/api/user/subscription", { credentials: "same-origin" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
+    async function loadSubscription() {
+      try {
+        const res = await fetch("/api/user/subscription", {
+          credentials: "same-origin",
+          cache: "no-store",
+        });
+        const data = res.ok ? await res.json() : null;
         if (!alive || !data) return;
         setState(data as SubscriptionState);
-      })
-      .catch(() => {});
+      } catch {
+        /* best-effort banner refresh only */
+      }
+    }
+
+    void loadSubscription();
+    const onFocus = () => void loadSubscription();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") void loadSubscription();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       alive = false;
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, []);
 

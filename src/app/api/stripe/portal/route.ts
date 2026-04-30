@@ -19,6 +19,30 @@ import { log, errorInfo } from "@/lib/log";
  * upgraded) get redirected to the pricing page instead — there's no
  * portal to surface for someone who hasn't entered the paid funnel.
  */
+function safeSettingsReturnPath(value: unknown): string {
+  if (typeof value !== "string") return "/app/settings#billing";
+  try {
+    const parsed = new URL(value, "https://clearpath.local");
+    if (
+      parsed.origin !== "https://clearpath.local" ||
+      parsed.pathname !== "/app/settings"
+    ) {
+      return "/app/settings#billing";
+    }
+    return `${parsed.pathname}${parsed.search}${parsed.hash || "#billing"}`;
+  } catch {
+    return "/app/settings#billing";
+  }
+}
+
+function withReturnFlag(path: string): string {
+  const [pathAndSearch, hash] = path.split("#", 2);
+  const separator = pathAndSearch.includes("?") ? "&" : "?";
+  return `${pathAndSearch}${separator}billing_return=1${
+    hash ? `#${hash}` : ""
+  }`;
+}
+
 export async function POST(req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) {
@@ -29,6 +53,14 @@ export async function POST(req: NextRequest) {
       { error: "Billing is not yet configured." },
       { status: 503 }
     );
+  }
+
+  let returnTo = "/app/settings#billing";
+  try {
+    const body = (await req.json()) as { returnTo?: unknown };
+    returnTo = safeSettingsReturnPath(body.returnTo);
+  } catch {
+    /* empty body — default return path */
   }
 
   try {
@@ -54,7 +86,7 @@ export async function POST(req: NextRequest) {
     const baseUrl = process.env.BETTER_AUTH_URL || req.nextUrl.origin;
     const portal = await stripe().billingPortal.sessions.create({
       customer: sub.stripeCustomerId,
-      return_url: `${baseUrl}/app/settings`,
+      return_url: `${baseUrl}${withReturnFlag(returnTo)}`,
     });
 
     return NextResponse.json({ url: portal.url });
