@@ -62,6 +62,9 @@ export type UserProfile = {
   preferences: {
     excludedSectors?: string[];
     esgPreference?: boolean;
+    governancePreference?: boolean;
+    climatePreference?: boolean;
+    controversialSectorsPreference?: boolean;
     notes?: string;
     density?: DashboardDensity;
     /**
@@ -164,6 +167,18 @@ function sanitizeUpdate(input: ProfileUpdate): ProfileUpdate {
         : undefined,
       esgPreference:
         typeof p.esgPreference === "boolean" ? p.esgPreference : undefined,
+      governancePreference:
+        typeof p.governancePreference === "boolean"
+          ? p.governancePreference
+          : undefined,
+      climatePreference:
+        typeof p.climatePreference === "boolean"
+          ? p.climatePreference
+          : undefined,
+      controversialSectorsPreference:
+        typeof p.controversialSectorsPreference === "boolean"
+          ? p.controversialSectorsPreference
+          : undefined,
       notes:
         typeof p.notes === "string" ? p.notes.slice(0, 500) : undefined,
       density:
@@ -270,6 +285,21 @@ export function buildProfileRider(p: UserProfile): string | null {
   }
   if (p.preferences.esgPreference) {
     parts.push("user prefers ESG-aligned investments");
+  }
+  if (p.preferences.governancePreference) {
+    parts.push(
+      "user wants extra emphasis on governance quality, accounting quality, shareholder alignment, and management risk"
+    );
+  }
+  if (p.preferences.climatePreference) {
+    parts.push(
+      "user wants climate transition and environmental regulatory risks surfaced when relevant"
+    );
+  }
+  if (p.preferences.controversialSectorsPreference) {
+    parts.push(
+      "user wants controversial-sector exposure flagged when relevant, without skipping the analysis"
+    );
   }
   if (p.preferences.notes) {
     parts.push(`user note: "${p.preferences.notes}"`);
