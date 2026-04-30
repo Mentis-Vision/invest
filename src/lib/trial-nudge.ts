@@ -172,32 +172,32 @@ function templateFor(
           body: `
             <p>${greeting}</p>
             <p>Your free 30-day trial of ClearPath ends on <strong>${escapeHtml(niceDate)}</strong>.</p>
-            <p>If the three-lens research has been useful, you can lock in <strong>founder pricing</strong> — 25% off forever — by upgrading anytime in the next week with code <strong>FOUNDER25</strong> at checkout.</p>
+            <p>If the three-lens research has been useful, you can take <strong>25% off your first year</strong> by upgrading anytime in the next week with code <strong>FOUNDER25</strong> at checkout.</p>
             <p>If it hasn&rsquo;t been useful, hit reply and tell me why. I read every response.</p>
           `,
           ctaLabel: "View plans",
           ctaUrl: pricingUrl,
           footnote: "We send at most one email per nudge window. You can opt out of all email nudges in your settings.",
         }),
-        text: `Your free 30-day ClearPath trial ends on ${niceDate}.\n\nLock in founder pricing (25% off forever) with code FOUNDER25 at checkout: ${pricingUrl}`,
+        text: `Your free 30-day ClearPath trial ends on ${niceDate}.\n\nTake 25% off your first year with code FOUNDER25 at checkout: ${pricingUrl}`,
       };
 
     case "D3":
       return {
-        subject: "3 days left — lock in founder pricing",
+        subject: "3 days left — take 25% off your first year",
         html: renderEmailTemplate({
           preview: "Three days until your trial ends. FOUNDER25 still available.",
           body: `
             <p>${greeting}</p>
             <p>Three days until your ClearPath trial ends (${escapeHtml(niceDate)}).</p>
-            <p><strong>Founder pricing</strong> — 25% off forever with code <strong>FOUNDER25</strong> — expires when your trial does.</p>
+            <p>Code <strong>FOUNDER25</strong> — <strong>25% off your first year</strong> — expires when your trial does.</p>
             <p>If you&rsquo;re still deciding, the most useful thing to do is run a fresh three-lens panel on a position you&rsquo;re actually considering. The disagreement-surfacing on real holdings is what most people convert on.</p>
           `,
-          ctaLabel: "Lock in founder pricing",
+          ctaLabel: "Use FOUNDER25",
           ctaUrl: pricingUrl,
           footnote: "Replies go straight to the founder.",
         }),
-        text: `3 days until your trial ends (${niceDate}). FOUNDER25 = 25% off forever, expires with the trial. ${pricingUrl}`,
+        text: `3 days until your trial ends (${niceDate}). FOUNDER25 = 25% off your first year, expires with the trial. ${pricingUrl}`,
       };
 
     case "D1":
@@ -249,7 +249,7 @@ function templateFor(
           preview: "A small thank-you discount for taking another look.",
           body: `
             <p>${greeting}</p>
-            <p>It&rsquo;s been a week since your trial ended. If ClearPath is on the maybe pile, here&rsquo;s a one-time win-back: <strong>FOUNDER25 reactivated</strong> for the next 7 days. 25% off forever, same as the trial deal.</p>
+            <p>It&rsquo;s been a week since your trial ended. If ClearPath is on the maybe pile, here&rsquo;s a one-time win-back: <strong>FOUNDER25 reactivated</strong> for the next 7 days. 25% off your first year, same as the trial deal.</p>
             <p>Two things changed since you last looked:</p>
             <ul>
               <li>Track-record page now publishes 30-day hit/miss outcomes — public, with no cherry-picking.</li>

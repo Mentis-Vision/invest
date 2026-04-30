@@ -139,7 +139,7 @@ export default function TrialBanner() {
             {daysLeft} {daysLeft === 1 ? "day" : "days"} left
           </strong>{" "}
           in your free trial. Lock in founder pricing —{" "}
-          <span className="font-mono">FOUNDER25</span> for 25% off forever.
+          <span className="font-mono">FOUNDER25</span> for 25% off your first year.
         </>
       );
       ctaLabel = "Lock in 25% off";

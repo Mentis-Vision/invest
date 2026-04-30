@@ -94,7 +94,7 @@ export default function PricingTiersClient({
             <span className="font-mono font-semibold text-foreground">
               FOUNDER25
             </span>{" "}
-            at checkout to lock in 25% off forever. Available to anyone
+            at checkout for 25% off your first year. Available to anyone
             who upgrades within 30 days of signup.
           </p>
         </div>
