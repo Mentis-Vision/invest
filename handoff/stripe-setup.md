@@ -77,21 +77,60 @@ The webhook code is in `src/app/api/stripe/webhook/route.ts`. It:
 Returns 500 on handler failure so Stripe retries. Returns 200 on
 success or for ignored events (charge.*, payment_intent.*, etc.).
 
-## 5. Optional — founder-pricing coupon
+## 5. Founder-pricing coupon (FOUNDER25 — first year only)
 
-Stripe Dashboard → **Products → Coupons → New coupon**.
+Two-step in the Stripe Dashboard. The coupon defines the discount
+rule; the promotion code is what customers actually type at checkout.
 
-- Name: "Founder pricing"
-- Type: Percent off
-- Percent: 25%
-- Duration: Forever
-- Code (optional): `FOUNDER25`
+### Step 5a — Create the coupon
+
+Stripe Dashboard → **Products → Coupons → "+ New"**.
+
+- Name: `Founder pricing`
+- Type: **Percent off**
+- Percent: `25`
+- **Duration: Repeating**
+- **Duration in months: `12`**
+
+That last bit is the important change — `Repeating / 12` means the
+discount applies for the customer's first 12 months of subscription
+and then auto-removes. Annual subs get 25% off their one annual
+charge; monthly subs get 25% off each of their first 12 monthly
+charges. Either way, the customer's renewal at month 13 returns to
+full price. No permanent margin tax.
+
+(If "Forever" is set instead, every annual founder customer locks
+in 25% off in perpetuity — that's $72.50/yr × N customers × forever
+of foregone revenue.)
+
+Save. Stripe assigns an internal coupon ID like `25_off_yEwhKfGn`.
+
+### Step 5b — Create the customer-facing code
+
+Inside the coupon you just created → **"Promotion codes" tab → "+ New"**.
+
+- Code: `FOUNDER25`
+- Coupon: (the one from 5a)
+- Restrictions:
+  - ☑ **Limit to first-time customers only** (prevents abuse — only
+    available to customers who haven't paid yet)
+  - ☑ **Limit to one redemption per customer**
+  - Optional: set an absolute expiry date so the launch promo
+    doesn't run indefinitely
+- Active: ☑
+
+Save.
+
+### How customers see it
 
 The Checkout Session is created with `allow_promotion_codes: true`,
-so this code surfaces as an input on the Stripe-hosted checkout page.
-You can also auto-apply it for the first 30 days of signup by
-setting up a [promotion code rule](https://stripe.com/docs/billing/subscriptions/coupons)
-restricted to subscriptions created within X days of customer creation.
+so the input field appears on the Stripe-hosted checkout. Customer
+types `FOUNDER25` → 25% comes off the first invoice. On year-2
+renewal the price returns to standard rate automatically; we don't
+have to do anything to terminate the discount.
+
+Marketing copy across the site (`/pricing` strip, T-3 + T+7 trial
+nudge emails) says **"25% off your first year"** to match.
 
 ## 6. Verify the pipeline end-to-end
 
