@@ -991,10 +991,6 @@ function BillingSection({
       annual: "$790/yr",
     },
   };
-  const intervalNote =
-    billingInterval === "annual"
-      ? "Annual billing selected — pay once per year and save about 17%."
-      : "Monthly billing selected — pay month to month.";
 
   // Stripe-not-configured state — show the card but with a disabled
   // CTA so user knows where billing will live, and ops sees we're
@@ -1094,16 +1090,26 @@ function BillingSection({
           )}
         </p>
 
-        {!isPaid && (
-          <div className="rounded-md border border-border bg-background/60 p-2.5">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <div className="text-xs font-medium">Billing cadence</div>
-                <div className="text-[11px] text-muted-foreground">
-                  {intervalNote}
-                </div>
-              </div>
-              <div className="inline-grid grid-cols-2 rounded-lg border border-border bg-card p-0.5">
+        {/* CTAs */}
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          {isPaid ? (
+            <Button
+              onClick={openPortal}
+              disabled={busy !== null}
+              variant={busy === "portal" ? "default" : "outline"}
+            >
+              {busy === "portal" && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Manage billing
+              <ArrowUpRight className="ml-1.5 h-3.5 w-3.5" />
+            </Button>
+          ) : (
+            <>
+              <div
+                className="inline-grid grid-cols-2 rounded-lg border border-border bg-card p-0.5"
+                aria-label="Billing cadence"
+              >
                 {(["monthly", "annual"] as const).map((interval) => {
                   const active = billingInterval === interval;
                   return (
@@ -1123,26 +1129,6 @@ function BillingSection({
                   );
                 })}
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* CTAs */}
-        <div className="flex flex-wrap gap-2 pt-1">
-          {isPaid ? (
-            <Button
-              onClick={openPortal}
-              disabled={busy !== null}
-              variant={busy === "portal" ? "default" : "outline"}
-            >
-              {busy === "portal" && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              Manage billing
-              <ArrowUpRight className="ml-1.5 h-3.5 w-3.5" />
-            </Button>
-          ) : (
-            <>
               <Button
                 onClick={() => startCheckout("individual")}
                 disabled={busy !== null}
