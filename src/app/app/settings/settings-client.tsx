@@ -1112,19 +1112,28 @@ function BillingSection({
               >
                 {(["monthly", "annual"] as const).map((interval) => {
                   const active = billingInterval === interval;
+                  const label =
+                    interval === "monthly"
+                      ? "Monthly"
+                      : "Annual · 2 mo free";
                   return (
                     <button
                       key={interval}
                       type="button"
                       onClick={() => setBillingInterval(interval)}
                       disabled={busy !== null}
-                      className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                      aria-label={
+                        interval === "annual"
+                          ? "Annual billing, get 2 months free"
+                          : "Monthly billing"
+                      }
+                      className={`whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                         active
                           ? "bg-primary text-primary-foreground shadow-sm"
                           : "text-muted-foreground hover:bg-muted hover:text-foreground"
                       }`}
                     >
-                      {interval === "monthly" ? "Monthly" : "Annual"}
+                      {label}
                     </button>
                   );
                 })}
