@@ -761,11 +761,14 @@ function BillingSection({
   className?: string;
 }) {
   type CheckoutTier = "individual" | "active";
+  type BillingInterval = "monthly" | "annual";
   type BillingBusy = CheckoutTier | "portal" | null;
 
   const [busy, setBusy] = useState<BillingBusy>(null);
   const [highlightedTier, setHighlightedTier] =
     useState<CheckoutTier | null>(null);
+  const [billingInterval, setBillingInterval] =
+    useState<BillingInterval>("monthly");
   const [err, setErr] = useState<string | null>(null);
   const nowMs = useClientNowMs();
 
@@ -919,7 +922,7 @@ function BillingSection({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tier,
-          interval: "monthly",
+          interval: billingInterval,
           returnTo: currentBillingReturnPath(),
         }),
       });
@@ -978,6 +981,20 @@ function BillingSection({
   const defaultHighlightedTier: CheckoutTier =
     billing.tier === "active" ? "active" : "individual";
   const selectedTier = highlightedTier ?? defaultHighlightedTier;
+  const tierPriceLabel: Record<CheckoutTier, Record<BillingInterval, string>> = {
+    individual: {
+      monthly: "$29/mo",
+      annual: "$290/yr",
+    },
+    active: {
+      monthly: "$79/mo",
+      annual: "$790/yr",
+    },
+  };
+  const intervalNote =
+    billingInterval === "annual"
+      ? "Annual billing selected — pay once per year and save about 17%."
+      : "Monthly billing selected — pay month to month.";
 
   // Stripe-not-configured state — show the card but with a disabled
   // CTA so user knows where billing will live, and ops sees we're
@@ -1077,6 +1094,39 @@ function BillingSection({
           )}
         </p>
 
+        {!isPaid && (
+          <div className="rounded-md border border-border bg-background/60 p-2.5">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-xs font-medium">Billing cadence</div>
+                <div className="text-[11px] text-muted-foreground">
+                  {intervalNote}
+                </div>
+              </div>
+              <div className="inline-grid grid-cols-2 rounded-lg border border-border bg-card p-0.5">
+                {(["monthly", "annual"] as const).map((interval) => {
+                  const active = billingInterval === interval;
+                  return (
+                    <button
+                      key={interval}
+                      type="button"
+                      onClick={() => setBillingInterval(interval)}
+                      disabled={busy !== null}
+                      className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                        active
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      }`}
+                    >
+                      {interval === "monthly" ? "Monthly" : "Annual"}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* CTAs */}
         <div className="flex flex-wrap gap-2 pt-1">
           {isPaid ? (
@@ -1101,7 +1151,8 @@ function BillingSection({
                 {busy === "individual" && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-                Upgrade to Individual · $29/mo
+                Upgrade to Individual ·{" "}
+                {tierPriceLabel.individual[billingInterval]}
               </Button>
               <Button
                 variant={selectedTier === "active" ? "default" : "outline"}
@@ -1111,7 +1162,7 @@ function BillingSection({
                 {busy === "active" && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-                Upgrade to Active · $79/mo
+                Upgrade to Active · {tierPriceLabel.active[billingInterval]}
               </Button>
               {/* Even non-paid users should be able to open the
                   portal once a Stripe customer exists — handy if a
