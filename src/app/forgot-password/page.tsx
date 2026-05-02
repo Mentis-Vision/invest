@@ -34,6 +34,13 @@ export default function ForgotPasswordPage() {
   return (
     <AuthLayout>
       <div className="mb-10 text-center">
+        <div className="mb-6 flex flex-col items-center gap-2.5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="" className="h-16 w-16 object-contain" />
+          <span className="font-mono text-[13px] font-semibold uppercase tracking-[0.22em] text-foreground">
+            ClearPath Invest
+          </span>
+        </div>
         <h1 className="font-heading text-[36px] leading-[1.1] tracking-tight text-foreground">
           Reset your
           <br />

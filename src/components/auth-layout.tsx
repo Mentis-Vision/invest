@@ -1,8 +1,5 @@
 "use client";
 
-import Link from "next/link";
-import Image from "next/image";
-
 function PaperTexture() {
   // Subtle paper-grain via layered radial gradients
   return (
@@ -16,38 +13,6 @@ function PaperTexture() {
         `,
       }}
     />
-  );
-}
-
-/**
- * Brand mark at the top of every auth screen — clickable, returns to
- * the marketing site. Replaces the previous "Issue 01 · Private Beta"
- * editorial rule, which both broadcast a status we no longer want to
- * lead with and left users with no way back to the marketing site if
- * they wandered into the auth flow.
- */
-function BrandMark() {
-  return (
-    <Link
-      href="/"
-      className="group absolute left-1/2 top-10 flex -translate-x-1/2 items-center gap-2 text-foreground/85 transition-opacity hover:opacity-100"
-      aria-label="ClearPath Invest — back to home"
-    >
-      <Image
-        src="/logo.png"
-        alt=""
-        width={1024}
-        height={1014}
-        priority
-        className="h-9 w-9 object-contain"
-      />
-      <span className="font-heading text-[16px] font-medium tracking-tight">
-        ClearPath
-      </span>
-      <span className="ml-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground transition-colors group-hover:text-foreground/60">
-        Invest
-      </span>
-    </Link>
   );
 }
 
@@ -75,7 +40,6 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-6">
       <PaperTexture />
-      <BrandMark />
       <div className="relative z-10 w-full max-w-[380px]">{children}</div>
       <Footer />
     </div>

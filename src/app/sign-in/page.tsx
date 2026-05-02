@@ -68,10 +68,18 @@ export default function SignInPage() {
 
   return (
     <AuthLayout>
-      {/* Heading only — the AuthLayout BrandMark already renders the
-          logo + wordmark at the top of the page. A second masthead here
-          stacked the brand twice. */}
+      {/* Masthead — prominent stacked hero so the brand reads as the
+          primary anchor of the page. Logo is 64px (h-16), wordmark is
+          a 13px spaced uppercase label that supports it without
+          competing with the headline below. */}
       <div className="mb-10 text-center">
+        <div className="mb-6 flex flex-col items-center gap-2.5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="" className="h-16 w-16 object-contain" />
+          <span className="font-mono text-[13px] font-semibold uppercase tracking-[0.22em] text-foreground">
+            ClearPath Invest
+          </span>
+        </div>
         <h1 className="font-heading text-[42px] leading-[1.05] tracking-tight text-foreground">
           The Investor&rsquo;s
           <br />
