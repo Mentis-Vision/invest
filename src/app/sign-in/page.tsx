@@ -73,13 +73,17 @@ export default function SignInPage() {
           a 13px spaced uppercase label that supports it without
           competing with the headline below. */}
       <div className="mb-10 text-center">
-        <div className="mb-6 flex flex-col items-center gap-2.5">
+        <Link
+          href="/"
+          aria-label="ClearPath Invest — back to home"
+          className="mb-6 flex flex-col items-center gap-2.5 transition-opacity hover:opacity-80"
+        >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.png" alt="" className="h-16 w-16 object-contain" />
           <span className="font-mono text-[13px] font-semibold uppercase tracking-[0.22em] text-foreground">
             ClearPath Invest
           </span>
-        </div>
+        </Link>
         <h1 className="font-heading text-[42px] leading-[1.05] tracking-tight text-foreground">
           The Investor&rsquo;s
           <br />
