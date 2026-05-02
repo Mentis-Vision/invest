@@ -199,15 +199,6 @@ function humanizeError(code: string): string {
 export default function VerifyPage() {
   return (
     <AuthLayout>
-      {/* Masthead — shared with every auth page so the brand anchors
-          the flow consistently regardless of which state we're in. */}
-      <div className="mb-8 flex flex-col items-center gap-2.5 text-center">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.png" alt="" className="h-16 w-16 object-contain" />
-        <span className="font-mono text-[13px] font-semibold uppercase tracking-[0.22em] text-foreground">
-          ClearPath Invest
-        </span>
-      </div>
       <Suspense
         fallback={
           <div className="rounded-lg border border-border/60 bg-card/80 p-8 text-center backdrop-blur">

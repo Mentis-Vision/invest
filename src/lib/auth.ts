@@ -100,7 +100,17 @@ export const auth = betterAuth({
       maxAge: 5 * 60,
     },
   },
-  trustedOrigins: [baseUrl],
+  // Browsers can land on either the apex or the www variant depending on
+  // how Vercel routes the canonical domain. BetterAuth checks the request
+  // Origin header against this list verbatim, so both variants must be
+  // present or one of them throws "Invalid origin" on every POST.
+  trustedOrigins: Array.from(
+    new Set([
+      baseUrl,
+      baseUrl.replace("https://www.", "https://"),
+      baseUrl.replace("https://", "https://www."),
+    ])
+  ),
   plugins: [
     // TOTP-based optional second factor. Schema migrated 2026-04-19:
     //   - user.twoFactorEnabled: boolean flag
