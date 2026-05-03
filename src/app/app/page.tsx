@@ -13,6 +13,7 @@ import { buildQueueForUser } from "@/lib/dashboard/queue-builder";
 import { DailyHeadline } from "@/components/dashboard/daily-headline";
 import { DecisionQueue } from "@/components/dashboard/decision-queue";
 import { RiskTile } from "@/components/dashboard/risk-tile";
+import { MarketRegimeTile } from "@/components/dashboard/market-regime-tile";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { HeadlineCache, QueueItem } from "@/lib/dashboard/types";
 
@@ -172,16 +173,14 @@ export default async function Home({
 }
 
 function ContextTilesRow({ userId }: { userId: string }) {
-  // Macro (Batch D) and {YEAR} pace (Batch G) are still placeholders;
-  // RiskTile (Batch A) replaces the middle "Portfolio MTD" slot. The
-  // tile's own empty-state ("—" everywhere) covers the case where
-  // ticker_market_daily has < 20 days for the user's holdings.
+  // Layout: MarketRegimeTile (Batch D) on the left, RiskTile (Batch A)
+  // in the middle, {YEAR} pace placeholder on the right (Batch G).
+  // Each tile owns its own empty-state — MarketRegime falls back to
+  // a NEUTRAL label with em-dashed signals when FRED is unavailable;
+  // RiskTile fills "—" everywhere when the warehouse has < 20 days.
   return (
     <div className="grid grid-cols-3 gap-2 text-xs text-[var(--muted-foreground)]">
-      <div className="bg-[var(--card)] border border-[var(--border)] rounded p-3 text-center">
-        <div className="opacity-70">Macro</div>
-        <div className="font-bold text-[var(--foreground)]">—</div>
-      </div>
+      <MarketRegimeTile />
       <RiskTile userId={userId} />
       <div className="bg-[var(--card)] border border-[var(--border)] rounded p-3 text-center">
         <div className="opacity-70">{new Date().getUTCFullYear()} pace</div>

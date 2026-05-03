@@ -32,4 +32,14 @@ export const CHIP_DEFINITIONS: Record<string, string> = {
     "Fractional Kelly position size — the share of portfolio that maximizes long-run geometric growth given your historical win-rate and average win/loss. We display ¼ Kelly to reduce drawdown when the inputs are estimated from a small sample. Informational only, not investment advice.",
   "pos size":
     "Suggested fractional Kelly position size, derived from your realized win-rate and avg win/loss across BUY recommendations. Informational only, not investment advice.",
+  regime:
+    "Market regime composite — combines VIX level, VIX9D/VIX term structure, days-to-FOMC, and put/call ratio into a 4-bucket label (Risk-on, Neutral, Fragile, Stress).",
+  "VIX9D/VIX":
+    "VIX9D divided by VIX. Below 1.0 means contango (calm); above 1.0 means backwardation (front-month vol pricing higher than longer-dated, classic risk-off signal).",
+  CAPE:
+    "Shiller cyclically-adjusted P/E ratio — S&P 500 price divided by 10-year average inflation-adjusted earnings. Currently deferred; no stable free API source.",
+  Buffett:
+    "Buffett indicator — total US stock market capitalization (Wilshire 5000) divided by nominal GDP. Above 1.4 has historically signaled stretched valuations. Informational only, not investment advice.",
+  "T-FOMC":
+    "Calendar days until the next FOMC rate-decision announcement. Markets routinely freeze inside the 3-day window around an announcement; the regime composite weights it as a stress factor.",
 };
