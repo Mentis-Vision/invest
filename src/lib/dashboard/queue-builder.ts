@@ -31,6 +31,8 @@ import {
 } from "./queue-sources";
 import { getQualityScores } from "./metrics/quality-loader";
 import type { QualityScores } from "./metrics/quality";
+import { getTickerMomentum } from "./metrics/momentum-loader";
+import { getKellyFraction } from "./metrics/kelly-loader";
 import type {
   QueueItem,
   ItemTypeKey,
@@ -464,6 +466,119 @@ function enrichWithQualityChips(
   }
 }
 
+/**
+ * Pull 12-1 momentum for every held ticker the user has, in a single
+ * Promise.all. Returns a sparse map — tickers with <252 days of
+ * warehouse history (or any other null state from the loader) are
+ * simply absent. The caller layers the momentum chip onto every raw
+ * item whose ticker is in the map.
+ *
+ * Bounded at the same 25-ticker ceiling we use for the quality loader
+ * so very large portfolios don't slow the queue render.
+ */
+async function loadHoldingMomentum(
+  review: ReviewSummary | null,
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const tickers = (review?.holdings ?? []).map((h) =>
+    h.ticker.toUpperCase(),
+  );
+  if (tickers.length === 0) return out;
+  const limited = Array.from(new Set(tickers)).slice(0, 25);
+
+  const results = await Promise.all(
+    limited.map(async (t) => {
+      try {
+        const mom = await getTickerMomentum(t);
+        return { ticker: t, mom };
+      } catch (err) {
+        log.warn("queue-builder", "momentum lookup failed", {
+          ticker: t,
+          ...errorInfo(err),
+        });
+        return { ticker: t, mom: null };
+      }
+    }),
+  );
+
+  for (const { ticker, mom } of results) {
+    if (mom === null || !Number.isFinite(mom)) continue;
+    out.set(ticker, mom);
+  }
+  return out;
+}
+
+/**
+ * Format a fractional return as a signed percent string with a
+ * single decimal place: 0.0823 → "+8.2%". Used by the momentum chip.
+ */
+function formatMomentumPct(value: number): string {
+  const pct = value * 100;
+  const sign = pct > 0 ? "+" : pct < 0 ? "" : "";
+  return `${sign}${pct.toFixed(1)}%`;
+}
+
+/**
+ * Layer the `mom +X%` chip onto every raw item whose ticker has a
+ * computable 12-1 momentum value. Mutates raw in place. Safe to
+ * call after enrichWithQualityChips — both append to r.chips.
+ */
+function enrichWithMomentumChips(
+  raw: RawItem[],
+  momentumByTicker: Map<string, number>,
+): void {
+  for (const r of raw) {
+    if (!r.ticker) continue;
+    const mom = momentumByTicker.get(r.ticker.toUpperCase());
+    if (mom === undefined) continue;
+    r.chips = [
+      ...r.chips,
+      {
+        label: "mom",
+        value: formatMomentumPct(mom),
+        tooltipKey: "mom",
+      },
+    ];
+  }
+}
+
+/**
+ * Layer a Kelly chip onto stale_rec_held and catalyst_prep_imminent
+ * items. We surface Kelly only on the items where it's most
+ * actionable — a stale long the user might re-deploy into, or a
+ * pre-catalyst position they might re-size. The chip is identical
+ * across these item types (it's a per-user fraction, not per
+ * ticker).
+ *
+ * `kellyFraction` is the per-user value pre-computed by the caller —
+ * pass null to skip enrichment entirely (the user has too few
+ * outcomes for a meaningful estimate).
+ */
+function enrichWithKellyChips(
+  raw: RawItem[],
+  kellyFraction: number | null,
+): void {
+  if (kellyFraction === null || !Number.isFinite(kellyFraction)) return;
+  if (kellyFraction <= 0) return;
+  const value = `${(kellyFraction * 100).toFixed(1)}%`;
+  for (const r of raw) {
+    if (
+      r.itemType !== "stale_rec_held" &&
+      r.itemType !== "catalyst_prep_imminent"
+    ) {
+      continue;
+    }
+    r.chips = [
+      ...r.chips,
+      {
+        label: "Kelly ¼",
+        value,
+        tooltipKey: "Kelly",
+      },
+    ];
+  }
+}
+
 function buildYearPaceReview(
   review: ReviewSummary | null,
   raw: RawItem[],
@@ -523,6 +638,23 @@ export async function buildQueueForUser(
   // single pass.
   const qualityByTicker = await buildQualityDeclineAndCollect(review, raw);
   enrichWithQualityChips(raw, qualityByTicker);
+
+  // Phase 2 science layer chips: 12-1 momentum (per held ticker)
+  // + fractional Kelly position size (per user). Both run after
+  // emitters so they only enrich existing items — they never
+  // create new rows.
+  const [momentumByTicker, kellyFraction] = await Promise.all([
+    loadHoldingMomentum(review),
+    getKellyFraction(userId).catch((err) => {
+      log.warn("queue-builder", "kelly lookup failed", {
+        userId,
+        ...errorInfo(err),
+      });
+      return null;
+    }),
+  ]);
+  enrichWithMomentumChips(raw, momentumByTicker);
+  enrichWithKellyChips(raw, kellyFraction);
 
   // ---- finalize: filter state, score, sort ----
   const now = Date.now();
