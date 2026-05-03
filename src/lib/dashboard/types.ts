@@ -17,7 +17,8 @@ export type ItemTypeKey =
   | "year_pace_review"
   | "quality_decline"
   | "goals_setup"
-  | "rebalance_drift";
+  | "rebalance_drift"
+  | "tax_harvest";
 
 export type QueueItemStatus = null | "snoozed" | "dismissed" | "done";
 

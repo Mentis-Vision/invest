@@ -158,5 +158,18 @@ export function renderTemplate(ctx: TemplateContext): TemplateOutput {
         body: `${dir} by roughly ${fmtMoney(Math.abs(dollars))}: stocks ${fmtPct(cur)} vs ${fmtPct(tgt)} target.`,
       };
     }
+
+    case "tax_harvest": {
+      // totalLossDollars is stored as a positive whole-dollar number
+      // by queue-builder (Math.abs of the summed loss). numPositions
+      // is the count of harvestable losses.
+      const total = Math.round(Math.abs(asNumber(data.totalLossDollars)));
+      const num = Math.max(1, Math.round(asNumber(data.numPositions)));
+      const noun = num === 1 ? "position has" : "positions have";
+      return {
+        title: `Tax-loss harvest: ${fmtMoney(total)} unrealized`,
+        body: `${num} ${noun} ${fmtMoney(total)} in harvestable losses. Suggested replacements available; verify wash-sale safety with your tax advisor.`,
+      };
+    }
   }
 }

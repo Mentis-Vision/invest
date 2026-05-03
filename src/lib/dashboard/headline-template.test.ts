@@ -79,6 +79,38 @@ describe("renderTemplate — catalyst_prep", () => {
   });
 });
 
+describe("renderTemplate — tax_harvest", () => {
+  it("renders aggregate loss + position count + advisor disclaimer", () => {
+    const out = renderTemplate({
+      itemType: "tax_harvest",
+      ticker: null,
+      data: {
+        totalLossDollars: 1450,
+        numPositions: 3,
+      },
+    });
+    expect(out.title).toContain("$1,450");
+    expect(out.title).toContain("Tax-loss harvest");
+    expect(out.body).toContain("3 positions");
+    expect(out.body).toContain("$1,450");
+    expect(out.body).toContain("tax advisor");
+    expect(out.body).toContain("wash-sale");
+  });
+
+  it("renders singular noun when only one harvestable position", () => {
+    const out = renderTemplate({
+      itemType: "tax_harvest",
+      ticker: null,
+      data: {
+        totalLossDollars: 250,
+        numPositions: 1,
+      },
+    });
+    expect(out.body).toMatch(/1 position has/);
+    expect(out.body).toContain("$250");
+  });
+});
+
 describe("renderTemplate — outcome_action_mark", () => {
   it("renders outcome ask", () => {
     const out = renderTemplate({

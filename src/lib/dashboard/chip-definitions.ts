@@ -59,4 +59,12 @@ export const CHIP_DEFINITIONS: Record<string, string> = {
     "Your risk tolerance setting: conservative, moderate, or aggressive.",
   drift:
     "Difference between current stock allocation and your target glidepath, in percentage points.",
+  loss:
+    "Unrealized loss on this position — current value minus original cost basis. Negative values qualify for tax-loss harvesting if held in a taxable (non-IRA / non-401k) account.",
+  replacement:
+    "Suggested wash-sale-safe replacement — a broad sector ETF unlikely to be deemed 'substantially identical' to the sold position. General guidance only; verify with your tax advisor before acting.",
+  "wash-sale":
+    "IRS wash-sale rule — selling at a loss and buying the same or substantially identical security within 30 days before OR after disallows the loss. The 30-day window applies symmetrically.",
+  "tax-window":
+    "Days remaining in the current tax year to harvest losses for this year's return. December 31 is the cutoff for most filers; consult your tax advisor.",
 };
