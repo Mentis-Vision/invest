@@ -42,6 +42,8 @@ import { MonteCarloCard } from "@/components/dashboard/year-outlook/monte-carlo-
 import { getMonteCarloProjection } from "@/lib/dashboard/metrics/monte-carlo-loader";
 import { DamodaranCard } from "@/components/dashboard/year-outlook/damodaran-cost-of-capital-card";
 import { MacroVitalsTile } from "@/components/dashboard/year-outlook/macro-vitals-tile";
+import { BehavioralAuditCard } from "@/components/dashboard/year-outlook/behavioral-audit-card";
+import { getBehavioralAudit } from "@/lib/dashboard/metrics/behavioral-audit-loader";
 import { AuditAiCard } from "@/components/dashboard/audit-ai-card";
 import { getAuditAiTrackRecord } from "@/lib/dashboard/metrics/audit-ai-loader";
 import { log, errorInfo } from "@/lib/log";
@@ -95,7 +97,7 @@ export default async function YearOutlookPage() {
   // resolved currentValue to seed the simulation. Cheap relative to
   // the warehouse round-trips above (pure CPU once goals load).
   // The Audit-AI track-record query is independent so it parallels.
-  const [monteCarloResult, auditAiResult] = await Promise.all([
+  const [monteCarloResult, auditAiResult, behavioralAudit] = await Promise.all([
     getMonteCarloProjection(userId, currentValue).catch((err) => {
       log.warn("year-outlook.page", "monte carlo load failed", {
         userId,
@@ -112,6 +114,17 @@ export default async function YearOutlookPage() {
         return null;
       },
     ),
+    getBehavioralAudit(userId).catch((err) => {
+      log.warn("year-outlook.page", "behavioral audit load failed", {
+        userId,
+        ...errorInfo(err),
+      });
+      return {
+        homeBias: null,
+        concentrationDrift: null,
+        recencyChase: null,
+      };
+    }),
   ]);
 
   const year = new Date().getUTCFullYear();
@@ -146,6 +159,7 @@ export default async function YearOutlookPage() {
         <DamodaranCard />
         <MacroVitalsTile />
         <MacroOutlook />
+        <BehavioralAuditCard audit={behavioralAudit} />
         <AuditAiCard result={auditAiResult} scope="user" />
       </main>
     </AppShell>
