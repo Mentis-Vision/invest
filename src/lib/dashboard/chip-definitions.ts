@@ -42,4 +42,12 @@ export const CHIP_DEFINITIONS: Record<string, string> = {
     "Buffett indicator — total US stock market capitalization (Wilshire 5000) divided by nominal GDP. Above 1.4 has historically signaled stretched valuations. Informational only, not investment advice.",
   "T-FOMC":
     "Calendar days until the next FOMC rate-decision announcement. Markets routinely freeze inside the 3-day window around an announcement; the regime composite weights it as a stress factor.",
+  "VaR 95":
+    "Value-at-Risk at 95% confidence — the loss the portfolio is expected to exceed on roughly 1 in 20 trading days, derived from the empirical (historical) return distribution rather than a Gaussian assumption. Informational only, not investment advice.",
+  "VaR 99":
+    "Value-at-Risk at 99% confidence — the loss the portfolio is expected to exceed on roughly 1 in 100 trading days. Always more extreme than VaR 95 and a cleaner read on tail risk for concentrated portfolios.",
+  CVaR:
+    "Conditional VaR / Expected Shortfall — the average loss across the days that breach VaR. Cares not just about where the cutoff sits but how bad the bad days actually are; tighter measure of tail risk than VaR alone.",
+  "var-1mo":
+    "1-month VaR projected from the daily figure via square-root-of-time scaling (sqrt(21) trading days). Assumes returns are i.i.d. — same shape regulators expect for capital adequacy reporting. Informational only, not investment advice.",
 };
