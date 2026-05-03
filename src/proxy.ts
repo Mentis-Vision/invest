@@ -46,6 +46,7 @@ function requiresAuth(pathname: string): boolean {
   if (pathname.startsWith("/api/ticker-tape")) return true;
   if (pathname.startsWith("/api/dashboard/")) return true;
   if (pathname.startsWith("/api/queue/")) return true;
+  if (pathname.startsWith("/api/goals")) return true;
   return false;
 }
 
