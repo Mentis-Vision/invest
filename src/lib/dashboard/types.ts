@@ -66,3 +66,32 @@ export const HORIZON_COLOR: Record<HorizonTag, string> = {
   THIS_MONTH: "var(--hold)",
   THIS_YEAR: "var(--buy)",
 };
+
+// ── Phase 5 dashboard redesign types ──
+
+export interface BenchmarkComparison {
+  key: string;       // preset slug ("sp500") or custom ticker ("ARKK")
+  label: string;     // human-readable
+  deltaPct: number;  // portfolio − benchmark over chosen window, fraction
+}
+
+export interface TickerMover {
+  ticker: string;
+  changePct: number;  // signed fraction (0.023 = +2.3%)
+}
+
+export interface HeroSparklinePoint {
+  date: string;       // ISO date
+  value: number;      // portfolio total $ on that date
+}
+
+export interface HeroData {
+  totalValue: number | null;
+  dayChange: { dollars: number; pct: number } | null;
+  mtdPct: number | null;
+  ytdPct: number | null;
+  benchmarks: BenchmarkComparison[];
+  sparkline: HeroSparklinePoint[];
+  topMovers: TickerMover[];
+  asOf: string | null;
+}
