@@ -206,6 +206,26 @@ export async function getSeriesHistory(
   return obs.slice(0, months).reverse();
 }
 
+/**
+ * Fetches the most recent observation for a series and returns it as a
+ * `{ value: number; date: string }` pair, or null when the series is
+ * unavailable / has no usable observations / the value isn't numeric.
+ *
+ * Used by regime-loader (VIXCLS, VIX9D) and macro-valuation
+ * (WILL5000PRFC, GDP) — small surface, no daily-vs-monthly preference,
+ * because the caller knows which series it asked for.
+ */
+export async function getLatestSeriesValue(
+  seriesId: string,
+): Promise<{ value: number; date: string } | null> {
+  const obs = await fetchObservations(seriesId, 1);
+  const o = obs[0];
+  if (!o) return null;
+  const num = Number(o.value);
+  if (!Number.isFinite(num)) return null;
+  return { value: num, date: o.date };
+}
+
 export function formatMacroForAI(snapshot: MacroSnapshot): string {
   if (snapshot.length === 0) {
     return "MACRO CONTEXT: FRED data unavailable (no API key configured).";
