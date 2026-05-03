@@ -31,6 +31,17 @@ export async function POST(req: Request) {
     [session.user.id, itemKey, snoozeUntil],
   );
 
+  // Invalidate the precomputed daily-headline cache. The /app page
+  // used to fall back to this cache when items[] was empty, which
+  // could re-render a just-snoozed/dismissed item. Even with that
+  // fallback dropped, we still clear the cache so any future
+  // consumer (or re-introduced fallback) sees a fresh value rather
+  // than the pre-action snapshot. The next cron tick rebuilds it.
+  await pool.query(
+    `UPDATE user_profile SET headline_cache = NULL, headline_cached_at = NULL WHERE "userId" = $1`,
+    [session.user.id],
+  );
+
   log.info("queue", "queue.snooze", { userId: session.user.id, itemKey });
   return NextResponse.json({ ok: true, snoozeUntil });
 }

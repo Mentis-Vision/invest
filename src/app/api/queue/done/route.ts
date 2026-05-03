@@ -30,6 +30,15 @@ export async function POST(req: Request) {
     [session.user.id, itemKey],
   );
 
+  // Invalidate the precomputed daily-headline cache. See
+  // src/app/app/page.tsx for the rationale — keeps any future
+  // consumer of `headline_cache` from re-rendering a just-marked-
+  // done item.
+  await pool.query(
+    `UPDATE user_profile SET headline_cache = NULL, headline_cached_at = NULL WHERE "userId" = $1`,
+    [session.user.id],
+  );
+
   log.info("queue", "queue.done", { userId: session.user.id, itemKey });
   return NextResponse.json({ ok: true });
 }

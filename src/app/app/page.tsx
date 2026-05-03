@@ -9,7 +9,6 @@ import {
 import { stripe, stripeConfigured, priceIdFor } from "@/lib/stripe";
 import DashboardClient from "@/components/dashboard-client";
 import { log, errorInfo } from "@/lib/log";
-import { pool } from "@/lib/db";
 import { buildQueueForUser } from "@/lib/dashboard/queue-builder";
 import { DailyHeadline } from "@/components/dashboard/daily-headline";
 import { DecisionQueue } from "@/components/dashboard/decision-queue";
@@ -17,7 +16,7 @@ import { RiskTile } from "@/components/dashboard/risk-tile";
 import { VarTile } from "@/components/dashboard/var-tile";
 import { MarketRegimeTile } from "@/components/dashboard/market-regime-tile";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import type { HeadlineCache, QueueItem } from "@/lib/dashboard/types";
+import type { QueueItem } from "@/lib/dashboard/types";
 
 export const dynamic = "force-dynamic";
 
@@ -135,30 +134,25 @@ export default async function Home({
 
   // ---- New overview composition ---------------------------------------
   const userId = session.user.id;
-  const [items, cacheRow] = await Promise.all([
-    buildQueueForUser(userId).catch((err) => {
-      log.warn("app.page", "buildQueueForUser failed", {
-        userId,
-        ...errorInfo(err),
-      });
-      return [] as QueueItem[];
-    }),
-    pool
-      .query<{ headline_cache: HeadlineCache | null }>(
-        `SELECT headline_cache FROM user_profile WHERE "userId" = $1`,
-        [userId],
-      )
-      .catch((err) => {
-        log.warn("app.page", "headline_cache fetch failed", {
-          userId,
-          ...errorInfo(err),
-        });
-        return { rows: [] as Array<{ headline_cache: HeadlineCache | null }> };
-      }),
-  ]);
+  const items = await buildQueueForUser(userId).catch((err) => {
+    log.warn("app.page", "buildQueueForUser failed", {
+      userId,
+      ...errorInfo(err),
+    });
+    return [] as QueueItem[];
+  });
 
-  const cached = cacheRow.rows[0]?.headline_cache ?? null;
-  const headline: QueueItem | null = items[0] ?? cached?.rendered ?? null;
+  // Stale-headline fix (2026-05-02): we used to fall back to
+  // `user_profile.headline_cache.rendered` whenever `items` was empty,
+  // but that conflated "queue genuinely empty after dismiss" with
+  // "queue builder errored." The latter is already handled by the
+  // catch above (returns `[]`); the former should render the
+  // empty-state CTA, not re-render the just-dismissed item. The cron
+  // still refreshes the cache daily for the warm-load case but it's
+  // no longer authoritative for this surface — the snooze/dismiss/
+  // done route handlers also clear it on user action so it can never
+  // shadow a real action.
+  const headline: QueueItem | null = items[0] ?? null;
   const queue = headline
     ? items.filter((i) => i.itemKey !== headline.itemKey)
     : items;
