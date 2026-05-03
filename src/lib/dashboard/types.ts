@@ -15,7 +15,9 @@ export type ItemTypeKey =
   | "outcome_action_mark"
   | "cash_idle"
   | "year_pace_review"
-  | "quality_decline";
+  | "quality_decline"
+  | "goals_setup"
+  | "rebalance_drift";
 
 export type QueueItemStatus = null | "snoozed" | "dismissed" | "done";
 
