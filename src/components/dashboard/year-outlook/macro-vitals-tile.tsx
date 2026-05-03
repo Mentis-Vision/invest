@@ -20,6 +20,7 @@ import {
 import { getSkewReading } from "@/lib/dashboard/metrics/skew";
 import { getTipsRealYield } from "@/lib/dashboard/metrics/tips-real-yield";
 import { getFedWatchSnapshot } from "@/lib/dashboard/metrics/fed-watch";
+import { AsOfFootnote } from "@/components/dashboard/as-of-footnote";
 import { log, errorInfo } from "@/lib/log";
 
 const SKEW_BAND_LABEL: Record<string, string> = {
@@ -92,6 +93,7 @@ export async function MacroVitalsTile() {
                 <div className="text-[10px] text-muted-foreground">
                   {SKEW_BAND_LABEL[skew.band]} · {fmtPercentile(skew.percentile2y)} pct (2y)
                 </div>
+                <AsOfFootnote source="^SKEW (Yahoo)" asOf={skew.asOf} />
               </>
             ) : (
               <>
@@ -121,6 +123,7 @@ export async function MacroVitalsTile() {
                 <div className="text-[10px] text-muted-foreground">
                   Nom {fmtPct(tips.nominal10y)} · Brk {fmtPct(tips.breakeven10y)}
                 </div>
+                <AsOfFootnote source="FRED" asOf={tips.asOf} />
               </>
             ) : (
               <>
@@ -146,6 +149,7 @@ export async function MacroVitalsTile() {
                   by {fedWatch.targetYear} · current{" "}
                   {fmtPct(fedWatch.currentFunds)}
                 </div>
+                <AsOfFootnote source="FOMC SEP" asOf={fedWatch.asOf} />
               </>
             ) : (
               <>

@@ -24,8 +24,8 @@ export async function getStressScenarios(
   userId: string,
 ): Promise<StressScenarioResult[] | null> {
   try {
-    const exposure = await getFactorExposure(userId);
-    return runStressScenarios(exposure);
+    const result = await getFactorExposure(userId);
+    return runStressScenarios(result.exposure);
   } catch (err) {
     log.warn("stress-test-loader", "failed", {
       userId,

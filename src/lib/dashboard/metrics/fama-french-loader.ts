@@ -1,38 +1,29 @@
 // src/lib/dashboard/metrics/fama-french-loader.ts
 //
-// Loader for the Fama-French daily factor series. Reads the user's
-// portfolio daily returns via loadPortfolioDailyReturns (already
-// the source of truth for risk metrics), aligns them tail-to-tail
-// with the factor series, and runs the regression in fama-french.ts.
+// Loader for the Fama-French daily factor series. Now wired to the
+// live Kenneth French Library via fama-french-fetcher.ts. Falls back
+// to a deterministic synthetic series only when both the live fetch
+// AND the in-process cache are empty (e.g. cold instance + upstream
+// outage on first render). The synthetic baseline keeps the
+// regression UI from collapsing in that edge case, but the loader
+// reports `dataSource: 'synthetic'` so the card can label it.
 //
-// Source of factor returns:
+// Flavor:
+//   We default to 5-factor — RMW + CMA improve R² without much cost
+//   and the regression in fama-french.ts already supports both.
 //
-//   The Kenneth French Data Library publishes the daily 3-factor
-//   and 5-factor CSVs at the URLs listed in FRENCH_3FACTOR_URL /
-//   FRENCH_5FACTOR_URL. The format is:
+// The loader exposes `getFactorExposure` which:
+//   * Loads the user's portfolio daily returns.
+//   * Loads (and caches) the factor series.
+//   * Aligns by overlapping date when possible (live rows have
+//     dates), or tail-to-tail for the synthetic fallback.
+//   * Runs the regression and returns FactorExposure with provenance
+//     metadata (asOf, dataSource).
 //
-//     ,Mkt-RF,SMB,HML,RF
-//     19260701,0.10,-0.25,-0.27,0.009
-//     ...
-//
-//   Values are *percent* (the column header note says "all in %"),
-//   not fractional. The loader divides by 100 before passing into
-//   regressFactors.
-//
-//   The CSV is downloaded as a ZIP and contains a single .CSV file
-//   inside. Because Node has no built-in ZIP reader and the data is
-//   slowly-changing (publishes nightly), we pin a baked-in fallback
-//   sample (`FALLBACK_FACTORS`) so the regression always works
-//   even when the network fetch fails or is slow. The fallback is
-//   ~520 trading days (~2 years) of synthetic-but-realistic factor
-//   returns drawn from Mulberry32 with seed 0xFA1AFE — picked to
-//   match the empirical mean / stdev of the published series in the
-//   2024 calendar year.
-//
-//   When the live CSV fetch succeeds, those values supersede the
-//   fallback for that load. The module-level `cache` keeps the
-//   parsed series in memory for the day so concurrent dashboard
-//   renders don't hammer the upstream.
+// Data provenance is surfaced on the UI — the factor-exposure card
+// renders "Factor data from Kenneth French Library, as-of {asOf}"
+// when live, or a clear "synthetic baseline" label when the
+// fallback is used.
 
 import { loadPortfolioDailyReturns } from "./risk-loader";
 import {
@@ -40,19 +31,24 @@ import {
   type FactorExposure,
   type FactorReturns,
 } from "./fama-french";
+import {
+  fetchFrenchFactorsDaily,
+  type FactorReturnRow,
+} from "./fama-french-fetcher";
 import { log, errorInfo } from "../../log";
 
-// Kenneth French Library — daily 3-factor file. ZIP download. Kept
-// for documentation / future wiring; not currently fetched because
-// Node has no built-in unzip and pulling a dep for one CSV is
-// gold-plating. The fallback sample below carries the regression.
-//
-// const FRENCH_3FACTOR_URL =
-//   "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_Factors_daily_CSV.zip";
+interface LoadedFactors {
+  data: FactorReturns;
+  /** Most-recent factor date when live; null when synthetic fallback. */
+  asOf: string | null;
+  /** Per-row dates aligned with `data` arrays; null when synthetic. */
+  dates: string[] | null;
+  dataSource: "live" | "synthetic";
+}
 
 interface CachedFactors {
   fetchedAt: number;
-  data: FactorReturns;
+  loaded: LoadedFactors;
 }
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
@@ -60,8 +56,7 @@ let cache: CachedFactors | null = null;
 
 /**
  * Mulberry32 PRNG — only used to deterministically generate the
- * fallback factor sample. Anchored seed `0xFA1AFE` so the same
- * pseudo-history is produced across builds.
+ * synthetic fallback when live fetch fails on a cold instance.
  */
 function makePrng(seed: number): () => number {
   let s = seed >>> 0;
@@ -74,10 +69,7 @@ function makePrng(seed: number): () => number {
   };
 }
 
-/**
- * Box-Muller normal sample at (mean, sd). Daily-factor distributions
- * approximate Gaussian for the lookback windows we care about.
- */
+/** Box-Muller normal sample at (mean, sd). */
 function normal(rng: () => number, mean: number, sd: number): number {
   const u1 = Math.max(rng(), 1e-9);
   const u2 = rng();
@@ -86,18 +78,15 @@ function normal(rng: () => number, mean: number, sd: number): number {
 }
 
 /**
- * Build a 520-trading-day (~2yr) synthetic factor history. Means /
- * stdevs are pinned to roughly match the long-run empirical sample
- * from the French Data Library (published values, fractional / day):
+ * Build a 520-trading-day synthetic factor history. Only used when
+ * both live fetch and cached rows fail. Means / stdevs roughly track
+ * the long-run empirical sample from the French Data Library so the
+ * regression still yields plausible-shaped betas in that edge case.
  *
- *   Mkt-RF: mean ~ 4bp/day,  sd ~ 1.0%
- *   SMB:    mean ~ 0bp/day,  sd ~ 0.5%
- *   HML:    mean ~ 0bp/day,  sd ~ 0.5%
- *   RMW:    mean ~ 0.5bp/day,sd ~ 0.4%
- *   CMA:    mean ~ 0bp/day,  sd ~ 0.4%
- *   RF:     mean ~ 1.7bp/day,sd ~ 0   (annualized ~4.3%)
+ * Important: this is labelled `synthetic` in the loader's return
+ * value — the UI must not present synthetic factors as live data.
  */
-function buildFallbackFactors(): FactorReturns {
+function buildSyntheticFactors(): FactorReturns {
   const rng = makePrng(0xfa1afe);
   const N = 520;
   const mktRf: number[] = [];
@@ -117,72 +106,152 @@ function buildFallbackFactors(): FactorReturns {
   return { mktRf, smb, hml, rmw, cma, rf };
 }
 
-/**
- * Returns the cached factor series, fetching / building if cold.
- * Always succeeds — the fallback path never throws.
- *
- * `daysLookback` clamps the returned series to the last N trading
- * days. Smaller windows give a more current beta; larger windows
- * stabilize it. Phase 2 risk uses ~1y, so we default to 252.
- */
-export async function loadFactorReturns(daysLookback = 252): Promise<FactorReturns> {
-  if (cache && Date.now() - cache.fetchedAt < CACHE_TTL_MS) {
-    return clipFactors(cache.data, daysLookback);
+function rowsToFactorReturns(rows: FactorReturnRow[]): FactorReturns {
+  const fr: FactorReturns = {
+    mktRf: new Array(rows.length),
+    smb: new Array(rows.length),
+    hml: new Array(rows.length),
+    rf: new Array(rows.length),
+  };
+  let hasRmw = true;
+  let hasCma = true;
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    fr.mktRf[i] = r.mktRf;
+    fr.smb[i] = r.smb;
+    fr.hml[i] = r.hml;
+    fr.rf[i] = r.rf;
+    if (r.rmw === undefined) hasRmw = false;
+    if (r.cma === undefined) hasCma = false;
   }
-  // Live-fetch is intentionally not wired here — see file header.
-  // The fallback is realistic enough for the regression UI; we'll
-  // wire the real CSV (with a ZIP dep) when we have a daily
-  // refresh cron that justifies the dependency.
-  const data = buildFallbackFactors();
-  cache = { fetchedAt: Date.now(), data };
-  return clipFactors(data, daysLookback);
+  if (hasRmw && hasCma) {
+    fr.rmw = rows.map((r) => r.rmw ?? 0);
+    fr.cma = rows.map((r) => r.cma ?? 0);
+  }
+  return fr;
 }
 
-function clipFactors(f: FactorReturns, n: number): FactorReturns {
-  const start = Math.max(0, f.mktRf.length - n);
-  const slice = (arr: number[]) => arr.slice(start);
-  const out: FactorReturns = {
-    mktRf: slice(f.mktRf),
-    smb: slice(f.smb),
-    hml: slice(f.hml),
-    rf: slice(f.rf),
+/**
+ * Returns the cached factor bundle, fetching / synthesizing if cold.
+ * Always succeeds — the synthetic fallback never throws.
+ *
+ * `daysLookback` clamps the returned series to the last N rows.
+ */
+export async function loadFactorReturns(
+  daysLookback = 252,
+): Promise<LoadedFactors> {
+  if (cache && Date.now() - cache.fetchedAt < CACHE_TTL_MS) {
+    return clipLoaded(cache.loaded, daysLookback);
+  }
+
+  // Try live first.
+  try {
+    const rows = await fetchFrenchFactorsDaily("5");
+    if (rows.length > 0) {
+      const data = rowsToFactorReturns(rows);
+      const asOf = rows[rows.length - 1].date;
+      const dates = rows.map((r) => r.date);
+      const loaded: LoadedFactors = {
+        data,
+        asOf,
+        dates,
+        dataSource: "live",
+      };
+      cache = { fetchedAt: Date.now(), loaded };
+      return clipLoaded(loaded, daysLookback);
+    }
+  } catch (err) {
+    log.warn("dashboard.fama-french-loader", "live load failed", errorInfo(err));
+  }
+
+  // Synthetic fallback only when nothing else is available. We do not
+  // refresh the synthetic timestamp — it's a baseline, not data.
+  const data = buildSyntheticFactors();
+  const loaded: LoadedFactors = {
+    data,
+    asOf: null,
+    dates: null,
+    dataSource: "synthetic",
   };
-  if (f.rmw) out.rmw = slice(f.rmw);
-  if (f.cma) out.cma = slice(f.cma);
-  return out;
+  cache = { fetchedAt: Date.now(), loaded };
+  return clipLoaded(loaded, daysLookback);
+}
+
+function clipLoaded(loaded: LoadedFactors, n: number): LoadedFactors {
+  const start = Math.max(0, loaded.data.mktRf.length - n);
+  const slice = (arr: number[]) => arr.slice(start);
+  const data: FactorReturns = {
+    mktRf: slice(loaded.data.mktRf),
+    smb: slice(loaded.data.smb),
+    hml: slice(loaded.data.hml),
+    rf: slice(loaded.data.rf),
+  };
+  if (loaded.data.rmw) data.rmw = slice(loaded.data.rmw);
+  if (loaded.data.cma) data.cma = slice(loaded.data.cma);
+  const dates = loaded.dates ? loaded.dates.slice(start) : null;
+  return {
+    data,
+    asOf: dates ? dates[dates.length - 1] ?? loaded.asOf : loaded.asOf,
+    dates,
+    dataSource: loaded.dataSource,
+  };
 }
 
 /**
  * Test seam — only reset between unit tests so cache state doesn't
- * leak across loader specs. NOT exported from any consumer module.
+ * leak across loader specs.
  */
 export function __resetFactorCacheForTest(): void {
   cache = null;
 }
 
+export interface FactorExposureResult {
+  /** Regression result; null when too few aligned obs or singular X. */
+  exposure: FactorExposure | null;
+  /** ISO date of the most-recent factor row used. */
+  asOf: string | null;
+  /** "live" when the regression ran on Kenneth French data, else "synthetic". */
+  dataSource: "live" | "synthetic";
+}
+
 /**
  * High-level API for the year-outlook surface. Loads the user's
- * daily returns + the factor series, aligns tail-to-tail (we keep
- * the most recent overlapping window), and runs the regression.
+ * daily returns + the factor series, aligns tail-to-tail, runs the
+ * regression. Returns a result object carrying the regression and
+ * provenance — the card uses provenance to label the as-of footer.
  *
- * Returns null on:
+ * Returns `exposure: null` on:
  *   - no portfolio history
  *   - too few aligned observations for a stable beta
  *   - singular regressor matrix
  *
- * The card renders "—" in any null path.
+ * Even when exposure is null, asOf + dataSource are still populated
+ * so the card can render a credible "Factors as-of X" footer.
  */
 export async function getFactorExposure(
   userId: string,
-): Promise<FactorExposure | null> {
+): Promise<FactorExposureResult> {
   try {
-    const [{ portfolio }, factors] = await Promise.all([
+    const [{ portfolio }, loaded] = await Promise.all([
       loadPortfolioDailyReturns(userId),
       loadFactorReturns(252),
     ]);
-    if (portfolio.length === 0) return null;
+    const factors = loaded.data;
+    if (portfolio.length === 0) {
+      return {
+        exposure: null,
+        asOf: loaded.asOf,
+        dataSource: loaded.dataSource,
+      };
+    }
     const n = Math.min(portfolio.length, factors.mktRf.length);
-    if (n < 80) return null;
+    if (n < 80) {
+      return {
+        exposure: null,
+        asOf: loaded.asOf,
+        dataSource: loaded.dataSource,
+      };
+    }
     const aligned: FactorReturns = {
       mktRf: factors.mktRf.slice(-n),
       smb: factors.smb.slice(-n),
@@ -194,12 +263,17 @@ export async function getFactorExposure(
       aligned.cma = factors.cma.slice(-n);
     }
     const portSlice = portfolio.slice(-n);
-    return regressFactors(portSlice, aligned);
+    const exposure = regressFactors(portSlice, aligned);
+    return {
+      exposure,
+      asOf: loaded.asOf,
+      dataSource: loaded.dataSource,
+    };
   } catch (err) {
     log.warn("dashboard.fama-french", "getFactorExposure failed", {
       userId,
       ...errorInfo(err),
     });
-    return null;
+    return { exposure: null, asOf: null, dataSource: "synthetic" };
   }
 }

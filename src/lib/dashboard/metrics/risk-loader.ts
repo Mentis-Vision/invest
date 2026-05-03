@@ -49,6 +49,8 @@ interface PriceRow {
 export async function loadPortfolioDailyReturns(userId: string): Promise<{
   portfolio: number[];
   benchmark: number[];
+  /** ISO date of the most recent aligned observation, or null when empty. */
+  asOf: string | null;
 }> {
   let holdingsRows: HoldingRow[] = [];
   try {
@@ -81,11 +83,11 @@ export async function loadPortfolioDailyReturns(userId: string): Promise<{
       userId,
       ...errorInfo(err),
     });
-    return { portfolio: [], benchmark: [] };
+    return { portfolio: [], benchmark: [], asOf: null };
   }
 
   if (holdingsRows.length === 0) {
-    return { portfolio: [], benchmark: [] };
+    return { portfolio: [], benchmark: [], asOf: null };
   }
 
   const tickers = holdingsRows.map((h) => h.ticker.toUpperCase());
@@ -123,7 +125,7 @@ export async function loadPortfolioDailyReturns(userId: string): Promise<{
       userId,
       ...errorInfo(err),
     });
-    return { portfolio: [], benchmark: [] };
+    return { portfolio: [], benchmark: [], asOf: null };
   }
 
   // Pivot into date → (ticker → close)
@@ -143,6 +145,7 @@ export async function loadPortfolioDailyReturns(userId: string): Promise<{
   const dates = Array.from(byDate.keys()).sort();
   const portfolio: number[] = [];
   const benchmark: number[] = [];
+  const usedDates: string[] = [];
 
   for (let i = 1; i < dates.length; i++) {
     const prevPrices = byDate.get(dates[i - 1]);
@@ -186,6 +189,7 @@ export async function loadPortfolioDailyReturns(userId: string): Promise<{
     // the daily move toward zero.
     portfolio.push(pRet / totalWeight);
     benchmark.push(bRet);
+    usedDates.push(dates[i]);
   }
 
   log.info("dashboard.risk", "loadPortfolioDailyReturns", {
@@ -194,19 +198,37 @@ export async function loadPortfolioDailyReturns(userId: string): Promise<{
     samples: portfolio.length,
   });
 
-  return { portfolio, benchmark };
+  return {
+    portfolio,
+    benchmark,
+    asOf: usedDates.length > 0 ? usedDates[usedDates.length - 1] : null,
+  };
+}
+
+export interface PortfolioRiskWithAsOf extends PortfolioRisk {
+  /** ISO date of the most recent observation in the sample. */
+  asOf: string | null;
+}
+
+export interface VarResultWithAsOf extends VarResult {
+  /** ISO date of the most recent observation in the sample. */
+  asOf: string | null;
 }
 
 /**
  * Compute the full PortfolioRisk for a user. Returns null when the
  * sample window is too short for stable metrics (< 20 days).
+ *
+ * The returned object carries an asOf timestamp (latest aligned
+ * observation) so tiles can surface freshness without re-querying
+ * the warehouse.
  */
 export async function getPortfolioRisk(
   userId: string,
-): Promise<PortfolioRisk | null> {
-  const { portfolio, benchmark } = await loadPortfolioDailyReturns(userId);
+): Promise<PortfolioRiskWithAsOf | null> {
+  const { portfolio, benchmark, asOf } = await loadPortfolioDailyReturns(userId);
   if (portfolio.length < MIN_SAMPLES) return null;
-  return computePortfolioRisk(portfolio, benchmark);
+  return { ...computePortfolioRisk(portfolio, benchmark), asOf };
 }
 
 /**
@@ -218,10 +240,12 @@ export async function getPortfolioRisk(
  */
 export async function getPortfolioVaR(
   userId: string,
-): Promise<VarResult | null> {
-  const { portfolio } = await loadPortfolioDailyReturns(userId);
+): Promise<VarResultWithAsOf | null> {
+  const { portfolio, asOf } = await loadPortfolioDailyReturns(userId);
   if (portfolio.length < MIN_SAMPLES) return null;
-  return computeVaR(portfolio);
+  const result = computeVaR(portfolio);
+  if (!result) return null;
+  return { ...result, asOf };
 }
 
 /**

@@ -18,6 +18,7 @@ import {
   getPortfolioVaR,
   getPortfolioValue,
 } from "@/lib/dashboard/metrics/risk-loader";
+import { AsOfFootnote } from "@/components/dashboard/as-of-footnote";
 
 function fmtPct(n: number | null | undefined): string {
   if (n === null || n === undefined || !Number.isFinite(n) || n === 0) {
@@ -104,6 +105,10 @@ export async function VarTile({ userId }: { userId: string }) {
           colorVar="--hold"
         />
       </div>
+      <AsOfFootnote
+        source={`Warehouse · ${sample}d sample`}
+        asOf={varResult?.asOf ?? null}
+      />
     </div>
   );
 }
