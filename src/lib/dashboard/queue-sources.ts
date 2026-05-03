@@ -11,6 +11,7 @@
 import { pool } from "../db";
 import { log, errorInfo } from "../log";
 import { getCachedPortfolioReview } from "../portfolio-review";
+import { getPortfolioRisk } from "./metrics/risk-loader";
 
 export interface ReviewBreach {
   ticker: string;
@@ -104,12 +105,24 @@ export async function getReviewSummary(
     staleRecs,
     upcomingCatalysts,
     cashIdle,
+    risk,
   ] = await Promise.all([
     listHoldingsWithWeights(userId),
     listConcentrationBreaches(userId),
     listStaleRecs(userId),
     listUpcomingCatalysts(userId),
     deriveCashIdle(userId),
+    // Phase 2 Batch A: pull portfolio + SPY YTD from the warehouse
+    // risk loader. Wrapped in catch so a slow / failing loader never
+    // breaks queue-builder — we fall back to undefined and the
+    // year_pace_review template renders the existing 0.0% placeholder.
+    getPortfolioRisk(userId).catch((err) => {
+      log.warn("queue-sources", "risk-load-failed", {
+        userId,
+        ...errorInfo(err),
+      });
+      return null;
+    }),
   ]);
 
   if (
@@ -122,6 +135,19 @@ export async function getReviewSummary(
     return null;
   }
 
+  // Convert the loader's fractional returns (0.052 = 5.2%) into the
+  // percent-number shape the year_pace_review template expects —
+  // headline-template.fmtSign treats numeric inputs as percents and
+  // queue-builder's chip uses `.toFixed(1)` directly without
+  // multiplying. `null` values fall through to undefined so the
+  // template fallback to 0.0% still applies.
+  const portfolioYtdPct =
+    risk && Number.isFinite(risk.ytdPct) ? risk.ytdPct * 100 : undefined;
+  const spyYtdPct =
+    risk && Number.isFinite(risk.benchYtdPct)
+      ? risk.benchYtdPct * 100
+      : undefined;
+
   return {
     brokerStatus: brokerStatus.status,
     brokerName: brokerStatus.brokerName,
@@ -130,12 +156,8 @@ export async function getReviewSummary(
     upcomingCatalysts,
     staleRecs,
     cashIdle,
-    // YTD metrics: deferred — neither portfolio_snapshot nor
-    // ticker_market_daily reaches back to Jan 1, so we cannot anchor a
-    // real YTD without backfill. Leave undefined; queue-builder falls
-    // back to 0.0% in the year_pace_review template.
-    portfolioYtdPct: undefined,
-    spyYtdPct: undefined,
+    portfolioYtdPct,
+    spyYtdPct,
   };
 }
 
