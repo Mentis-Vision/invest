@@ -15,6 +15,7 @@
 import { getMarketRegime } from "@/lib/dashboard/metrics/regime-loader";
 import { getMacroValuation } from "@/lib/dashboard/metrics/macro-valuation";
 import type { RegimeLabel } from "@/lib/dashboard/metrics/regime";
+import { AsOfFootnote } from "@/components/dashboard/as-of-footnote";
 
 const LABEL_COLOR: Record<RegimeLabel, string> = {
   RISK_ON: "var(--buy)",
@@ -106,6 +107,13 @@ export async function MarketRegimeTile() {
           </span>
         </div>
       )}
+      <AsOfFootnote source="VIX (FRED)" asOf={regime.asOf} />
+      {regime.nextFOMCDate ? (
+        <AsOfFootnote
+          source={`FOMC (${regime.fomcSource})`}
+          asOf={`next ${regime.nextFOMCDate}`}
+        />
+      ) : null}
     </div>
   );
 }

@@ -12,10 +12,13 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { PortfolioRisk } from "@/lib/dashboard/metrics/risk";
 import type { VarResult } from "@/lib/dashboard/metrics/var";
+import { AsOfFootnote } from "@/components/dashboard/as-of-footnote";
 
 interface RiskLandscapeProps {
-  risk: PortfolioRisk | null;
-  varResult: VarResult | null;
+  // Accept either the bare math type or the loader-augmented "with asOf"
+  // wrapper — the asOf field is optional so callers can pass either.
+  risk: (PortfolioRisk & { asOf?: string | null }) | null;
+  varResult: (VarResult & { asOf?: string | null }) | null;
   /** Total invested capital — drives VaR dollar exposure cells. */
   portfolioValue: number;
 }
@@ -129,6 +132,10 @@ export function RiskLandscape({
             colorVar="--hold"
           />
         </div>
+        <AsOfFootnote
+          source={`Warehouse · ${sample}d sample`}
+          asOf={risk?.asOf ?? varResult?.asOf ?? null}
+        />
       </CardContent>
     </Card>
   );

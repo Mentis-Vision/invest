@@ -9,6 +9,7 @@
 // that fill in later batches.
 
 import { getPortfolioRisk } from "@/lib/dashboard/metrics/risk-loader";
+import { AsOfFootnote } from "@/components/dashboard/as-of-footnote";
 
 function fmtRatio(n: number): string {
   if (!Number.isFinite(n) || n === 0) return "—";
@@ -62,6 +63,10 @@ export async function RiskTile({ userId }: { userId: string }) {
           </div>
         </div>
       </div>
+      <AsOfFootnote
+        source={`Warehouse · ${sample}d sample`}
+        asOf={risk?.asOf ?? null}
+      />
     </div>
   );
 }
