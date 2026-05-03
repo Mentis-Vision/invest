@@ -25,4 +25,11 @@ export const CHIP_DEFINITIONS: Record<string, string> = {
   M: "Beneish M-Score (8-factor). Above −1.78 flags potential earnings manipulation; below is the clean zone.",
   accruals:
     "Sloan accruals ratio = (NetIncome − CFO) / TotalAssets. High positive values flag earnings driven by accruals rather than cash.",
+  mom: "Jegadeesh-Titman 12-1 momentum — total return over the trailing 12 months minus the most recent 1 month, which strips out short-term reversal. Positive values mean the trend has been accelerating into a recent pause.",
+  "12-1 mom":
+    "Jegadeesh-Titman 12-1 momentum — total return over the trailing 12 months minus the most recent 1 month, which strips out short-term reversal. Positive values mean the trend has been accelerating into a recent pause.",
+  Kelly:
+    "Fractional Kelly position size — the share of portfolio that maximizes long-run geometric growth given your historical win-rate and average win/loss. We display ¼ Kelly to reduce drawdown when the inputs are estimated from a small sample. Informational only, not investment advice.",
+  "pos size":
+    "Suggested fractional Kelly position size, derived from your realized win-rate and avg win/loss across BUY recommendations. Informational only, not investment advice.",
 };
