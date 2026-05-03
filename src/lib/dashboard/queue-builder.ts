@@ -29,6 +29,8 @@ import {
   type ReviewSummary,
   type UnactionedOutcome,
 } from "./queue-sources";
+import { getQualityScores } from "./metrics/quality-loader";
+import type { QualityScores } from "./metrics/quality";
 import type {
   QueueItem,
   ItemTypeKey,
@@ -97,7 +99,53 @@ function deepLink(
       return { href: "/app/portfolio", label: "Allocate" };
     case "year_pace_review":
       return { href: "/app/history", label: "View pace" };
+    case "quality_decline":
+      return {
+        href: ticker
+          ? `/app/research?ticker=${encodeURIComponent(ticker)}`
+          : "/app/research",
+        label: "Open thesis",
+      };
   }
+}
+
+/**
+ * Build the standard set of quality chips for a ticker that has at
+ * least one populated quality score. Skips chips for `null` scores
+ * so the layered chip row doesn't render empty values.
+ */
+function qualityChips(scores: QualityScores | null): QueueChip[] {
+  if (!scores) return [];
+  const chips: QueueChip[] = [];
+  if (scores.piotroski !== null) {
+    chips.push({
+      label: "F-Score",
+      value: `${scores.piotroski}/9`,
+      tooltipKey: "F-Score",
+    });
+  }
+  if (scores.altmanZ !== null) {
+    chips.push({
+      label: "Z",
+      value: scores.altmanZ.toFixed(1),
+      tooltipKey: "Z",
+    });
+  }
+  if (scores.beneishM !== null) {
+    chips.push({
+      label: "M",
+      value: scores.beneishM.toFixed(1),
+      tooltipKey: "M",
+    });
+  }
+  if (scores.sloanAccruals !== null) {
+    chips.push({
+      label: "accruals",
+      value: `${(scores.sloanAccruals * 100).toFixed(1)}%`,
+      tooltipKey: "accruals",
+    });
+  }
+  return chips;
 }
 
 async function loadStateRows(
@@ -328,6 +376,94 @@ function buildCashIdle(review: ReviewSummary | null, raw: RawItem[]): void {
   }
 }
 
+/**
+ * Emit a `quality_decline` item for any held ticker whose Piotroski
+ * F-Score dropped by ≥2 points period-over-period. Returns the
+ * per-ticker score map so other builders can enrich existing items
+ * with the same chips without re-querying the warehouse.
+ *
+ * Held tickers come from `review.holdings`; if review is null we
+ * skip the loop entirely (no holdings → nothing to flag).
+ */
+async function buildQualityDeclineAndCollect(
+  review: ReviewSummary | null,
+  raw: RawItem[],
+): Promise<Map<string, QualityScores>> {
+  const out = new Map<string, QualityScores>();
+  const tickers = (review?.holdings ?? []).map((h) => h.ticker.toUpperCase());
+  if (tickers.length === 0) return out;
+
+  // Bound the warehouse round-trips — for very large portfolios this
+  // would otherwise slow the queue render. 25 holdings covers the
+  // 95th-percentile portfolio for the current beta cohort.
+  const limited = tickers.slice(0, 25);
+
+  const results = await Promise.all(
+    limited.map(async (t) => {
+      try {
+        const scores = await getQualityScores(t);
+        return { ticker: t, scores };
+      } catch (err) {
+        log.warn("queue-builder", "quality lookup failed", {
+          ticker: t,
+          ...errorInfo(err),
+        });
+        return { ticker: t, scores: null };
+      }
+    }),
+  );
+
+  for (const { ticker, scores } of results) {
+    if (!scores) continue;
+    out.set(ticker, scores);
+
+    // quality_decline fires only when both Piotroski periods are
+    // present and the score dropped ≥2 points.
+    const cur = scores.piotroski;
+    const prior = scores.priorPiotroski;
+    if (cur === null || prior === null || prior === undefined) continue;
+    const drop = prior - cur;
+    if (drop < 2) continue;
+
+    raw.push({
+      itemKey: `quality_decline:${ticker}`,
+      itemType: "quality_decline",
+      ticker,
+      hoursToEvent: null,
+      templateData: {
+        ticker,
+        priorScore: prior,
+        currentScore: cur,
+        drop,
+      },
+      chips: qualityChips(scores),
+    });
+  }
+
+  return out;
+}
+
+/**
+ * For each existing raw item with a ticker, layer in any available
+ * quality chips after the item-type's own chips. Mutates rawItems in
+ * place. Skips quality_decline items themselves (they already have
+ * the full quality chip row).
+ */
+function enrichWithQualityChips(
+  raw: RawItem[],
+  qualityByTicker: Map<string, QualityScores>,
+): void {
+  for (const r of raw) {
+    if (!r.ticker) continue;
+    if (r.itemType === "quality_decline") continue;
+    const scores = qualityByTicker.get(r.ticker.toUpperCase());
+    if (!scores) continue;
+    const extra = qualityChips(scores);
+    if (extra.length === 0) continue;
+    r.chips = [...r.chips, ...extra];
+  }
+}
+
 function buildYearPaceReview(
   review: ReviewSummary | null,
   raw: RawItem[],
@@ -381,6 +517,12 @@ export async function buildQueueForUser(
   buildOutcomes(outcomes, raw);
   buildCashIdle(review, raw);
   buildYearPaceReview(review, raw);
+
+  // Quality decline runs last among emitters so we can collect the
+  // score map and use it to enrich existing items' chip rows in a
+  // single pass.
+  const qualityByTicker = await buildQualityDeclineAndCollect(review, raw);
+  enrichWithQualityChips(raw, qualityByTicker);
 
   // ---- finalize: filter state, score, sort ----
   const now = Date.now();

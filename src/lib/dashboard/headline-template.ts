@@ -129,5 +129,16 @@ export function renderTemplate(ctx: TemplateContext): TemplateOutput {
         body: `Portfolio YTD: ${fmtSign(ytdPct)} vs SPY ${fmtSign(benchPct)}.`,
       };
     }
+
+    case "quality_decline": {
+      const prior = asNumber(data.priorScore);
+      const current = asNumber(data.currentScore);
+      const drop = asNumber(data.drop);
+      const dropStr = Number.isFinite(drop) ? drop : "several";
+      return {
+        title: `${t} fundamentals deteriorating`,
+        body: `${t} Piotroski dropped ${prior}→${current} (-${dropStr} pts) — fundamentals deteriorating across cash flow + leverage + efficiency.`,
+      };
+    }
   }
 }
