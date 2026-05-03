@@ -41,6 +41,7 @@ import { getFactorExposure } from "@/lib/dashboard/metrics/fama-french-loader";
 import { MonteCarloCard } from "@/components/dashboard/year-outlook/monte-carlo-card";
 import { getMonteCarloProjection } from "@/lib/dashboard/metrics/monte-carlo-loader";
 import { DamodaranCard } from "@/components/dashboard/year-outlook/damodaran-cost-of-capital-card";
+import { MacroVitalsTile } from "@/components/dashboard/year-outlook/macro-vitals-tile";
 import { AuditAiCard } from "@/components/dashboard/audit-ai-card";
 import { getAuditAiTrackRecord } from "@/lib/dashboard/metrics/audit-ai-loader";
 import { log, errorInfo } from "@/lib/log";
@@ -143,6 +144,7 @@ export default async function YearOutlookPage() {
         />
         <FactorExposureCard exposure={factorExposure} />
         <DamodaranCard />
+        <MacroVitalsTile />
         <MacroOutlook />
         <AuditAiCard result={auditAiResult} scope="user" />
       </main>
