@@ -12,6 +12,7 @@ import { pool } from "../db";
 import { log, errorInfo } from "../log";
 import { getCachedPortfolioReview } from "../portfolio-review";
 import { getPortfolioRisk } from "./metrics/risk-loader";
+import { getUserGoals, type UserGoals } from "./goals-loader";
 
 export interface ReviewBreach {
   ticker: string;
@@ -62,6 +63,21 @@ export interface ReviewSummary {
   cashIdle: ReviewCashIdle | null;
   portfolioYtdPct?: number;
   spyYtdPct?: number;
+  /**
+   * Phase 3 Batch F — share of portfolio (excluding cash) currently
+   * allocated to stocks/equity, expressed as a whole-percent value
+   * (0–100). `null` when the user has no holdings or all holdings are
+   * non-stock asset classes; queue-builder gates rebalance_drift on
+   * non-null + age + riskTolerance present.
+   */
+  stockAllocationPct: number | null;
+  /**
+   * Phase 3 Batch F — user goals row (target wealth, target date,
+   * monthly contribution, current age, risk tolerance). All fields can
+   * be null until the user fills out the GoalsForm. queue-builder uses
+   * the absence of `targetWealth` to emit `goals_setup`.
+   */
+  goals: UserGoals | null;
 }
 
 export interface UnactionedOutcome {
@@ -106,6 +122,8 @@ export async function getReviewSummary(
     upcomingCatalysts,
     cashIdle,
     risk,
+    stockAllocationPct,
+    goals,
   ] = await Promise.all([
     listHoldingsWithWeights(userId),
     listConcentrationBreaches(userId),
@@ -123,17 +141,32 @@ export async function getReviewSummary(
       });
       return null;
     }),
+    // Phase 3 Batch F: stock allocation + goals row drive the
+    // goals_setup / rebalance_drift queue items. Both are wrapped in
+    // catch so a transient DB / loader failure never breaks the
+    // dashboard render — they degrade to null and the queue-builder
+    // skips the corresponding emitter.
+    deriveStockAllocationPct(userId).catch((err) => {
+      log.warn("queue-sources", "stock-allocation-load-failed", {
+        userId,
+        ...errorInfo(err),
+      });
+      return null;
+    }),
+    getUserGoals(userId).catch((err) => {
+      log.warn("queue-sources", "goals-load-failed", {
+        userId,
+        ...errorInfo(err),
+      });
+      return null;
+    }),
   ]);
 
-  if (
-    !review &&
-    brokerStatus.status === "none" &&
-    holdings.length === 0
-  ) {
-    // No data at all — caller will fall through to the always-on
-    // year_pace_review item.
-    return null;
-  }
+  // Note: even with no broker / no holdings / no review, we still
+  // return a summary because Phase 3 Batch F's `goals_setup` emit
+  // depends on knowing whether the user has set targetWealth. The
+  // queue-builder's other emitters all tolerate empty arrays / null
+  // fields, so this is a safe relaxation of the previous early-return.
 
   // Convert the loader's fractional returns (0.052 = 5.2%) into the
   // percent-number shape the year_pace_review template expects —
@@ -158,7 +191,47 @@ export async function getReviewSummary(
     cashIdle,
     portfolioYtdPct,
     spyYtdPct,
+    stockAllocationPct,
+    goals,
   };
+}
+
+/**
+ * Share of NON-CASH portfolio value currently held in equity asset
+ * classes ('stock', 'equity', 'etf'), as a whole-percent number on
+ * 0–100. We treat 'etf' as stock-equivalent because all the broad-market
+ * holdings the user actually carries (SPY/VOO/VTI) are equity ETFs;
+ * crypto is excluded so a Bitcoin sleeve doesn't artificially inflate
+ * the stock-side drift figure.
+ *
+ * Returns null when the user has no holdings (or only cash) — caller
+ * uses the null to skip the rebalance_drift emit entirely.
+ */
+async function deriveStockAllocationPct(
+  userId: string,
+): Promise<number | null> {
+  try {
+    const { rows } = await pool.query<{ pct: string | number | null }>(
+      `SELECT (SUM(CASE WHEN "assetClass" IN ('stock', 'equity', 'etf')
+                        THEN COALESCE("lastValue", 0) ELSE 0 END)
+               / NULLIF(SUM(COALESCE("lastValue", 0)), 0) * 100)::float
+              AS pct
+         FROM "holding"
+        WHERE "userId" = $1
+          AND "assetClass" IS DISTINCT FROM 'cash'`,
+      [userId],
+    );
+    const pctRaw = rows[0]?.pct;
+    if (pctRaw === null || pctRaw === undefined) return null;
+    const pct = Number(pctRaw);
+    return Number.isFinite(pct) ? pct : null;
+  } catch (err) {
+    log.warn("queue-sources", "deriveStockAllocationPct failed", {
+      userId,
+      ...errorInfo(err),
+    });
+    return null;
+  }
 }
 
 async function deriveBrokerStatus(

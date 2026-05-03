@@ -140,5 +140,23 @@ export function renderTemplate(ctx: TemplateContext): TemplateOutput {
         body: `${t} Piotroski dropped ${prior}→${current} (-${dropStr} pts) — fundamentals deteriorating across cash flow + leverage + efficiency.`,
       };
     }
+
+    case "goals_setup": {
+      return {
+        title: `Set your goals to unlock pacing`,
+        body: `Set your target wealth, date, and risk tolerance to unlock personalized pacing and rebalance prompts.`,
+      };
+    }
+
+    case "rebalance_drift": {
+      const cur = asNumber(data.currentStockPct);
+      const tgt = asNumber(data.targetStockPct);
+      const dollars = asNumber(data.rebalanceDollars);
+      const dir = cur > tgt ? "Trim stocks" : "Add stocks";
+      return {
+        title: `Allocation drift ${Math.abs(cur - tgt).toFixed(0)}pp`,
+        body: `${dir} by roughly ${fmtMoney(Math.abs(dollars))}: stocks ${fmtPct(cur)} vs ${fmtPct(tgt)} target.`,
+      };
+    }
   }
 }

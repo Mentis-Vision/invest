@@ -6,7 +6,7 @@
 
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Target } from "lucide-react";
 
 export default function GoalsPromptCard() {
@@ -23,9 +23,9 @@ export default function GoalsPromptCard() {
           and risk tolerance. We use those to compute a target allocation
           glidepath and tell you when you&apos;re on (or off) pace.
         </p>
-        <Button asChild>
-          <Link href="/app/settings/goals">Set goals</Link>
-        </Button>
+        <Link href="/app/settings/goals" className={buttonVariants()}>
+          Set goals
+        </Link>
       </CardContent>
     </Card>
   );

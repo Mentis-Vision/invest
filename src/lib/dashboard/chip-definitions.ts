@@ -50,4 +50,13 @@ export const CHIP_DEFINITIONS: Record<string, string> = {
     "Conditional VaR / Expected Shortfall — the average loss across the days that breach VaR. Cares not just about where the cutoff sits but how bad the bad days actually are; tighter measure of tail risk than VaR alone.",
   "var-1mo":
     "1-month VaR projected from the daily figure via square-root-of-time scaling (sqrt(21) trading days). Assumes returns are i.i.d. — same shape regulators expect for capital adequacy reporting. Informational only, not investment advice.",
+  "target $":
+    "Target wealth — the amount of money you're aiming to accumulate by your target date.",
+  "target date": "Target date — when you want to reach your target wealth.",
+  glidepath:
+    "Target stock/bond allocation derived from your age and risk tolerance ('120-age' rule with risk offsets).",
+  "risk-tol":
+    "Your risk tolerance setting: conservative, moderate, or aggressive.",
+  drift:
+    "Difference between current stock allocation and your target glidepath, in percentage points.",
 };

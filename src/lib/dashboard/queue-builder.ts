@@ -33,6 +33,8 @@ import { getQualityScores } from "./metrics/quality-loader";
 import type { QualityScores } from "./metrics/quality";
 import { getTickerMomentum } from "./metrics/momentum-loader";
 import { getKellyFraction } from "./metrics/kelly-loader";
+import { getPortfolioValue } from "./metrics/risk-loader";
+import { targetAllocation } from "./goals";
 import type {
   QueueItem,
   ItemTypeKey,
@@ -108,6 +110,10 @@ function deepLink(
           : "/app/research",
         label: "Open thesis",
       };
+    case "goals_setup":
+      return { href: "/app/settings/goals", label: "Set goals" };
+    case "rebalance_drift":
+      return { href: "/app/portfolio", label: "View allocation" };
   }
 }
 
@@ -579,6 +585,90 @@ function enrichWithKellyChips(
   }
 }
 
+/**
+ * Phase 3 Batch F — emit `goals_setup` when the user hasn't filled out
+ * their goals yet, otherwise check for `rebalance_drift`.
+ *
+ *   - goals_setup fires when goals.targetWealth is null. Acts as a
+ *     persistent nudge until the user runs through GoalsForm.
+ *   - rebalance_drift fires when goals are set AND review has both a
+ *     stockAllocationPct and the user's currentAge + riskTolerance, AND
+ *     the absolute drift between current and target stock allocation
+ *     exceeds 5pp. The dollar amount needed to rebalance is the user's
+ *     non-cash portfolio value times the drift fraction.
+ *
+ * Because `getPortfolioValue` is an async DB read, this builder runs
+ * outside the synchronous emit chain and is awaited explicitly by the
+ * caller.
+ */
+async function buildGoalsAndRebalanceDrift(
+  userId: string,
+  review: ReviewSummary | null,
+  raw: RawItem[],
+): Promise<void> {
+  const goals = review?.goals ?? null;
+
+  // Goals-setup emit: no goals row at all, OR targetWealth not yet
+  // set. We anchor the item key on a single literal so the same
+  // dashboard surface always references the same decision_queue_state
+  // row across renders.
+  if (!goals?.targetWealth) {
+    raw.push({
+      itemKey: "goals_setup:initial",
+      itemType: "goals_setup",
+      ticker: null,
+      hoursToEvent: null,
+      templateData: {},
+      chips: [],
+    });
+    return;
+  }
+
+  // Rebalance-drift emit: requires age + risk + allocation.
+  if (
+    goals.currentAge === null ||
+    goals.riskTolerance === null ||
+    review?.stockAllocationPct === null ||
+    review?.stockAllocationPct === undefined
+  ) {
+    return;
+  }
+
+  const target = targetAllocation(goals.currentAge, goals.riskTolerance);
+  const drift = Math.abs(review.stockAllocationPct - target.stocksPct);
+  if (drift <= 5) return;
+
+  const portfolioValue = await getPortfolioValue(userId).catch((err) => {
+    log.warn("queue-builder", "getPortfolioValue failed", {
+      userId,
+      ...errorInfo(err),
+    });
+    return 0;
+  });
+  const rebalanceDollars = portfolioValue * (drift / 100);
+
+  const now = new Date();
+  raw.push({
+    itemKey: `rebalance_drift:${now.getUTCFullYear()}-${now.getUTCMonth()}`,
+    itemType: "rebalance_drift",
+    ticker: null,
+    hoursToEvent: null,
+    templateData: {
+      currentStockPct: review.stockAllocationPct,
+      targetStockPct: target.stocksPct,
+      rebalanceDollars,
+    },
+    chips: [
+      { label: "drift", value: `${drift.toFixed(0)}pp`, tooltipKey: "drift" },
+      {
+        label: "target",
+        value: `${target.stocksPct}%`,
+        tooltipKey: "glidepath",
+      },
+    ],
+  });
+}
+
 function buildYearPaceReview(
   review: ReviewSummary | null,
   raw: RawItem[],
@@ -632,6 +722,9 @@ export async function buildQueueForUser(
   buildOutcomes(outcomes, raw);
   buildCashIdle(review, raw);
   buildYearPaceReview(review, raw);
+  // Phase 3 Batch F — async because the rebalance_drift emit needs the
+  // non-cash portfolio value to compute the suggested rebalance amount.
+  await buildGoalsAndRebalanceDrift(userId, review, raw);
 
   // Quality decline runs last among emitters so we can collect the
   // score map and use it to enrich existing items' chip rows in a
