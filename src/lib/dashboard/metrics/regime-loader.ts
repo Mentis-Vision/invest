@@ -31,15 +31,21 @@ import { log, errorInfo } from "../../log";
 import {
   classifyRegime,
   daysToNextFOMC,
+  FOMC_FALLBACK_CALENDAR,
   type RegimeClassification,
   type RegimeSignals,
 } from "./regime";
+import { fetchFOMCCalendar } from "./fomc-fetcher";
 
 export interface RegimeSnapshot {
   signals: RegimeSignals;
   classification: RegimeClassification;
   /** Date of the underlying VIX observation, when available. */
   asOf: string | null;
+  /** ISO date of the next FOMC announcement, or null when calendar is empty. */
+  nextFOMCDate: string | null;
+  /** Whether the calendar came from the live federalreserve.gov scrape or the pinned fallback. */
+  fomcSource: "live" | "fallback";
 }
 
 const memo = new Map<string, Promise<RegimeSnapshot>>();
@@ -64,7 +70,7 @@ async function getPutCallRatio(): Promise<number | null> {
 }
 
 async function fetchRegimeSnapshot(): Promise<RegimeSnapshot> {
-  const [vixObs, vix9dObs, putCall] = await Promise.all([
+  const [vixObs, vix9dObs, putCall, fomcDates] = await Promise.all([
     getLatestSeriesValue("VIXCLS").catch((err) => {
       log.warn("dashboard.regime", "VIXCLS fetch failed", { ...errorInfo(err) });
       return null;
@@ -76,6 +82,12 @@ async function fetchRegimeSnapshot(): Promise<RegimeSnapshot> {
       return null;
     }),
     getPutCallRatio(),
+    fetchFOMCCalendar().catch((err) => {
+      log.warn("dashboard.regime", "FOMC calendar fetch failed", {
+        ...errorInfo(err),
+      });
+      return [] as string[];
+    }),
   ]);
 
   const vixLevel = vixObs?.value ?? null;
@@ -89,10 +101,35 @@ async function fetchRegimeSnapshot(): Promise<RegimeSnapshot> {
       ? vix9d / vixLevel
       : null;
 
+  // Use live calendar when available; fall back to the pinned baseline
+  // so the FOMC sub-row keeps showing a credible answer on cold-start
+  // upstream failures.
+  const usedFallback = fomcDates.length === 0;
+  const calendar = usedFallback ? FOMC_FALLBACK_CALENDAR : fomcDates;
+
+  const today = new Date();
+  const daysToFOMC = daysToNextFOMC(today, calendar);
+  const nextFOMCDate =
+    daysToFOMC < 999
+      ? calendar.find((d) => {
+          const dMid = Date.UTC(
+            Number(d.slice(0, 4)),
+            Number(d.slice(5, 7)) - 1,
+            Number(d.slice(8, 10)),
+          );
+          const todayMid = Date.UTC(
+            today.getUTCFullYear(),
+            today.getUTCMonth(),
+            today.getUTCDate(),
+          );
+          return dMid >= todayMid;
+        }) ?? null
+      : null;
+
   const signals: RegimeSignals = {
     vixLevel,
     vixTermRatio,
-    daysToFOMC: daysToNextFOMC(),
+    daysToFOMC,
     putCallRatio: putCall,
   };
 
@@ -101,6 +138,8 @@ async function fetchRegimeSnapshot(): Promise<RegimeSnapshot> {
     signals,
     classification,
     asOf: vixObs?.date ?? null,
+    nextFOMCDate,
+    fomcSource: usedFallback ? "fallback" : "live",
   };
 }
 

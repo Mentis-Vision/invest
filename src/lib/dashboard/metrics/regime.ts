@@ -133,11 +133,21 @@ export function classifyRegime(
 
 // ─── FOMC calendar ───────────────────────────────────────────────────────
 //
-// Update annually from federalreserve.gov/monetarypolicy/fomccalendars.htm
-// Each date is the *second* day of the two-day meeting (the rate-decision
-// announcement day). 18:00Z ≈ 14:00 ET, the typical statement release time.
+// Live calendar is fetched from federalreserve.gov via fomc-fetcher.ts;
+// the loader (regime-loader.ts) pre-fetches once per render and feeds
+// the resulting array into daysToNextFOMC() below. The pure helper
+// remains synchronous and dependency-free so existing tests continue
+// to call it inline without async plumbing.
+//
+// Each date is the *second* day of the two-day meeting (the rate-
+// decision announcement day) in ISO YYYY-MM-DD form, sorted ascending.
+//
+// FOMC_FALLBACK_CALENDAR is a small pinned baseline used only when the
+// live fetch fails on a cold instance. We keep it deliberately short
+// (current + next year if known) so it doesn't drift far from reality
+// before someone notices. The fetcher is the source of truth.
 
-const FOMC_DATES_2026 = [
+export const FOMC_FALLBACK_CALENDAR = [
   "2026-01-28",
   "2026-03-18",
   "2026-04-29",
@@ -148,19 +158,21 @@ const FOMC_DATES_2026 = [
   "2026-12-09",
 ];
 
-// Placeholder until the 2027 schedule is published. Update annually.
-const FOMC_DATES_2027: string[] = [];
-
-const FOMC_CALENDAR: string[] = [...FOMC_DATES_2026, ...FOMC_DATES_2027];
-
 /**
  * Returns the number of *calendar* days from `today` (UTC) until the
  * next FOMC announcement, inclusive of today. 0 means the next
  * announcement is today; 1 means tomorrow; 999 is the sentinel for
- * "no future date in the loaded calendar" so callers can fall back
+ * "no future date in the supplied calendar" so callers can fall back
  * cleanly without throwing.
+ *
+ * `dates` defaults to the pinned fallback calendar so legacy
+ * consumers and unit tests don't need to thread the live fetch
+ * through.
  */
-export function daysToNextFOMC(today: Date = new Date()): number {
+export function daysToNextFOMC(
+  today: Date = new Date(),
+  dates: string[] = FOMC_FALLBACK_CALENDAR,
+): number {
   // Floor `today` to UTC midnight so partial-day comparisons don't
   // flip the result based on the hour the dashboard renders.
   const todayMidnightUTC = Date.UTC(
@@ -168,7 +180,7 @@ export function daysToNextFOMC(today: Date = new Date()): number {
     today.getUTCMonth(),
     today.getUTCDate(),
   );
-  for (const d of FOMC_CALENDAR) {
+  for (const d of dates) {
     const fomcMidnightUTC = Date.UTC(
       Number(d.slice(0, 4)),
       Number(d.slice(5, 7)) - 1,
