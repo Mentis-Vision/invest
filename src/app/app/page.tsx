@@ -8,16 +8,17 @@ import {
 } from "@/lib/subscription";
 import { stripe, stripeConfigured, priceIdFor } from "@/lib/stripe";
 import DashboardClient from "@/components/dashboard-client";
+import AppShell from "@/components/app-shell";
 import { log, errorInfo } from "@/lib/log";
-import { pool } from "@/lib/db";
 import { buildQueueForUser } from "@/lib/dashboard/queue-builder";
 import { DailyHeadline } from "@/components/dashboard/daily-headline";
 import { DecisionQueue } from "@/components/dashboard/decision-queue";
 import { RiskTile } from "@/components/dashboard/risk-tile";
 import { VarTile } from "@/components/dashboard/var-tile";
 import { MarketRegimeTile } from "@/components/dashboard/market-regime-tile";
+import { LegacyDashboardSection } from "@/components/dashboard/legacy-dashboard-section";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import type { HeadlineCache, QueueItem } from "@/lib/dashboard/types";
+import type { QueueItem } from "@/lib/dashboard/types";
 
 export const dynamic = "force-dynamic";
 
@@ -135,56 +136,73 @@ export default async function Home({
 
   // ---- New overview composition ---------------------------------------
   const userId = session.user.id;
-  const [items, cacheRow] = await Promise.all([
-    buildQueueForUser(userId).catch((err) => {
-      log.warn("app.page", "buildQueueForUser failed", {
-        userId,
-        ...errorInfo(err),
-      });
-      return [] as QueueItem[];
-    }),
-    pool
-      .query<{ headline_cache: HeadlineCache | null }>(
-        `SELECT headline_cache FROM user_profile WHERE "userId" = $1`,
-        [userId],
-      )
-      .catch((err) => {
-        log.warn("app.page", "headline_cache fetch failed", {
-          userId,
-          ...errorInfo(err),
-        });
-        return { rows: [] as Array<{ headline_cache: HeadlineCache | null }> };
-      }),
-  ]);
+  const items = await buildQueueForUser(userId).catch((err) => {
+    log.warn("app.page", "buildQueueForUser failed", {
+      userId,
+      ...errorInfo(err),
+    });
+    return [] as QueueItem[];
+  });
 
-  const cached = cacheRow.rows[0]?.headline_cache ?? null;
-  const headline: QueueItem | null = items[0] ?? cached?.rendered ?? null;
+  // Stale-headline fix (2026-05-02): we used to fall back to
+  // `user_profile.headline_cache.rendered` whenever `items` was empty,
+  // but that conflated "queue genuinely empty after dismiss" with
+  // "queue builder errored." The latter is already handled by the
+  // catch above (returns `[]`); the former should render the
+  // empty-state CTA, not re-render the just-dismissed item. The cron
+  // still refreshes the cache daily for the warm-load case but it's
+  // no longer authoritative for this surface — the snooze/dismiss/
+  // done route handlers also clear it on user action so it can never
+  // shadow a real action.
+  const headline: QueueItem | null = items[0] ?? null;
   const queue = headline
     ? items.filter((i) => i.itemKey !== headline.itemKey)
     : items;
 
+  // Composition (2026-05-02). The /app overview is now wrapped in the
+  // shared AppShell so the top nav, ticker tape, and trial banner are
+  // present (matches /app/history, /app/year-outlook, /app/settings).
+  // Two stacked sections inside the shell:
+  //
+  //   1. Actionable layer (max-w-3xl): Headline + Queue + tiles. Tight
+  //      decision-focused column.
+  //   2. Legacy hybrid-v2 dashboard (full width via DashboardView):
+  //      Next Move hero + BlockGrid + drill panel. Informational.
+  //
+  // Rendering DashboardView directly (via the LegacyDashboardSection
+  // client wrapper) avoids stacking a second AppShell that
+  // DashboardClient would have brought along.
   return (
-    <TooltipProvider delay={200}>
-      <main className="max-w-3xl mx-auto px-4 py-6 flex flex-col gap-4">
-        <DailyHeadline item={headline} />
-        <DecisionQueue items={queue} />
-        <ContextTilesRow userId={userId} />
-        {/*
-          Phase 3 Batch G: surface a link to the standalone Year
-          Outlook page from the homepage so users can drill from the
-          dashboard tiles into the full pacing / glidepath / risk
-          landscape view without hunting through the top nav.
-        */}
-        <div className="flex justify-end">
-          <Link
-            href="/app/year-outlook"
-            className="text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
-          >
-            View year outlook →
-          </Link>
-        </div>
-      </main>
-    </TooltipProvider>
+    <AppShell
+      user={{ name: session.user.name ?? "", email: session.user.email }}
+    >
+      <TooltipProvider delay={200}>
+        <section className="max-w-3xl mx-auto px-4 py-6 flex flex-col gap-4">
+          <DailyHeadline item={headline} />
+          <DecisionQueue items={queue} />
+          <ContextTilesRow userId={userId} />
+          {/*
+            Phase 3 Batch G: surface a link to the standalone Year
+            Outlook page from the homepage so users can drill from the
+            dashboard tiles into the full pacing / glidepath / risk
+            landscape view without hunting through the top nav.
+          */}
+          <div className="flex justify-end">
+            <Link
+              href="/app/year-outlook"
+              className="text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+            >
+              View year outlook →
+            </Link>
+          </div>
+        </section>
+
+        {/* Rich informational dashboard below the actionable layer. */}
+        <section className="border-t border-[var(--border)] mt-2 pt-6">
+          <LegacyDashboardSection userName={session.user.name ?? "there"} />
+        </section>
+      </TooltipProvider>
+    </AppShell>
   );
 }
 

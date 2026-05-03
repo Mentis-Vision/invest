@@ -59,7 +59,20 @@ type NavItem = {
  * hybrid-v2 redesign; these now ride as horizontal tabs in the top bar.
  */
 const navItems: NavItem[] = [
-  { id: "dashboard", label: "Dashboard", kind: "view", icon: LayoutDashboard },
+  // Dashboard is a real link to /app rather than a `kind: "view"`
+  // entry — the /app overview now hosts the actionable Headline +
+  // Queue layer above the legacy DashboardView (2026-05-02), so
+  // there's a meaningful difference between "/app" (composed
+  // overview) and "/app?view=dashboard" (legacy DashboardView only,
+  // routed through DashboardClient). Linking to /app keeps the
+  // composed page reachable from the top nav.
+  {
+    id: "dashboard",
+    label: "Dashboard",
+    kind: "link",
+    icon: LayoutDashboard,
+    href: "/app",
+  },
   { id: "portfolio", label: "Portfolio", kind: "view", icon: PieChart },
   { id: "research", label: "Research", kind: "view", icon: Search },
   {
@@ -248,6 +261,15 @@ export default function AppShell({
 
   function isActive(item: NavItem) {
     if (item.kind === "link" && item.href) {
+      // /app is the dashboard overview itself — match exactly so the
+      // Dashboard tab doesn't light up while the user is on
+      // /app/history, /app/year-outlook, etc. Other links
+      // (/app/history, /app/year-outlook) keep the prefix match so
+      // sub-routes (e.g. /app/r/[id]) under those sections still
+      // highlight correctly.
+      if (item.href === "/app") {
+        return pathname === "/app" || pathname === "/app/";
+      }
       return pathname === item.href || pathname.startsWith(item.href + "/");
     }
     return onDashboard && currentView === item.id;

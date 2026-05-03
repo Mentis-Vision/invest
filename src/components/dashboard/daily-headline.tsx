@@ -36,7 +36,7 @@ export function DailyHeadline({ item }: { item: QueueItem | null }) {
         </div>
         <div className="mt-3">
           <button
-            onClick={() => router.push("/app/research")}
+            onClick={() => router.push("/app?view=research")}
             className="bg-[var(--foreground)] text-[var(--background)] text-xs font-bold px-3 py-1.5 rounded"
           >
             Open research

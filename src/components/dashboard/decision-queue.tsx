@@ -49,7 +49,11 @@ export function DecisionQueue({ items }: { items: QueueItem[] }) {
   if (items.length === 0) {
     return (
       <div className="bg-[var(--card)] border border-[var(--border)] rounded-md p-6 text-center text-sm text-[var(--muted-foreground)]">
-        Decision queue is empty. Snooze or dismiss earlier? Open the activity log to review.
+        <p className="mb-1">Decision queue is empty.</p>
+        <p className="text-xs">
+          All clear. Use the dashboard below to review your portfolio,
+          or run new research from the top nav.
+        </p>
       </div>
     );
   }
