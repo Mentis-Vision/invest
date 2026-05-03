@@ -36,6 +36,8 @@ import { PacingCard } from "@/components/dashboard/year-outlook/pacing-card";
 import { GlidepathVisualizer } from "@/components/dashboard/year-outlook/glidepath-visualizer";
 import { RiskLandscape } from "@/components/dashboard/year-outlook/risk-landscape";
 import { MacroOutlook } from "@/components/dashboard/year-outlook/macro-outlook";
+import { FactorExposureCard } from "@/components/dashboard/year-outlook/factor-exposure-card";
+import { getFactorExposure } from "@/lib/dashboard/metrics/fama-french-loader";
 import { log, errorInfo } from "@/lib/log";
 
 export const dynamic = "force-dynamic";
@@ -45,7 +47,7 @@ export default async function YearOutlookPage() {
   if (!session?.user?.id) redirect("/sign-in");
   const userId = session.user.id;
 
-  const [goals, currentValue, risk, varResult] = await Promise.all([
+  const [goals, currentValue, risk, varResult, factorExposure] = await Promise.all([
     getUserGoals(userId).catch((err) => {
       log.warn("year-outlook.page", "goals load failed", {
         userId,
@@ -69,6 +71,13 @@ export default async function YearOutlookPage() {
     }),
     getPortfolioVaR(userId).catch((err) => {
       log.warn("year-outlook.page", "VaR load failed", {
+        userId,
+        ...errorInfo(err),
+      });
+      return null;
+    }),
+    getFactorExposure(userId).catch((err) => {
+      log.warn("year-outlook.page", "factor exposure load failed", {
         userId,
         ...errorInfo(err),
       });
@@ -103,6 +112,7 @@ export default async function YearOutlookPage() {
           varResult={varResult}
           portfolioValue={currentValue}
         />
+        <FactorExposureCard exposure={factorExposure} />
         <MacroOutlook />
       </main>
     </AppShell>
