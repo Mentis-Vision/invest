@@ -38,6 +38,8 @@ import { RiskLandscape } from "@/components/dashboard/year-outlook/risk-landscap
 import { MacroOutlook } from "@/components/dashboard/year-outlook/macro-outlook";
 import { FactorExposureCard } from "@/components/dashboard/year-outlook/factor-exposure-card";
 import { getFactorExposure } from "@/lib/dashboard/metrics/fama-french-loader";
+import { MonteCarloCard } from "@/components/dashboard/year-outlook/monte-carlo-card";
+import { getMonteCarloProjection } from "@/lib/dashboard/metrics/monte-carlo-loader";
 import { log, errorInfo } from "@/lib/log";
 
 export const dynamic = "force-dynamic";
@@ -85,6 +87,20 @@ export default async function YearOutlookPage() {
     }),
   ]);
 
+  // Monte-Carlo runs after the first wave because it needs the
+  // resolved currentValue to seed the simulation. Cheap relative to
+  // the warehouse round-trips above (pure CPU once goals load).
+  const monteCarloResult = await getMonteCarloProjection(
+    userId,
+    currentValue,
+  ).catch((err) => {
+    log.warn("year-outlook.page", "monte carlo load failed", {
+      userId,
+      ...errorInfo(err),
+    });
+    return null;
+  });
+
   const year = new Date().getUTCFullYear();
 
   return (
@@ -106,6 +122,7 @@ export default async function YearOutlookPage() {
           benchYtdPct={risk?.benchYtdPct ?? null}
         />
         <PacingCard goals={goals} currentValue={currentValue} />
+        <MonteCarloCard result={monteCarloResult} />
         <GlidepathVisualizer userId={userId} goals={goals} />
         <RiskLandscape
           risk={risk}
