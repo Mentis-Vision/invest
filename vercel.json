@@ -40,6 +40,10 @@
     {
       "path": "/api/cron/trial-nudge",
       "schedule": "0 16 * * *"
+    },
+    {
+      "path": "/api/cron/headline-rebuild",
+      "schedule": "0 11 * * *"
     }
   ]
 }
