@@ -8,6 +8,14 @@ import {
 import { stripe, stripeConfigured, priceIdFor } from "@/lib/stripe";
 import DashboardClient from "@/components/dashboard-client";
 import { log, errorInfo } from "@/lib/log";
+import { pool } from "@/lib/db";
+import { buildQueueForUser } from "@/lib/dashboard/queue-builder";
+import { DailyHeadline } from "@/components/dashboard/daily-headline";
+import { DecisionQueue } from "@/components/dashboard/decision-queue";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import type { HeadlineCache, QueueItem } from "@/lib/dashboard/types";
+
+export const dynamic = "force-dynamic";
 
 export default async function Home({
   searchParams,
@@ -105,9 +113,78 @@ export default async function Home({
     }
   }
 
+  // ?view= routing.
+  //
+  // The new Phase-1 actionable overview (Daily Headline + Decision Queue)
+  // is the default `/app` view. Any explicit ?view=portfolio | research |
+  // strategy | integrations | dashboard still routes through the existing
+  // client-shell composition (sidebar nav, legacy hybrid dashboard, etc.)
+  // so deep links into those panels are not broken.
+  const viewParam = typeof params.view === "string" ? params.view : null;
+  if (viewParam && viewParam !== "overview") {
+    return (
+      <DashboardClient
+        user={{ name: session.user.name, email: session.user.email }}
+      />
+    );
+  }
+
+  // ---- New overview composition ---------------------------------------
+  const userId = session.user.id;
+  const [items, cacheRow] = await Promise.all([
+    buildQueueForUser(userId).catch((err) => {
+      log.warn("app.page", "buildQueueForUser failed", {
+        userId,
+        ...errorInfo(err),
+      });
+      return [] as QueueItem[];
+    }),
+    pool
+      .query<{ headline_cache: HeadlineCache | null }>(
+        `SELECT headline_cache FROM user_profile WHERE "userId" = $1`,
+        [userId],
+      )
+      .catch((err) => {
+        log.warn("app.page", "headline_cache fetch failed", {
+          userId,
+          ...errorInfo(err),
+        });
+        return { rows: [] as Array<{ headline_cache: HeadlineCache | null }> };
+      }),
+  ]);
+
+  const cached = cacheRow.rows[0]?.headline_cache ?? null;
+  const headline: QueueItem | null = items[0] ?? cached?.rendered ?? null;
+  const queue = headline
+    ? items.filter((i) => i.itemKey !== headline.itemKey)
+    : items;
+
   return (
-    <DashboardClient
-      user={{ name: session.user.name, email: session.user.email }}
-    />
+    <TooltipProvider delay={200}>
+      <main className="max-w-3xl mx-auto px-4 py-6 flex flex-col gap-4">
+        <DailyHeadline item={headline} />
+        <DecisionQueue items={queue} />
+        <ContextTilesRow />
+      </main>
+    </TooltipProvider>
+  );
+}
+
+function ContextTilesRow() {
+  return (
+    <div className="grid grid-cols-3 gap-2 text-xs text-[var(--muted-foreground)]">
+      <div className="bg-[var(--card)] border border-[var(--border)] rounded p-3 text-center">
+        <div className="opacity-70">Macro</div>
+        <div className="font-bold text-[var(--foreground)]">—</div>
+      </div>
+      <div className="bg-[var(--card)] border border-[var(--border)] rounded p-3 text-center">
+        <div className="opacity-70">Portfolio MTD</div>
+        <div className="font-bold text-[var(--foreground)]">—</div>
+      </div>
+      <div className="bg-[var(--card)] border border-[var(--border)] rounded p-3 text-center">
+        <div className="opacity-70">{new Date().getUTCFullYear()} pace</div>
+        <div className="font-bold text-[var(--foreground)]">—</div>
+      </div>
+    </div>
   );
 }
