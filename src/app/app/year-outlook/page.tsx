@@ -91,7 +91,7 @@ export default async function YearOutlookPage() {
         userId,
         ...errorInfo(err),
       });
-      return null;
+      return { exposure: null, asOf: null, dataSource: "synthetic" as const };
     }),
   ]);
 
@@ -168,7 +168,11 @@ export default async function YearOutlookPage() {
           scenarios={stressScenarios}
           portfolioValue={currentValue}
         />
-        <FactorExposureCard exposure={factorExposure} />
+        <FactorExposureCard
+          exposure={factorExposure.exposure}
+          asOf={factorExposure.asOf}
+          dataSource={factorExposure.dataSource}
+        />
         <DamodaranCard />
         <MacroVitalsTile />
         <MacroOutlook />

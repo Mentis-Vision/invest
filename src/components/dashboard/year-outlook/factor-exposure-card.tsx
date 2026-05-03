@@ -16,9 +16,14 @@ import {
   interpretExposure,
   type FactorExposure,
 } from "@/lib/dashboard/metrics/fama-french";
+import { AsOfFootnote } from "@/components/dashboard/as-of-footnote";
 
 interface FactorExposureCardProps {
   exposure: FactorExposure | null;
+  /** ISO date of the most-recent factor row used. */
+  asOf?: string | null;
+  /** Provenance: "live" Kenneth French CSV, or "synthetic" baseline fallback. */
+  dataSource?: "live" | "synthetic";
 }
 
 function fmtBeta(n: number | undefined | null): string {
@@ -52,7 +57,15 @@ function Cell({ label, value, hint }: CellProps) {
   );
 }
 
-export function FactorExposureCard({ exposure }: FactorExposureCardProps) {
+export function FactorExposureCard({
+  exposure,
+  asOf,
+  dataSource = "live",
+}: FactorExposureCardProps) {
+  const sourceLabel =
+    dataSource === "live"
+      ? "Kenneth French Library"
+      : "Synthetic baseline (live fetch unavailable)";
   return (
     <Card>
       <CardHeader>
@@ -78,6 +91,11 @@ export function FactorExposureCard({ exposure }: FactorExposureCardProps) {
           {exposure?.fiveFactor ? " / RMW / CMA" : ""}.
           Informational only, not investment advice.
         </p>
+        <AsOfFootnote
+          source={sourceLabel}
+          asOf={asOf ?? null}
+          fallback={dataSource === "synthetic" ? "synthetic baseline" : undefined}
+        />
       </CardContent>
     </Card>
   );
