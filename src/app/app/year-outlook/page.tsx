@@ -44,6 +44,8 @@ import { DamodaranCard } from "@/components/dashboard/year-outlook/damodaran-cos
 import { MacroVitalsTile } from "@/components/dashboard/year-outlook/macro-vitals-tile";
 import { BehavioralAuditCard } from "@/components/dashboard/year-outlook/behavioral-audit-card";
 import { getBehavioralAudit } from "@/lib/dashboard/metrics/behavioral-audit-loader";
+import { StressTestCard } from "@/components/dashboard/year-outlook/stress-test-card";
+import { getStressScenarios } from "@/lib/dashboard/metrics/stress-test-loader";
 import { AuditAiCard } from "@/components/dashboard/audit-ai-card";
 import { getAuditAiTrackRecord } from "@/lib/dashboard/metrics/audit-ai-loader";
 import { log, errorInfo } from "@/lib/log";
@@ -97,7 +99,7 @@ export default async function YearOutlookPage() {
   // resolved currentValue to seed the simulation. Cheap relative to
   // the warehouse round-trips above (pure CPU once goals load).
   // The Audit-AI track-record query is independent so it parallels.
-  const [monteCarloResult, auditAiResult, behavioralAudit] = await Promise.all([
+  const [monteCarloResult, auditAiResult, behavioralAudit, stressScenarios] = await Promise.all([
     getMonteCarloProjection(userId, currentValue).catch((err) => {
       log.warn("year-outlook.page", "monte carlo load failed", {
         userId,
@@ -124,6 +126,13 @@ export default async function YearOutlookPage() {
         concentrationDrift: null,
         recencyChase: null,
       };
+    }),
+    getStressScenarios(userId).catch((err) => {
+      log.warn("year-outlook.page", "stress test load failed", {
+        userId,
+        ...errorInfo(err),
+      });
+      return null;
     }),
   ]);
 
@@ -153,6 +162,10 @@ export default async function YearOutlookPage() {
         <RiskLandscape
           risk={risk}
           varResult={varResult}
+          portfolioValue={currentValue}
+        />
+        <StressTestCard
+          scenarios={stressScenarios}
           portfolioValue={currentValue}
         />
         <FactorExposureCard exposure={factorExposure} />
