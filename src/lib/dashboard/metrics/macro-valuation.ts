@@ -26,9 +26,12 @@
 //     free API and both impose attribution / scrape-rate limits.
 //   - Manual constants would go stale within a quarter and have
 //     near-zero value compared to the live Buffett indicator.
-//   - Decision: ship Buffett-only in v1; CAPE returns null and the
-//     UI hides the chip. Wire a real source in a later batch when
-//     we have a content-pipeline that can refresh it monthly.
+//   - Decision: keep CAPE deferred here (returns null, UI hides
+//     the chip). Damodaran's monthly implied ERP — wired in
+//     `damodaran-loader.ts` and surfaced via DamodaranCard in
+//     Phase 4 Batch J — is the credible alternative we shipped
+//     instead. Same spirit (forward-looking market valuation
+//     anchor) without the brittle Shiller scrape.
 
 import { getLatestSeriesValue } from "../../data/fred";
 import { log, errorInfo } from "../../log";

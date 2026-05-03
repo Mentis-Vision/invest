@@ -37,7 +37,11 @@ export const CHIP_DEFINITIONS: Record<string, string> = {
   "VIX9D/VIX":
     "VIX9D divided by VIX. Below 1.0 means contango (calm); above 1.0 means backwardation (front-month vol pricing higher than longer-dated, classic risk-off signal).",
   CAPE:
-    "Shiller cyclically-adjusted P/E ratio — S&P 500 price divided by 10-year average inflation-adjusted earnings. Currently deferred; no stable free API source.",
+    "Shiller cyclically-adjusted P/E ratio — S&P 500 price divided by 10-year average inflation-adjusted earnings. Deferred (no stable free API); Damodaran's monthly implied ERP is the credible alternative shipped on the Year Outlook surface instead.",
+  ERP:
+    "Damodaran's S&P 500 implied equity risk premium — the equity premium embedded in current index prices given forward earnings and payout assumptions. Updated quarterly from the NYU Stern data file. Informational only, not investment advice.",
+  COE:
+    "Implied cost of equity — the annual return current price + dividends imply the market is demanding to hold this stock. Gordon Growth (D₁/P + g) when there's a dividend stream, else CAPM (rf + β·ERP). Spread vs market = COE − (rf + ERP); positive means a richer hurdle than the index.",
   Buffett:
     "Buffett indicator — total US stock market capitalization (Wilshire 5000) divided by nominal GDP. Above 1.4 has historically signaled stretched valuations. Informational only, not investment advice.",
   "T-FOMC":

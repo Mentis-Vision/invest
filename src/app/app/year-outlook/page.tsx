@@ -40,6 +40,7 @@ import { FactorExposureCard } from "@/components/dashboard/year-outlook/factor-e
 import { getFactorExposure } from "@/lib/dashboard/metrics/fama-french-loader";
 import { MonteCarloCard } from "@/components/dashboard/year-outlook/monte-carlo-card";
 import { getMonteCarloProjection } from "@/lib/dashboard/metrics/monte-carlo-loader";
+import { DamodaranCard } from "@/components/dashboard/year-outlook/damodaran-cost-of-capital-card";
 import { log, errorInfo } from "@/lib/log";
 
 export const dynamic = "force-dynamic";
@@ -130,6 +131,7 @@ export default async function YearOutlookPage() {
           portfolioValue={currentValue}
         />
         <FactorExposureCard exposure={factorExposure} />
+        <DamodaranCard />
         <MacroOutlook />
       </main>
     </AppShell>
