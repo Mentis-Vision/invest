@@ -26,6 +26,7 @@ import {
   PieChart,
   Search,
   History as HistoryIcon,
+  TrendingUp,
   Menu,
   LogOut,
   Settings as SettingsIcon,
@@ -45,7 +46,7 @@ type View =
   | "integrations";
 
 type NavItem = {
-  id: View | "history";
+  id: View | "history" | "year-outlook";
   label: string;
   kind: "view" | "link";
   icon: typeof LayoutDashboard;
@@ -61,6 +62,13 @@ const navItems: NavItem[] = [
   { id: "dashboard", label: "Dashboard", kind: "view", icon: LayoutDashboard },
   { id: "portfolio", label: "Portfolio", kind: "view", icon: PieChart },
   { id: "research", label: "Research", kind: "view", icon: Search },
+  {
+    id: "year-outlook",
+    label: "Year Outlook",
+    kind: "link",
+    icon: TrendingUp,
+    href: "/app/year-outlook",
+  },
   {
     id: "history",
     label: "Journal",

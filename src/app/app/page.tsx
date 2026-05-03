@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
@@ -168,6 +169,20 @@ export default async function Home({
         <DailyHeadline item={headline} />
         <DecisionQueue items={queue} />
         <ContextTilesRow userId={userId} />
+        {/*
+          Phase 3 Batch G: surface a link to the standalone Year
+          Outlook page from the homepage so users can drill from the
+          dashboard tiles into the full pacing / glidepath / risk
+          landscape view without hunting through the top nav.
+        */}
+        <div className="flex justify-end">
+          <Link
+            href="/app/year-outlook"
+            className="text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+          >
+            View year outlook →
+          </Link>
+        </div>
       </main>
     </TooltipProvider>
   );
