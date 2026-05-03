@@ -15,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { targetAllocation } from "@/lib/dashboard/goals";
 import { computeGlidepathDrift } from "@/lib/dashboard/year-outlook";
-import { getStockAllocationPct } from "@/lib/dashboard/year-outlook-loader";
+import { getActualAllocationSplit } from "@/lib/dashboard/year-outlook-loader";
 import type { UserGoals } from "@/lib/dashboard/goals-loader";
 import { GlidepathChart } from "./glidepath-chart";
 
@@ -54,27 +54,11 @@ export async function GlidepathVisualizer({
   }
 
   const target = targetAllocation(age, risk);
-  const actualStocksPct = await getStockAllocationPct(userId);
-  const drift = computeGlidepathDrift(actualStocksPct, target);
-
-  // Build the actual triple. When the loader can't tell us the actual
-  // stocks share we still render the target so users see what the
-  // allocation rule says they should hold.
-  const actual =
-    actualStocksPct === null
-      ? null
-      : (() => {
-          const stocks = Math.max(0, Math.min(100, actualStocksPct));
-          const nonStock = 100 - stocks;
-          const targetNonStock = target.bondsPct + target.cashPct;
-          const bondsShare =
-            targetNonStock > 0
-              ? target.bondsPct / targetNonStock
-              : 0.5;
-          const bonds = nonStock * bondsShare;
-          const cash = nonStock - bonds;
-          return { stocksPct: stocks, bondsPct: bonds, cashPct: cash };
-        })();
+  // Phase 4 Batch I: real bond/commodity classification via the static
+  // ticker map. Bonds and cash now reflect actual holdings instead of
+  // a target-ratio proxy.
+  const actual = await getActualAllocationSplit(userId);
+  const drift = computeGlidepathDrift(actual?.stocksPct ?? null, target);
 
   return (
     <Card>
