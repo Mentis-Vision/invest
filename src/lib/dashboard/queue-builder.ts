@@ -34,6 +34,11 @@ import type { QualityScores } from "./metrics/quality";
 import { getTickerMomentum } from "./metrics/momentum-loader";
 import { getKellyFraction } from "./metrics/kelly-loader";
 import { getPortfolioValue } from "./metrics/risk-loader";
+import { getRevisionBreadth } from "./metrics/revision-breadth-loader";
+import {
+  formatRev6Chip,
+  type RevisionBreadth,
+} from "./metrics/revision-breadth";
 import { targetAllocation } from "./goals";
 import type {
   QueueItem,
@@ -588,6 +593,81 @@ function enrichWithKellyChips(
 }
 
 /**
+ * Phase 4 Batch J — load REV6 analyst-revision-breadth for every
+ * raw item that would receive the chip (stale_rec_held +
+ * catalyst_prep_imminent only). Bounded to 15 unique tickers per
+ * render so a flurry of catalyst items doesn't spike Finnhub
+ * usage; remainder simply don't get the chip.
+ */
+async function loadRevisionBreadthForActionableItems(
+  raw: RawItem[],
+): Promise<Map<string, RevisionBreadth>> {
+  const out = new Map<string, RevisionBreadth>();
+  const targets = new Set<string>();
+  for (const r of raw) {
+    if (
+      r.ticker &&
+      (r.itemType === "stale_rec_held" || r.itemType === "catalyst_prep_imminent")
+    ) {
+      targets.add(r.ticker.toUpperCase());
+    }
+  }
+  if (targets.size === 0) return out;
+  const limited = Array.from(targets).slice(0, 15);
+  const results = await Promise.all(
+    limited.map(async (ticker) => {
+      try {
+        const breadth = await getRevisionBreadth(ticker);
+        return { ticker, breadth };
+      } catch (err) {
+        log.warn("queue-builder", "rev6 lookup failed", {
+          ticker,
+          ...errorInfo(err),
+        });
+        return { ticker, breadth: null };
+      }
+    }),
+  );
+  for (const { ticker, breadth } of results) {
+    if (breadth === null) continue;
+    out.set(ticker, breadth);
+  }
+  return out;
+}
+
+/**
+ * Layer the rev6 chip onto every actionable raw item whose ticker
+ * resolved a REV6 breadth value. Skips items where both upgrades
+ * AND downgrades are zero — that "—/—" chip would be visual
+ * noise without actionable signal.
+ */
+function enrichWithRev6Chips(
+  raw: RawItem[],
+  revisionByTicker: Map<string, RevisionBreadth>,
+): void {
+  for (const r of raw) {
+    if (!r.ticker) continue;
+    if (
+      r.itemType !== "stale_rec_held" &&
+      r.itemType !== "catalyst_prep_imminent"
+    ) {
+      continue;
+    }
+    const breadth = revisionByTicker.get(r.ticker.toUpperCase());
+    if (!breadth) continue;
+    if (breadth.upgrades === 0 && breadth.downgrades === 0) continue;
+    r.chips = [
+      ...r.chips,
+      {
+        label: "rev6",
+        value: formatRev6Chip(breadth),
+        tooltipKey: "rev6",
+      },
+    ];
+  }
+}
+
+/**
  * Phase 3 Batch F — emit `goals_setup` when the user hasn't filled out
  * their goals yet, otherwise check for `rebalance_drift`.
  *
@@ -808,6 +888,14 @@ export async function buildQueueForUser(
   ]);
   enrichWithMomentumChips(raw, momentumByTicker);
   enrichWithKellyChips(raw, kellyFraction);
+
+  // Phase 4 Batch J — REV6 analyst-revision-breadth chip on
+  // stale_rec_held / catalyst_prep_imminent items. We fetch only
+  // the tickers that will actually receive the chip so a 25-name
+  // portfolio doesn't trigger 25 Finnhub calls when only a few
+  // items will display them.
+  const revisionByTicker = await loadRevisionBreadthForActionableItems(raw);
+  enrichWithRev6Chips(raw, revisionByTicker);
 
   // ---- finalize: filter state, score, sort ----
   const now = Date.now();

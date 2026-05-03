@@ -36,6 +36,13 @@ import { PacingCard } from "@/components/dashboard/year-outlook/pacing-card";
 import { GlidepathVisualizer } from "@/components/dashboard/year-outlook/glidepath-visualizer";
 import { RiskLandscape } from "@/components/dashboard/year-outlook/risk-landscape";
 import { MacroOutlook } from "@/components/dashboard/year-outlook/macro-outlook";
+import { FactorExposureCard } from "@/components/dashboard/year-outlook/factor-exposure-card";
+import { getFactorExposure } from "@/lib/dashboard/metrics/fama-french-loader";
+import { MonteCarloCard } from "@/components/dashboard/year-outlook/monte-carlo-card";
+import { getMonteCarloProjection } from "@/lib/dashboard/metrics/monte-carlo-loader";
+import { DamodaranCard } from "@/components/dashboard/year-outlook/damodaran-cost-of-capital-card";
+import { AuditAiCard } from "@/components/dashboard/audit-ai-card";
+import { getAuditAiTrackRecord } from "@/lib/dashboard/metrics/audit-ai-loader";
 import { log, errorInfo } from "@/lib/log";
 
 export const dynamic = "force-dynamic";
@@ -45,7 +52,7 @@ export default async function YearOutlookPage() {
   if (!session?.user?.id) redirect("/sign-in");
   const userId = session.user.id;
 
-  const [goals, currentValue, risk, varResult] = await Promise.all([
+  const [goals, currentValue, risk, varResult, factorExposure] = await Promise.all([
     getUserGoals(userId).catch((err) => {
       log.warn("year-outlook.page", "goals load failed", {
         userId,
@@ -74,6 +81,36 @@ export default async function YearOutlookPage() {
       });
       return null;
     }),
+    getFactorExposure(userId).catch((err) => {
+      log.warn("year-outlook.page", "factor exposure load failed", {
+        userId,
+        ...errorInfo(err),
+      });
+      return null;
+    }),
+  ]);
+
+  // Monte-Carlo runs after the first wave because it needs the
+  // resolved currentValue to seed the simulation. Cheap relative to
+  // the warehouse round-trips above (pure CPU once goals load).
+  // The Audit-AI track-record query is independent so it parallels.
+  const [monteCarloResult, auditAiResult] = await Promise.all([
+    getMonteCarloProjection(userId, currentValue).catch((err) => {
+      log.warn("year-outlook.page", "monte carlo load failed", {
+        userId,
+        ...errorInfo(err),
+      });
+      return null;
+    }),
+    getAuditAiTrackRecord({ userId, limit: 100, windowDays: 30 }).catch(
+      (err) => {
+        log.warn("year-outlook.page", "audit-ai load failed", {
+          userId,
+          ...errorInfo(err),
+        });
+        return null;
+      },
+    ),
   ]);
 
   const year = new Date().getUTCFullYear();
@@ -97,13 +134,17 @@ export default async function YearOutlookPage() {
           benchYtdPct={risk?.benchYtdPct ?? null}
         />
         <PacingCard goals={goals} currentValue={currentValue} />
+        <MonteCarloCard result={monteCarloResult} />
         <GlidepathVisualizer userId={userId} goals={goals} />
         <RiskLandscape
           risk={risk}
           varResult={varResult}
           portfolioValue={currentValue}
         />
+        <FactorExposureCard exposure={factorExposure} />
+        <DamodaranCard />
         <MacroOutlook />
+        <AuditAiCard result={auditAiResult} scope="user" />
       </main>
     </AppShell>
   );
