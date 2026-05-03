@@ -23,10 +23,22 @@ function fmtPct(n: number, digits = 1): string {
   return `${n.toFixed(digits)}%`;
 }
 
-function fmtSign(s: string | number | undefined): string {
+function fmtSign(s: string | number | null | undefined): string {
   if (s === undefined || s === null) return "flat";
-  if (typeof s === "number") return s >= 0 ? `+${fmtPct(s)}` : fmtPct(s);
+  if (typeof s === "number") {
+    if (!Number.isFinite(s)) return "flat";
+    return s >= 0 ? `+${fmtPct(s)}` : fmtPct(s);
+  }
   return String(s);
+}
+
+function asNumber(v: string | number | null | undefined): number {
+  return typeof v === "number" ? v : Number.NaN;
+}
+
+function asString(v: string | number | null | undefined, fallback: string): string {
+  if (v === undefined || v === null) return fallback;
+  return String(v);
 }
 
 export function renderTemplate(ctx: TemplateContext): TemplateOutput {
@@ -36,11 +48,12 @@ export function renderTemplate(ctx: TemplateContext): TemplateOutput {
   switch (itemType) {
     case "concentration_breach_severe":
     case "concentration_breach_moderate": {
-      const delta = data.deltaPp as number;
-      const cur = data.currentPct as number;
-      const min = data.minCapPct as number;
-      const max = data.maxCapPct as number;
-      const evt = data.nextEvent as string | undefined;
+      const delta = asNumber(data.deltaPp);
+      const cur = asNumber(data.currentPct);
+      const min = asNumber(data.minCapPct);
+      const max = asNumber(data.maxCapPct);
+      const evtRaw = data.nextEvent;
+      const evt = typeof evtRaw === "string" ? evtRaw : undefined;
       const tail = evt ? ` before ${evt}` : "";
       return {
         title: `${t} concentration ${fmtPct(cur)} — above your cap`,
@@ -50,10 +63,10 @@ export function renderTemplate(ctx: TemplateContext): TemplateOutput {
 
     case "stale_rec_held":
     case "stale_rec_watched": {
-      const days = data.daysAgo as number;
-      const move = String(data.moveSinceRec ?? "flat");
-      const verdict = String(data.originalVerdict ?? "HOLD");
-      const price = data.priceAtRec as number;
+      const days = asNumber(data.daysAgo);
+      const move = asString(data.moveSinceRec, "flat");
+      const verdict = asString(data.originalVerdict, "HOLD");
+      const price = asNumber(data.priceAtRec);
       return {
         title: `${t} thesis is ${days}d old`,
         body: `Re-research ${t} — last analyzed ${days}d ago, price ${move} since ${verdict} at ${fmtMoney(price)}.`,
@@ -62,13 +75,14 @@ export function renderTemplate(ctx: TemplateContext): TemplateOutput {
 
     case "catalyst_prep_imminent":
     case "catalyst_prep_upcoming": {
-      const eventName = String(data.eventName ?? "earnings");
-      const eventDate = String(data.eventDate ?? "soon");
-      const dte = data.daysToEvent as number;
-      const prior = data.priorReaction
-        ? `Last earnings reaction: ${data.priorReaction}.`
-        : "";
-      const pos = data.currentPct as number;
+      const eventName = asString(data.eventName, "earnings");
+      const eventDate = asString(data.eventDate, "soon");
+      const dte = asNumber(data.daysToEvent);
+      const prior =
+        data.priorReaction !== undefined && data.priorReaction !== null
+          ? `Last earnings reaction: ${String(data.priorReaction)}.`
+          : "";
+      const pos = asNumber(data.currentPct);
       const posStr = Number.isFinite(pos)
         ? ` Position is ${fmtPct(pos)} of portfolio.`
         : "";
@@ -79,10 +93,10 @@ export function renderTemplate(ctx: TemplateContext): TemplateOutput {
     }
 
     case "outcome_action_mark": {
-      const origDate = String(data.originalDate ?? "earlier");
-      const origVerdict = String(data.originalVerdict ?? "HOLD");
+      const origDate = asString(data.originalDate, "earlier");
+      const origVerdict = asString(data.originalVerdict, "HOLD");
       const move = fmtSign(data.outcomeMove);
-      const ov = String(data.outcomeVerdict ?? "scored");
+      const ov = asString(data.outcomeVerdict, "scored");
       return {
         title: `${t} outcome — ${ov}`,
         body: `Did you act on the ${origDate} ${origVerdict} on ${t}? Outcome scored ${move} (${ov}).`,
@@ -90,9 +104,9 @@ export function renderTemplate(ctx: TemplateContext): TemplateOutput {
     }
 
     case "cash_idle": {
-      const cash = data.cashAmount as number;
-      const idle = data.daysIdle as number;
-      const cands = data.numCandidates as number;
+      const cash = asNumber(data.cashAmount);
+      const idle = asNumber(data.daysIdle);
+      const cands = asNumber(data.numCandidates);
       return {
         title: `${fmtMoney(cash)} idle for ${idle}d`,
         body: `${fmtMoney(cash)} idle for ${idle}d. ${cands} BUY-rated candidates fit your sector budget.`,
@@ -100,7 +114,7 @@ export function renderTemplate(ctx: TemplateContext): TemplateOutput {
     }
 
     case "broker_reauth": {
-      const broker = String(data.brokerName ?? "Your broker");
+      const broker = asString(data.brokerName, "Your broker");
       return {
         title: `${broker} disconnected`,
         body: `${broker} disconnected — reauthorize to refresh holdings.`,
@@ -108,8 +122,8 @@ export function renderTemplate(ctx: TemplateContext): TemplateOutput {
     }
 
     case "year_pace_review": {
-      const ytdPct = data.ytdPct as number;
-      const benchPct = data.spyYtdPct as number;
+      const ytdPct = data.ytdPct;
+      const benchPct = data.spyYtdPct;
       return {
         title: `2026 year-pace review`,
         body: `Portfolio YTD: ${fmtSign(ytdPct)} vs SPY ${fmtSign(benchPct)}.`,
