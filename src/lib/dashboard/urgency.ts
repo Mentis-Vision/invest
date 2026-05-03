@@ -19,6 +19,7 @@ export const STATIC_IMPACT: Record<ItemTypeKey, number> = {
   goals_setup: 60,
   rebalance_drift: 50,
   tax_harvest: 40,
+  cluster_buying: 60,
 };
 
 export function computeTimeDecay(hoursToEvent: number | null): number {

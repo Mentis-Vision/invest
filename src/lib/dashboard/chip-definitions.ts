@@ -73,4 +73,30 @@ export const CHIP_DEFINITIONS: Record<string, string> = {
     "IRS wash-sale rule — selling at a loss and buying the same or substantially identical security within 30 days before OR after disallows the loss. The 30-day window applies symmetrically.",
   "tax-window":
     "Days remaining in the current tax year to harvest losses for this year's return. December 31 is the cutoff for most filers; consult your tax advisor.",
+  insiders:
+    "Number of distinct insiders (officers, directors, 10% owners) making open-market purchases inside the cluster window. ≥ 3 is the cluster threshold.",
+  cluster:
+    "Aggregate dollar value of cluster purchases across all participating insiders inside the rolling 14-day window. Excludes 10b5-1 plan trades.",
+  window:
+    "Width of the cluster window in calendar days — start date of earliest qualifying purchase to latest, capped at 14 days.",
+  short:
+    "Short interest as a percent of float, change vs. previous bi-weekly FINRA report. Rapid increase can mean rising bearish conviction; rapid decrease can mean a short squeeze unwinding.",
+  dtc:
+    "Days to cover — short interest divided by average daily volume. Above 5 days suggests it would take meaningful buying pressure for shorts to exit cleanly.",
+  SKEW:
+    "CBOE SKEW index — measures perceived tail-risk in S&P 500 options pricing. Levels above 130 indicate elevated black-swan hedging; levels below 110 indicate complacency.",
+  "real-yield":
+    "10-year TIPS real yield (DFII10) — nominal Treasury yield minus market-implied inflation. Positive real yields tighten financial conditions; negative real yields support risk assets.",
+  breakeven:
+    "10-year breakeven inflation (T10YIE) — the inflation rate the bond market is pricing in over the next decade. Rises with inflation expectations.",
+  "dot-plot":
+    "Median FOMC member projection for the federal funds rate (Summary of Economic Projections). Compared against market-implied path to gauge whether the market is pricing more or less easing than the Fed signals.",
+  "home-bias":
+    "Share of equity exposure in US-listed names. The global market-cap weight of the US is roughly 60%; allocating substantially more is a 'home bias' that historically correlates with under-diversification.",
+  concentration:
+    "Combined weight of the top three sector buckets in the portfolio. Trends upward over time when the user keeps adding to winners.",
+  recency:
+    "Recency-chase counter — count of recent recommendations or trades into year-to-date winners. Behavioral nudge, not advice.",
+  "stress-test":
+    "Hypothetical portfolio drawdown under a historical scenario (2008-09, 2020-Mar, +100bps rates). Computed by applying historical factor shocks to your current Fama-French exposures.",
 };
