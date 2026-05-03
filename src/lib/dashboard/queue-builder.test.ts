@@ -78,6 +78,7 @@ function mockReview(value: Record<string, unknown>): void {
     stockAllocationPct: null,
     portfolioYtdPct: 0,
     spyYtdPct: 0,
+    harvestableLosses: [],
     ...value,
   });
 }
@@ -598,5 +599,64 @@ describe("buildQueueForUser", () => {
     });
     const items = await buildQueueForUser("user_a");
     expect(items.find((i) => i.itemType === "rebalance_drift")).toBeUndefined();
+  });
+
+  it("emits tax_harvest with aggregate loss when harvestableLosses non-empty", async () => {
+    mockReview({
+      holdings: [],
+      concentrationBreaches: [],
+      upcomingCatalysts: [],
+      staleRecs: [],
+      cashIdle: null,
+      brokerStatus: "active",
+      brokerName: null,
+      harvestableLosses: [
+        {
+          ticker: "PYPL",
+          costBasis: 5000,
+          currentValue: 4400,
+          lossDollars: -600,
+          suggestedReplacement: "VFH",
+          sector: "Financials",
+        },
+        {
+          ticker: "DIS",
+          costBasis: 3000,
+          currentValue: 2700,
+          lossDollars: -300,
+          suggestedReplacement: "VOX",
+          sector: "Communication Services",
+        },
+      ],
+    });
+    const items = await buildQueueForUser("user_a");
+    const harvest = items.find((i) => i.itemType === "tax_harvest");
+    expect(harvest).toBeDefined();
+    expect(harvest?.title).toContain("$900");
+    expect(harvest?.body).toContain("2 positions");
+    expect(harvest?.body).toContain("tax advisor");
+    expect(harvest?.chips.find((c) => c.label === "loss")).toBeDefined();
+    expect(harvest?.chips.find((c) => c.label === "wash-sale")).toBeDefined();
+    // Tax harvest is anchored to year-end and tagged THIS_YEAR for any
+    // month earlier than December (the spec calls it Year-tagged).
+    const month = new Date().getUTCMonth();
+    if (month < 11) {
+      expect(harvest?.horizon).toBe("THIS_YEAR");
+    }
+  });
+
+  it("does NOT emit tax_harvest when harvestableLosses is empty", async () => {
+    mockReview({
+      holdings: [],
+      concentrationBreaches: [],
+      upcomingCatalysts: [],
+      staleRecs: [],
+      cashIdle: null,
+      brokerStatus: "active",
+      brokerName: null,
+      harvestableLosses: [],
+    });
+    const items = await buildQueueForUser("user_a");
+    expect(items.find((i) => i.itemType === "tax_harvest")).toBeUndefined();
   });
 });
