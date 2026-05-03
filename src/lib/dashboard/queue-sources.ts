@@ -1,14 +1,8 @@
 // src/lib/dashboard/queue-sources.ts
 // Thin adapter layer between queue-builder.ts and the underlying data
-// modules (portfolio-review, recommendation_outcome). Exposes the rich
-// shape that queue-builder needs without modifying source modules.
-//
-// In Phase 1 the underlying portfolio-review pipeline does not yet
-// produce concentration breaches, cash-idle, upcoming catalysts, or
-// stale-rec lists in a structured form — those are computed by later
-// passes. For now this adapter returns the fields it can derive cheaply
-// and leaves the rest undefined; queue-builder treats undefined as
-// "not present" and skips the corresponding item type.
+// modules (portfolio-review, recommendation_outcome, holdings, ticker
+// events, user_profile). Exposes the rich shape that queue-builder
+// needs without modifying source modules.
 //
 // Tests mock this module directly so the queue-builder's composition
 // logic can be exercised against arbitrary input shapes without standing
@@ -78,24 +72,51 @@ export interface UnactionedOutcome {
   originalVerdict: string;
 }
 
+const DEFAULT_CONCENTRATION_CAP_PCT = 5.0;
+const STALE_REC_DAYS = 30;
+const CATALYST_WINDOW_DAYS = 30;
+const CASH_IDLE_MIN_AMOUNT = 500; // queue-builder also gates on >= 500
+const CATALYST_EVENT_TYPES = ["earnings", "dividend_ex", "guidance"];
+
 /**
  * Build the queue-builder's view of a user's portfolio state.
  *
- * Reads the cached daily portfolio review (zero AI cost — same row the
- * dashboard already uses) and infers broker status from Plaid + SnapTrade
- * connection rows. Other rich fields default to empty / null in Phase 1
- * and are filled in by later phases.
+ * Reads:
+ *   - holdings (concentration weights, held tickers, cash bucket)
+ *   - user_profile.concentration_cap_pct (default 5.00)
+ *   - recommendation (stale recs)
+ *   - ticker_events (upcoming catalysts on held tickers)
+ *   - portfolio_snapshot (cash-idle days inferred from byAssetClass.cash)
+ *   - plaid_item / snaptrade_connection (broker status)
+ *
+ * Cheap, read-only. No AI calls. Catches every block so a partial DB
+ * failure can never knock out the whole dashboard.
  */
 export async function getReviewSummary(
   userId: string,
 ): Promise<ReviewSummary | null> {
-  // Phase 1: derive broker status from connection state. Even without a
-  // cached review row we still want broker_reauth to surface, so this
-  // runs unconditionally.
   const brokerStatus = await deriveBrokerStatus(userId);
   const review = await getCachedPortfolioReview(userId).catch(() => null);
 
-  if (!review && brokerStatus.status === "none") {
+  const [
+    holdings,
+    concentrationBreaches,
+    staleRecs,
+    upcomingCatalysts,
+    cashIdle,
+  ] = await Promise.all([
+    listHoldingsWithWeights(userId),
+    listConcentrationBreaches(userId),
+    listStaleRecs(userId),
+    listUpcomingCatalysts(userId),
+    deriveCashIdle(userId),
+  ]);
+
+  if (
+    !review &&
+    brokerStatus.status === "none" &&
+    holdings.length === 0
+  ) {
     // No data at all — caller will fall through to the always-on
     // year_pace_review item.
     return null;
@@ -104,11 +125,15 @@ export async function getReviewSummary(
   return {
     brokerStatus: brokerStatus.status,
     brokerName: brokerStatus.brokerName,
-    holdings: [],
-    concentrationBreaches: [],
-    upcomingCatalysts: [],
-    staleRecs: [],
-    cashIdle: null,
+    holdings,
+    concentrationBreaches,
+    upcomingCatalysts,
+    staleRecs,
+    cashIdle,
+    // YTD metrics: deferred — neither portfolio_snapshot nor
+    // ticker_market_daily reaches back to Jan 1, so we cannot anchor a
+    // real YTD without backfill. Leave undefined; queue-builder falls
+    // back to 0.0% in the year_pace_review template.
     portfolioYtdPct: undefined,
     spyYtdPct: undefined,
   };
@@ -155,6 +180,315 @@ async function deriveBrokerStatus(
       ...errorInfo(err),
     });
     return { status: "none", brokerName: null };
+  }
+}
+
+/**
+ * One row per (ticker) summed across accounts, weighted against the
+ * user's NON-CASH portfolio total. Same convention `alerts.ts` uses for
+ * concentration scoring — cash buckets are excluded so a position's
+ * weight reflects its share of invested capital, not gross balance.
+ */
+async function listHoldingsWithWeights(
+  userId: string,
+): Promise<Array<{ ticker: string; weight: number }>> {
+  try {
+    const { rows } = await pool.query<{
+      ticker: string;
+      weightPct: string | number | null;
+    }>(
+      `WITH totals AS (
+         SELECT SUM(COALESCE("lastValue", 0)) AS total
+           FROM "holding"
+          WHERE "userId" = $1
+            AND "assetClass" IS DISTINCT FROM 'cash'
+       ),
+       per_ticker AS (
+         SELECT ticker, SUM(COALESCE("lastValue", 0)) AS value
+           FROM "holding"
+          WHERE "userId" = $1
+            AND "assetClass" IS DISTINCT FROM 'cash'
+          GROUP BY ticker
+       )
+       SELECT p.ticker AS ticker,
+              (p.value / NULLIF(t.total, 0) * 100) AS "weightPct"
+         FROM per_ticker p, totals t
+        WHERE p.value > 0
+        ORDER BY p.value DESC`,
+      [userId],
+    );
+    return rows
+      .map((r) => ({
+        ticker: r.ticker,
+        weight: r.weightPct === null ? 0 : Number(r.weightPct),
+      }))
+      .filter((h) => Number.isFinite(h.weight));
+  } catch (err) {
+    log.warn("queue-sources", "listHoldingsWithWeights failed", {
+      userId,
+      ...errorInfo(err),
+    });
+    return [];
+  }
+}
+
+/**
+ * Concentration breaches: positions whose share of NON-CASH portfolio
+ * value exceeds the user's `user_profile.concentration_cap_pct`
+ * (default 5.00). Severe vs moderate is decided in queue-builder by
+ * comparing weight/cap ratio, so this only emits the raw breach.
+ */
+async function listConcentrationBreaches(
+  userId: string,
+): Promise<ReviewBreach[]> {
+  try {
+    const { rows: profileRows } = await pool.query<{
+      capPct: string | number | null;
+    }>(
+      `SELECT concentration_cap_pct AS "capPct"
+         FROM "user_profile"
+        WHERE "userId" = $1
+        LIMIT 1`,
+      [userId],
+    );
+    const capRaw = profileRows[0]?.capPct;
+    const cap =
+      capRaw === null || capRaw === undefined
+        ? DEFAULT_CONCENTRATION_CAP_PCT
+        : Number(capRaw);
+    const safeCap = Number.isFinite(cap) && cap > 0
+      ? cap
+      : DEFAULT_CONCENTRATION_CAP_PCT;
+
+    const holdings = await listHoldingsWithWeights(userId);
+    return holdings
+      .filter((h) => h.weight > safeCap)
+      .map((h) => ({
+        ticker: h.ticker,
+        weight: Number(h.weight.toFixed(2)),
+        cap: safeCap,
+      }));
+  } catch (err) {
+    log.warn("queue-sources", "listConcentrationBreaches failed", {
+      userId,
+      ...errorInfo(err),
+    });
+    return [];
+  }
+}
+
+/**
+ * Recommendations whose latest version per ticker is older than 30
+ * days. moveSinceRec compares priceAtRec to the warehouse close (no
+ * Yahoo live calls — too expensive on a page load). When the warehouse
+ * has no current close, moveSinceRec is "flat".
+ *
+ * isHeld: EXISTS check against the holding table. We dedupe accounts by
+ * using EXISTS instead of a JOIN, which would multiply rows when the
+ * user holds the same ticker in multiple accounts.
+ */
+async function listStaleRecs(userId: string): Promise<ReviewStaleRec[]> {
+  try {
+    const { rows } = await pool.query<{
+      recommendationId: string;
+      ticker: string;
+      recommendation: string;
+      priceAtRec: string | number;
+      createdAt: Date;
+      daysAgo: string | number;
+      isHeld: boolean;
+    }>(
+      `WITH latest AS (
+         SELECT DISTINCT ON ("userId", ticker)
+                id, "userId", ticker, recommendation, "priceAtRec", "createdAt"
+           FROM "recommendation"
+          WHERE "userId" = $1
+          ORDER BY "userId", ticker, "createdAt" DESC
+       )
+       SELECT l.id            AS "recommendationId",
+              l.ticker         AS ticker,
+              l.recommendation AS recommendation,
+              l."priceAtRec"   AS "priceAtRec",
+              l."createdAt"    AS "createdAt",
+              EXTRACT(DAY FROM NOW() - l."createdAt")::int AS "daysAgo",
+              EXISTS (
+                SELECT 1 FROM "holding" h
+                 WHERE h."userId" = l."userId"
+                   AND UPPER(h.ticker) = UPPER(l.ticker)
+              ) AS "isHeld"
+         FROM latest l
+        WHERE l."createdAt" < NOW() - INTERVAL '${STALE_REC_DAYS} days'
+        ORDER BY l."createdAt" ASC
+        LIMIT 25`,
+      [userId],
+    );
+
+    if (rows.length === 0) return [];
+
+    // Pull warehouse close for moveSinceRec — single batch read, no
+    // network. If a ticker has no warehouse row, moveSinceRec stays
+    // "flat" rather than blocking the queue.
+    const tickers = [...new Set(rows.map((r) => r.ticker))];
+    const { getTickerMarketBatch } = await import("../warehouse/market");
+    const marketMap = await getTickerMarketBatch(tickers).catch(() => new Map());
+
+    return rows.map((r) => {
+      const priceAtRec = Number(r.priceAtRec);
+      const close = marketMap.get(r.ticker.toUpperCase())?.close ?? null;
+      let moveSinceRec: string | number = "flat";
+      if (
+        close !== null &&
+        Number.isFinite(close) &&
+        Number.isFinite(priceAtRec) &&
+        priceAtRec > 0
+      ) {
+        const pct = ((close - priceAtRec) / priceAtRec) * 100;
+        moveSinceRec = `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`;
+      }
+      return {
+        ticker: r.ticker,
+        recommendationId: r.recommendationId,
+        daysAgo: Number(r.daysAgo),
+        moveSinceRec,
+        originalVerdict: r.recommendation ?? "HOLD",
+        priceAtRec,
+        isHeld: r.isHeld === true,
+      };
+    });
+  } catch (err) {
+    log.warn("queue-sources", "listStaleRecs failed", {
+      userId,
+      ...errorInfo(err),
+    });
+    return [];
+  }
+}
+
+/**
+ * Upcoming catalysts on user-held tickers from the warehouse
+ * `ticker_events` table. Held set is sourced from the holding table to
+ * keep the catalyst surface anchored to positions the user actually
+ * cares about. Window is the next 30 days; event types restricted to
+ * earnings / dividend_ex / guidance (the noise-to-signal cuts).
+ */
+async function listUpcomingCatalysts(
+  userId: string,
+): Promise<ReviewCatalyst[]> {
+  try {
+    const { rows } = await pool.query<{
+      ticker: string;
+      eventType: string;
+      eventDate: Date;
+      details: Record<string, unknown> | null;
+      daysToEvent: string | number;
+    }>(
+      `WITH user_tickers AS (
+         SELECT DISTINCT UPPER(ticker) AS ticker
+           FROM "holding"
+          WHERE "userId" = $1
+            AND "assetClass" IS DISTINCT FROM 'cash'
+       )
+       SELECT e.ticker      AS ticker,
+              e.event_type  AS "eventType",
+              e.event_date  AS "eventDate",
+              e.details     AS details,
+              (e.event_date - CURRENT_DATE)::int AS "daysToEvent"
+         FROM "ticker_events" e
+         JOIN user_tickers u ON u.ticker = e.ticker
+        WHERE e.event_date >= CURRENT_DATE
+          AND e.event_date <= CURRENT_DATE + INTERVAL '${CATALYST_WINDOW_DAYS} days'
+          AND e.event_type = ANY($2)
+        ORDER BY e.event_date ASC
+        LIMIT 25`,
+      [userId, CATALYST_EVENT_TYPES],
+    );
+
+    return rows.map((r) => {
+      const dateStr =
+        r.eventDate instanceof Date
+          ? r.eventDate.toISOString().slice(0, 10)
+          : String(r.eventDate).slice(0, 10);
+      const dte = Number(r.daysToEvent);
+      const eventName =
+        r.eventType === "earnings"
+          ? "earnings"
+          : r.eventType === "dividend_ex"
+            ? "ex-dividend"
+            : r.eventType === "guidance"
+              ? "guidance"
+              : r.eventType;
+      return {
+        ticker: r.ticker,
+        eventName,
+        eventDate: dateStr,
+        daysToEvent: Number.isFinite(dte) ? dte : 0,
+      };
+    });
+  } catch (err) {
+    log.warn("queue-sources", "listUpcomingCatalysts failed", {
+      userId,
+      ...errorInfo(err),
+    });
+    return [];
+  }
+}
+
+/**
+ * Cash-idle inference. We pull the most-recent `portfolio_snapshot`
+ * row's `byAssetClass.cash` bucket and use the longest run of
+ * consecutive snapshots where cash >= the current bucket * 0.9 (i.e.
+ * "cash has been roughly this high for N days") as the daysIdle hint.
+ *
+ * If there is no snapshot history yet (new user) or `byAssetClass.cash`
+ * is absent, returns null. This is correct — queue-builder gates on
+ * non-null AND amount >= 500 AND daysIdle >= 14, so the cash_idle item
+ * simply doesn't surface for users with no signal yet.
+ */
+async function deriveCashIdle(
+  userId: string,
+): Promise<ReviewCashIdle | null> {
+  try {
+    const { rows } = await pool.query<{
+      capturedAt: Date;
+      cashAmount: string | number | null;
+    }>(
+      `SELECT "capturedAt",
+              ("byAssetClass" ->> 'cash')::numeric AS "cashAmount"
+         FROM "portfolio_snapshot"
+        WHERE "userId" = $1
+          AND "byAssetClass" ? 'cash'
+        ORDER BY "capturedAt" DESC
+        LIMIT 60`,
+      [userId],
+    );
+    if (rows.length === 0) return null;
+    const latestRaw = rows[0]?.cashAmount;
+    if (latestRaw === null || latestRaw === undefined) return null;
+    const latest = Number(latestRaw);
+    if (!Number.isFinite(latest) || latest < CASH_IDLE_MIN_AMOUNT) return null;
+
+    const floor = latest * 0.9;
+    let daysIdle = 0;
+    for (const r of rows) {
+      const v = r.cashAmount === null ? Number.NaN : Number(r.cashAmount);
+      if (!Number.isFinite(v) || v < floor) break;
+      daysIdle++;
+    }
+    return {
+      amount: Math.round(latest),
+      daysIdle,
+      // numCandidates: we don't yet have a curated BUY-rated candidate
+      // pool keyed to the user's sector budget. Passing 0 surfaces the
+      // cash item without a misleading candidate count; the builder
+      // template tolerates 0.
+      numCandidates: 0,
+    };
+  } catch (err) {
+    log.warn("queue-sources", "deriveCashIdle failed", {
+      userId,
+      ...errorInfo(err),
+    });
+    return null;
   }
 }
 
