@@ -140,6 +140,19 @@ const FACT_TAGS: Record<string, string> = {
   CommonStockSharesOutstanding: "Shares outstanding",
   NetCashProvidedByUsedInOperatingActivities: "Operating cash flow",
   ResearchAndDevelopmentExpense: "R&D expense",
+  // Phase 4 Batch I: XBRL fields needed by Piotroski / Altman /
+  // Beneish / Sloan quality scores. Yahoo leaves these empty for many
+  // companies; SEC has them.
+  RetainedEarningsAccumulatedDeficit: "Retained earnings",
+  AssetsCurrent: "Current assets",
+  LiabilitiesCurrent: "Current liabilities",
+  AccountsReceivableNetCurrent: "Accounts receivable",
+  DepreciationDepletionAndAmortization: "Depreciation",
+  Depreciation: "Depreciation (alt)",
+  SellingGeneralAndAdministrativeExpense: "SG&A",
+  IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest:
+    "Pre-tax income",
+  PropertyPlantAndEquipmentNet: "Property, plant & equipment",
 };
 
 export async function getCompanyFacts(
