@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
@@ -11,12 +10,12 @@ import DashboardClient from "@/components/dashboard-client";
 import AppShell from "@/components/app-shell";
 import { log, errorInfo } from "@/lib/log";
 import { buildQueueForUser } from "@/lib/dashboard/queue-builder";
-import { DailyHeadline } from "@/components/dashboard/daily-headline";
-import { DecisionQueue } from "@/components/dashboard/decision-queue";
-import { RiskTile } from "@/components/dashboard/risk-tile";
-import { VarTile } from "@/components/dashboard/var-tile";
-import { MarketRegimeTile } from "@/components/dashboard/market-regime-tile";
-import { LegacyDashboardSection } from "@/components/dashboard/legacy-dashboard-section";
+import { PortfolioHero } from "@/components/dashboard/redesign/portfolio-hero";
+import { TodayDecision } from "@/components/dashboard/redesign/today-decision";
+import { WatchThisWeek } from "@/components/dashboard/redesign/watch-this-week";
+import { MarketConditionsSidebar } from "@/components/dashboard/redesign/market-conditions-sidebar";
+import { getHeroData } from "@/lib/dashboard/hero-loader";
+import { getMarketRegime } from "@/lib/dashboard/metrics/regime-loader";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { QueueItem } from "@/lib/dashboard/types";
 
@@ -134,90 +133,89 @@ export default async function Home({
     );
   }
 
-  // ---- New overview composition ---------------------------------------
+  // ---- Overview composition (Phase 5 redesign) ----------------------
+  //
+  // Spec §7. The overview surface is the unified PortfolioHero +
+  // TodayDecision + WatchThisWeek + MarketConditionsSidebar layout
+  // wrapped in the shared AppShell (top nav, ticker tape, trial
+  // banner). Each loader has its own catch so a failure on any one
+  // input degrades that section to its empty-state without taking
+  // the page down.
   const userId = session.user.id;
-  const items = await buildQueueForUser(userId).catch((err) => {
-    log.warn("app.page", "buildQueueForUser failed", {
-      userId,
-      ...errorInfo(err),
-    });
-    return [] as QueueItem[];
-  });
 
-  // Stale-headline fix (2026-05-02): we used to fall back to
-  // `user_profile.headline_cache.rendered` whenever `items` was empty,
-  // but that conflated "queue genuinely empty after dismiss" with
-  // "queue builder errored." The latter is already handled by the
-  // catch above (returns `[]`); the former should render the
-  // empty-state CTA, not re-render the just-dismissed item. The cron
-  // still refreshes the cache daily for the warm-load case but it's
-  // no longer authoritative for this surface — the snooze/dismiss/
-  // done route handlers also clear it on user action so it can never
-  // shadow a real action.
-  const headline: QueueItem | null = items[0] ?? null;
-  const queue = headline
-    ? items.filter((i) => i.itemKey !== headline.itemKey)
-    : items;
+  const [hero, queue, regime] = await Promise.all([
+    getHeroData(userId).catch((err) => {
+      log.warn("app.page", "hero-loader failed", {
+        userId,
+        ...errorInfo(err),
+      });
+      return null;
+    }),
+    buildQueueForUser(userId).catch((err) => {
+      log.warn("app.page", "buildQueueForUser failed", {
+        userId,
+        ...errorInfo(err),
+      });
+      return [] as QueueItem[];
+    }),
+    getMarketRegime().catch((err) => {
+      log.warn("app.page", "getMarketRegime failed", {
+        ...errorInfo(err),
+      });
+      return null;
+    }),
+  ]);
 
-  // Composition (2026-05-02). The /app overview is now wrapped in the
-  // shared AppShell so the top nav, ticker tape, and trial banner are
-  // present (matches /app/history, /app/year-outlook, /app/settings).
-  // Two stacked sections inside the shell:
-  //
-  //   1. Actionable layer (max-w-3xl): Headline + Queue + tiles. Tight
-  //      decision-focused column.
-  //   2. Legacy hybrid-v2 dashboard (full width via DashboardView):
-  //      Next Move hero + BlockGrid + drill panel. Informational.
-  //
-  // Rendering DashboardView directly (via the LegacyDashboardSection
-  // client wrapper) avoids stacking a second AppShell that
-  // DashboardClient would have brought along.
+  const primary = queue[0] ?? null;
+  const others = queue.slice(1);
+  const watchThisWeek = queue
+    .filter((i) => i.horizon === "THIS_WEEK")
+    .slice(0, 3);
+
+  // Map regime signals to MarketConditionsSidebar's expected props.
+  // The component expects label/vix/vixTermStructure/daysToFOMC/real10Y/asOf
+  // — derive vixTermStructure from the ratio (< 1 → contango, ≥ 1 →
+  // backwardation) and pass `real10Y: null` since the regime-loader
+  // doesn't surface a 10Y real yield today (TIPS series isn't wired
+  // into the loader yet — the sidebar gracefully renders "—").
+  const regimeProps = regime
+    ? {
+        label: regime.classification.label,
+        vix: regime.signals.vixLevel,
+        vixTermStructure:
+          regime.signals.vixTermRatio === null ||
+          regime.signals.vixTermRatio === undefined
+            ? null
+            : regime.signals.vixTermRatio < 1
+              ? ("contango" as const)
+              : ("backwardation" as const),
+        daysToFOMC: regime.signals.daysToFOMC ?? null,
+        real10Y: null,
+        asOf: regime.asOf,
+      }
+    : {
+        label: null,
+        vix: null,
+        vixTermStructure: null,
+        daysToFOMC: null,
+        real10Y: null,
+        asOf: null,
+      };
+
   return (
     <AppShell
       user={{ name: session.user.name ?? "", email: session.user.email }}
     >
       <TooltipProvider delay={200}>
-        <section className="max-w-3xl mx-auto px-4 py-6 flex flex-col gap-4">
-          <DailyHeadline item={headline} />
-          <DecisionQueue items={queue} />
-          <ContextTilesRow userId={userId} />
-          {/*
-            Phase 3 Batch G: surface a link to the standalone Year
-            Outlook page from the homepage so users can drill from the
-            dashboard tiles into the full pacing / glidepath / risk
-            landscape view without hunting through the top nav.
-          */}
-          <div className="flex justify-end">
-            <Link
-              href="/app/year-outlook"
-              className="text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
-            >
-              View year outlook →
-            </Link>
+        <main className="max-w-5xl mx-auto px-4 py-6 flex flex-col gap-3">
+          <PortfolioHero userName={session.user.name ?? null} hero={hero} />
+          <TodayDecision primary={primary} others={others} />
+          <div className="grid grid-cols-1 md:grid-cols-[1.8fr_1fr] gap-3">
+            <WatchThisWeek items={watchThisWeek} totalCount={queue.length} />
+            <MarketConditionsSidebar {...regimeProps} />
           </div>
-        </section>
-
-        {/* Rich informational dashboard below the actionable layer. */}
-        <section className="border-t border-[var(--border)] mt-2 pt-6">
-          <LegacyDashboardSection userName={session.user.name ?? "there"} />
-        </section>
+        </main>
       </TooltipProvider>
     </AppShell>
-  );
-}
-
-function ContextTilesRow({ userId }: { userId: string }) {
-  // Layout: MarketRegimeTile (Batch D) on the left, RiskTile (Batch A)
-  // in the middle, VarTile (Batch E) on the right. Each tile owns its
-  // own empty-state — MarketRegime falls back to a NEUTRAL label with
-  // em-dashed signals when FRED is unavailable; RiskTile and VarTile
-  // fill "—" everywhere when the warehouse has < 20 aligned days.
-  // Year-pace will return as its own surface in Batch G.
-  return (
-    <div className="grid grid-cols-3 gap-2 text-xs text-[var(--muted-foreground)]">
-      <MarketRegimeTile />
-      <RiskTile userId={userId} />
-      <VarTile userId={userId} />
-    </div>
   );
 }
