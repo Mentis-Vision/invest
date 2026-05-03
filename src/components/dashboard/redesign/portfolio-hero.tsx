@@ -3,16 +3,7 @@
 // MTD/YTD, configurable benchmark pills, 30-day sparkline, top-5 movers.
 
 import type { HeroData } from "@/lib/dashboard/types";
-
-// TEMP stub — replaced by Task 9 import from "./benchmark-picker"
-const BenchmarkPickerLauncher = ({ initialKeys }: { initialKeys: string[] }) => {
-  void initialKeys;
-  return (
-    <button className="text-[10px] border border-dashed border-[var(--decisive)] text-[var(--decisive)] px-2 py-0.5 rounded-lg">
-      + benchmark
-    </button>
-  );
-};
+import { BenchmarkPickerLauncher } from "./benchmark-picker";
 
 function fmtMoney(n: number): string {
   return `$${Math.round(n).toLocaleString("en-US")}`;
