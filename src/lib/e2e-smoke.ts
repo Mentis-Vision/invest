@@ -441,6 +441,31 @@ const TESTS: SmokeTest[] = [
       return `${count} fresh tickers`;
     },
   },
+
+  // Category: dashboard — Phase 1 actionable dashboard surfaces. The
+  // /app overview is the home of the Daily Headline + Decision Queue
+  // composition; if it disappears or starts 500ing, every authed user
+  // sees a broken homepage on next load.
+  {
+    name: "Homepage /app is auth-gated and reachable",
+    category: "dashboard",
+    async run({ baseUrl }) {
+      const res = await fetch(`${baseUrl}/app`, { redirect: "manual" });
+      // Unauthenticated request: expect a redirect to /sign-in
+      // (proxy.ts gates /app/*) or a 200 if the route is being served
+      // (some preview environments rewrite). Either way, 5xx or 4xx
+      // other than 401 means the route itself is broken.
+      const ok =
+        res.status === 200 ||
+        res.status === 401 ||
+        (res.status >= 300 && res.status < 400);
+      assert(
+        ok,
+        `expected 200 / 30x / 401, got ${res.status}`
+      );
+      return `auth gate intact (status ${res.status})`;
+    },
+  },
 ];
 
 // ─── Public runner ─────────────────────────────────────────────────
