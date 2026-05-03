@@ -92,6 +92,14 @@ function deepLink(
   ticker: string | null,
   payload: Record<string, unknown> = {},
 ): { href: string; label: string } {
+  // Routing model (2026-05-02): the workspace is a single dashboard
+  // page (`/app`) that switches inner views via `?view=<id>`, except
+  // for the standalone routes /app/history, /app/r/[id], /app/settings,
+  // /app/year-outlook which DO live at their own paths. The previous
+  // hrefs `/app/research?...` and `/app/portfolio?...` returned 404
+  // → BetterAuth's proxy treated them as missing and bounced users
+  // to /sign-in, which surfaced as "click does nothing / sends me
+  // to login." Use `?view=<id>` for in-shell views.
   switch (itemType) {
     case "broker_reauth":
       return { href: "/app/settings#brokerage", label: "Reauthorize" };
@@ -103,8 +111,8 @@ function deepLink(
     case "catalyst_prep_upcoming":
       return {
         href: ticker
-          ? `/app/research?ticker=${encodeURIComponent(ticker)}`
-          : "/app/research",
+          ? `/app?view=research&ticker=${encodeURIComponent(ticker)}`
+          : "/app?view=research",
         label: "Open thesis",
       };
     case "outcome_action_mark":
@@ -115,27 +123,27 @@ function deepLink(
         label: "Mark outcome",
       };
     case "cash_idle":
-      return { href: "/app/portfolio", label: "Allocate" };
+      return { href: "/app?view=portfolio", label: "Allocate" };
     case "year_pace_review":
       return { href: "/app/history", label: "View pace" };
     case "quality_decline":
       return {
         href: ticker
-          ? `/app/research?ticker=${encodeURIComponent(ticker)}`
-          : "/app/research",
+          ? `/app?view=research&ticker=${encodeURIComponent(ticker)}`
+          : "/app?view=research",
         label: "Open thesis",
       };
     case "goals_setup":
       return { href: "/app/settings/goals", label: "Set goals" };
     case "rebalance_drift":
-      return { href: "/app/portfolio", label: "View allocation" };
+      return { href: "/app?view=portfolio", label: "View allocation" };
     case "tax_harvest":
-      return { href: "/app/portfolio?view=tax-harvest", label: "Review losses" };
+      return { href: "/app?view=portfolio&hint=tax-harvest", label: "Review losses" };
     case "cluster_buying":
       return {
         href: ticker
-          ? `/app/research?ticker=${encodeURIComponent(ticker)}`
-          : "/app/research",
+          ? `/app?view=research&ticker=${encodeURIComponent(ticker)}`
+          : "/app?view=research",
         label: "Open thesis",
       };
   }
