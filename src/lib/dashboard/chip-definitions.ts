@@ -19,4 +19,10 @@ export const CHIP_DEFINITIONS: Record<string, string> = {
   broker: "Linked brokerage requiring reauthorization.",
   "last-sync": "Days since the last successful holdings sync from this broker.",
   pace: "Year-to-date portfolio return relative to the SPY benchmark.",
+  "F-Score":
+    "Piotroski F-Score (0–9). Sum of nine binary accounting checks — profitability, leverage, efficiency. 7+ = strong, 4–6 = mixed, 0–3 = weak.",
+  Z: "Altman Z-Score (5-factor). Above 2.99 = safe, 1.81–2.99 = grey zone, below 1.81 = financial distress.",
+  M: "Beneish M-Score (8-factor). Above −1.78 flags potential earnings manipulation; below is the clean zone.",
+  accruals:
+    "Sloan accruals ratio = (NetIncome − CFO) / TotalAssets. High positive values flag earnings driven by accruals rather than cash.",
 };
