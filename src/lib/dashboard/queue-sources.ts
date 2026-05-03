@@ -125,7 +125,8 @@ export async function getReviewSummary(
   userId: string,
 ): Promise<ReviewSummary | null> {
   const brokerStatus = await deriveBrokerStatus(userId);
-  const review = await getCachedPortfolioReview(userId).catch(() => null);
+  // Touch portfolio-review cache to keep it warm; downstream reads come from the loaders below.
+  await getCachedPortfolioReview(userId).catch(() => null);
 
   const [
     holdings,
