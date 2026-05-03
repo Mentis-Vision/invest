@@ -4,10 +4,9 @@
 // repo's existing data sources:
 //
 //   - Damodaran's market-level implied ERP (NYU Stern, monthly):
-//     getDamodaranERP() returns the latest figure. We pin a monthly
-//     anchor constant that we update each quarter — Damodaran's
-//     histimpl.html is HTML-scrape territory and isn't a stable
-//     wire to depend on for an on-render call.
+//     getDamodaranERP() now scrapes histimpl.html via the dedicated
+//     fetcher in damodaran-fetcher.ts. Falls back to a pinned
+//     constant when the live fetch fails on a cold instance.
 //   - The risk-free rate from FRED (DGS10).
 //   - Per-stock COE inputs from the existing yahoo snapshot
 //     (price, dividend yield, beta).
@@ -17,17 +16,17 @@
 import { getStockSnapshot } from "../../data/yahoo";
 import { getLatestSeriesValue } from "../../data/fred";
 import { impliedCostOfEquity, type CostOfEquityResult } from "./damodaran";
+import { fetchLiveDamodaranERP } from "./damodaran-fetcher";
 import { log, errorInfo } from "../../log";
 
-// Damodaran "histimpl.html" — manually pinned monthly anchor. As of
-// publication on 2026-01-01 the implied ERP for the S&P 500 read
-// 4.33%. Refresh this constant each quarter from the published
-// histimpl table; the file header explains the choice not to
-// scrape the live HTML.
+// Damodaran "histimpl.html" anchor — pinned baseline used only when
+// the live fetch fails on a cold instance with no in-process cache.
+// Refresh occasionally (annually is fine — it's a fallback). The
+// anchor reflects the 2025 year-end FCFE-implied ERP.
 //
 // Source: Aswath Damodaran, NYU Stern School of Business,
 // "Implied Equity Risk Premia" — pages.stern.nyu.edu/~adamodar/
-const ERP_ANCHOR = 0.0433;
+const ERP_ANCHOR = 0.0423;
 const ERP_ANCHOR_DATE = "2026-01-01";
 
 // Default risk-free rate when DGS10 is unavailable. 10-year
@@ -50,11 +49,45 @@ export interface DamodaranERP {
   erp: number;
   /** ISO date the anchor is sourced from. */
   asOf: string;
-  /** Whether this was the pinned anchor or a future live source. */
-  source: "anchor" | "live";
+  /** Provenance: "live" scrape, "cached" stale cache, or "anchor" pinned constant. */
+  source: "anchor" | "live" | "cached";
 }
 
-export function getDamodaranERP(): DamodaranERP {
+interface CachedERP {
+  fetchedAt: number;
+  data: DamodaranERP;
+}
+
+const ERP_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+let erpCache: CachedERP | null = null;
+
+/**
+ * Live Damodaran ERP. Tries the scraper first, falls back to the
+ * pinned constant on a cold-instance + upstream failure. Async because
+ * the live path makes a network call; the in-process cache amortizes
+ * across renders.
+ */
+export async function getDamodaranERP(): Promise<DamodaranERP> {
+  if (erpCache && Date.now() - erpCache.fetchedAt < ERP_TTL_MS) {
+    return erpCache.data;
+  }
+  try {
+    const live = await fetchLiveDamodaranERP();
+    if (live) {
+      const data: DamodaranERP = {
+        erp: live.erp,
+        asOf: live.asOf,
+        source: "live",
+      };
+      erpCache = { fetchedAt: Date.now(), data };
+      return data;
+    }
+  } catch (err) {
+    log.warn("dashboard.damodaran", "live ERP fetch failed", errorInfo(err));
+  }
+  // Fall back to anchor constant. Don't cache the anchor — keep
+  // retrying the live fetch on each render so we recover quickly
+  // when the upstream comes back.
   return {
     erp: ERP_ANCHOR,
     asOf: ERP_ANCHOR_DATE,
@@ -106,13 +139,12 @@ export async function getStockImpliedCOE(
   ticker: string,
 ): Promise<StockCostOfCapital | null> {
   try {
-    const [snap, riskFreeRate] = await Promise.all([
+    const [snap, riskFreeRate, erp] = await Promise.all([
       getStockSnapshot(ticker),
       getRiskFreeRate(),
+      getDamodaranERP(),
     ]);
     if (!snap || !Number.isFinite(snap.price) || snap.price <= 0) return null;
-
-    const erp = getDamodaranERP();
     // dividendYield from Yahoo is FRACTIONAL (0.025 = 2.5%). Convert
     // to dollars-per-share so the math reads cleanly.
     const dpsRaw =
@@ -156,4 +188,5 @@ export async function getStockImpliedCOE(
 /** Test seam — same convention as the FF loader. */
 export function __resetDamodaranCacheForTest(): void {
   rfCache = null;
+  erpCache = null;
 }

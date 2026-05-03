@@ -20,6 +20,7 @@ import {
   getStockImpliedCOE,
   type StockCostOfCapital,
 } from "@/lib/dashboard/metrics/damodaran-loader";
+import { AsOfFootnote } from "@/components/dashboard/as-of-footnote";
 
 interface DamodaranCardProps {
   /** Optional ticker to surface the per-stock COE callout. */
@@ -70,16 +71,23 @@ function spreadColor(s: number): string {
 }
 
 export async function DamodaranCard({ focusTicker }: DamodaranCardProps) {
-  const erp = getDamodaranERP();
+  // Live ERP fetch + (optional) per-stock COE in parallel — both are
+  // independent, so don't serialize the network round-trips.
+  const [erp, stock] = await Promise.all([
+    getDamodaranERP(),
+    focusTicker && focusTicker.trim().length > 0
+      ? getStockImpliedCOE(focusTicker.trim()).catch(
+          () => null as StockCostOfCapital | null,
+        )
+      : Promise.resolve<StockCostOfCapital | null>(null),
+  ]);
 
-  let stock: StockCostOfCapital | null = null;
-  if (focusTicker && focusTicker.trim().length > 0) {
-    try {
-      stock = await getStockImpliedCOE(focusTicker.trim());
-    } catch {
-      stock = null;
-    }
-  }
+  const sourceLabel =
+    erp.source === "live"
+      ? "Damodaran (live)"
+      : erp.source === "cached"
+        ? "Damodaran (cached)"
+        : "Damodaran (anchor)";
 
   return (
     <Card>
@@ -93,7 +101,7 @@ export async function DamodaranCard({ focusTicker }: DamodaranCardProps) {
           <Cell
             label="S&P 500 implied ERP"
             value={fmtPct(erp.erp)}
-            hint={`anchor — ${erp.asOf}`}
+            hint={`${erp.source} — ${erp.asOf}`}
           />
           {stock ? (
             <Cell
@@ -151,9 +159,10 @@ export async function DamodaranCard({ focusTicker }: DamodaranCardProps) {
             Damodaran&apos;s S&amp;P 500 implied ERP — the equity premium
             embedded in current index prices given forward earnings and
             payout assumptions. The credible alternative to Shiller CAPE
-            we ship here. Updated quarterly from the NYU Stern data file.
+            we ship here. Updated monthly from the NYU Stern data file.
           </p>
         )}
+        <AsOfFootnote source={sourceLabel} asOf={erp.asOf} />
       </CardContent>
     </Card>
   );
