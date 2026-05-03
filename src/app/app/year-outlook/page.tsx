@@ -41,6 +41,8 @@ import { getFactorExposure } from "@/lib/dashboard/metrics/fama-french-loader";
 import { MonteCarloCard } from "@/components/dashboard/year-outlook/monte-carlo-card";
 import { getMonteCarloProjection } from "@/lib/dashboard/metrics/monte-carlo-loader";
 import { DamodaranCard } from "@/components/dashboard/year-outlook/damodaran-cost-of-capital-card";
+import { AuditAiCard } from "@/components/dashboard/audit-ai-card";
+import { getAuditAiTrackRecord } from "@/lib/dashboard/metrics/audit-ai-loader";
 import { log, errorInfo } from "@/lib/log";
 
 export const dynamic = "force-dynamic";
@@ -91,16 +93,25 @@ export default async function YearOutlookPage() {
   // Monte-Carlo runs after the first wave because it needs the
   // resolved currentValue to seed the simulation. Cheap relative to
   // the warehouse round-trips above (pure CPU once goals load).
-  const monteCarloResult = await getMonteCarloProjection(
-    userId,
-    currentValue,
-  ).catch((err) => {
-    log.warn("year-outlook.page", "monte carlo load failed", {
-      userId,
-      ...errorInfo(err),
-    });
-    return null;
-  });
+  // The Audit-AI track-record query is independent so it parallels.
+  const [monteCarloResult, auditAiResult] = await Promise.all([
+    getMonteCarloProjection(userId, currentValue).catch((err) => {
+      log.warn("year-outlook.page", "monte carlo load failed", {
+        userId,
+        ...errorInfo(err),
+      });
+      return null;
+    }),
+    getAuditAiTrackRecord({ userId, limit: 100, windowDays: 30 }).catch(
+      (err) => {
+        log.warn("year-outlook.page", "audit-ai load failed", {
+          userId,
+          ...errorInfo(err),
+        });
+        return null;
+      },
+    ),
+  ]);
 
   const year = new Date().getUTCFullYear();
 
@@ -133,6 +144,7 @@ export default async function YearOutlookPage() {
         <FactorExposureCard exposure={factorExposure} />
         <DamodaranCard />
         <MacroOutlook />
+        <AuditAiCard result={auditAiResult} scope="user" />
       </main>
     </AppShell>
   );
