@@ -13,6 +13,10 @@ import { log, errorInfo } from "../log";
 import { getCachedPortfolioReview } from "../portfolio-review";
 import { getPortfolioRisk } from "./metrics/risk-loader";
 import { getUserGoals, type UserGoals } from "./goals-loader";
+import {
+  findHarvestableLosses,
+  type HarvestableLoss,
+} from "./metrics/tax-loader";
 
 export interface ReviewBreach {
   ticker: string;
@@ -78,6 +82,14 @@ export interface ReviewSummary {
    * the absence of `targetWealth` to emit `goals_setup`.
    */
   goals: UserGoals | null;
+  /**
+   * Phase 3 Batch H — positions with material unrealized losses
+   * (≥ $200) eligible for tax-loss harvesting. Empty array when no
+   * positions qualify or cost basis is missing across the board.
+   * queue-builder reads this to emit a single `tax_harvest` queue
+   * item with the aggregate loss.
+   */
+  harvestableLosses: HarvestableLoss[];
 }
 
 export interface UnactionedOutcome {
@@ -113,7 +125,8 @@ export async function getReviewSummary(
   userId: string,
 ): Promise<ReviewSummary | null> {
   const brokerStatus = await deriveBrokerStatus(userId);
-  const review = await getCachedPortfolioReview(userId).catch(() => null);
+  // Touch portfolio-review cache to keep it warm; downstream reads come from the loaders below.
+  await getCachedPortfolioReview(userId).catch(() => null);
 
   const [
     holdings,
@@ -124,6 +137,7 @@ export async function getReviewSummary(
     risk,
     stockAllocationPct,
     goals,
+    harvestableLosses,
   ] = await Promise.all([
     listHoldingsWithWeights(userId),
     listConcentrationBreaches(userId),
@@ -160,6 +174,17 @@ export async function getReviewSummary(
       });
       return null;
     }),
+    // Phase 3 Batch H: harvestable losses for the tax_harvest queue
+    // item. Loader is read-only against `holding` and silently
+    // returns [] when cost basis is missing — degraded mode is the
+    // expected state for users whose broker hasn't synced cost basis.
+    findHarvestableLosses(userId).catch((err) => {
+      log.warn("queue-sources", "tax-harvest-load-failed", {
+        userId,
+        ...errorInfo(err),
+      });
+      return [] as HarvestableLoss[];
+    }),
   ]);
 
   // Note: even with no broker / no holdings / no review, we still
@@ -193,6 +218,7 @@ export async function getReviewSummary(
     spyYtdPct,
     stockAllocationPct,
     goals,
+    harvestableLosses,
   };
 }
 

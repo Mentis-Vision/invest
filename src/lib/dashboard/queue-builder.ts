@@ -114,6 +114,8 @@ function deepLink(
       return { href: "/app/settings/goals", label: "Set goals" };
     case "rebalance_drift":
       return { href: "/app/portfolio", label: "View allocation" };
+    case "tax_harvest":
+      return { href: "/app/portfolio?view=tax-harvest", label: "Review losses" };
   }
 }
 
@@ -669,6 +671,63 @@ async function buildGoalsAndRebalanceDrift(
   });
 }
 
+/**
+ * Phase 3 Batch H — emit a single `tax_harvest` queue item when the
+ * loader returns at least one harvestable position. The aggregate
+ * loss across positions and the count drive the headline body.
+ *
+ * `harvestableLosses` is null-tolerant — if the loader degraded to
+ * an empty array (cost basis missing across the portfolio, DB blip)
+ * we simply skip the emit. The wash-sale disclaimer is rendered
+ * downstream by the drill view + headline template, never inferred.
+ */
+function buildTaxHarvest(review: ReviewSummary | null, raw: RawItem[]): void {
+  const losses = review?.harvestableLosses ?? [];
+  if (losses.length === 0) return;
+  const totalLoss = losses.reduce((acc, l) => acc + l.lossDollars, 0);
+  const totalAbs = Math.abs(totalLoss);
+
+  // Anchor the urgency window to the year-end tax cutoff. Setting
+  // hoursToEvent to "hours until Dec 31" gives the urgency function a
+  // real time signal (decays from 0.4 → 0.7 → 1.0 as Dec 31 approaches)
+  // and keeps the horizon tag at THIS_YEAR for any month earlier than
+  // November, matching the spec's "Year-tagged" intent.
+  const now = new Date();
+  const yearEnd = new Date(Date.UTC(now.getUTCFullYear(), 11, 31, 23, 59, 59));
+  const hoursToYearEnd = Math.max(
+    1,
+    Math.floor((yearEnd.getTime() - now.getTime()) / (60 * 60 * 1000)),
+  );
+
+  raw.push({
+    itemKey: `tax_harvest:${new Date().getUTCFullYear()}`,
+    itemType: "tax_harvest",
+    ticker: null,
+    hoursToEvent: hoursToYearEnd,
+    templateData: {
+      totalLossDollars: totalAbs,
+      numPositions: losses.length,
+    },
+    chips: [
+      {
+        label: "loss",
+        value: `-$${Math.round(totalAbs).toLocaleString("en-US")}`,
+        tooltipKey: "loss",
+      },
+      {
+        label: "positions",
+        value: String(losses.length),
+        tooltipKey: "loss",
+      },
+      {
+        label: "wash-sale",
+        value: "30d",
+        tooltipKey: "wash-sale",
+      },
+    ],
+  });
+}
+
 function buildYearPaceReview(
   review: ReviewSummary | null,
   raw: RawItem[],
@@ -722,6 +781,7 @@ export async function buildQueueForUser(
   buildOutcomes(outcomes, raw);
   buildCashIdle(review, raw);
   buildYearPaceReview(review, raw);
+  buildTaxHarvest(review, raw);
   // Phase 3 Batch F — async because the rebalance_drift emit needs the
   // non-cash portfolio value to compute the suggested rebalance amount.
   await buildGoalsAndRebalanceDrift(userId, review, raw);
