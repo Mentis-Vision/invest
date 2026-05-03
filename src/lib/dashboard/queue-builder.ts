@@ -39,6 +39,11 @@ import {
   formatRev6Chip,
   type RevisionBreadth,
 } from "./metrics/revision-breadth";
+import { getClusterBuyingSignals } from "./metrics/insider-cluster-loader";
+import {
+  formatClusterDollars,
+  type ClusterSignal,
+} from "./metrics/insider-cluster";
 import { targetAllocation } from "./goals";
 import type {
   QueueItem,
@@ -121,6 +126,13 @@ function deepLink(
       return { href: "/app/portfolio", label: "View allocation" };
     case "tax_harvest":
       return { href: "/app/portfolio?view=tax-harvest", label: "Review losses" };
+    case "cluster_buying":
+      return {
+        href: ticker
+          ? `/app/research?ticker=${encodeURIComponent(ticker)}`
+          : "/app/research",
+        label: "Open thesis",
+      };
   }
 }
 
@@ -808,6 +820,63 @@ function buildTaxHarvest(review: ReviewSummary | null, raw: RawItem[]): void {
   });
 }
 
+/**
+ * Phase 4 Batch K1 — emit a `cluster_buying` queue item per held
+ * ticker that the loader returned a cluster signal for. The signal
+ * is pre-filtered (>= 3 distinct insiders, $100k+ each, non-10b5-1)
+ * so we trust whatever the loader hands us.
+ *
+ * Bounded by the loader's 25-ticker ceiling. Skips silently when
+ * SEC EDGAR is unreachable — the signals map is simply empty.
+ */
+function buildClusterBuying(
+  signalsByTicker: Map<string, ClusterSignal>,
+  raw: RawItem[],
+): void {
+  for (const [ticker, signal] of signalsByTicker.entries()) {
+    const totalLabel = formatClusterDollars(signal.totalDollars);
+    // Compute window days from start→end (inclusive of both bounds).
+    const startMs = Date.parse(signal.windowStart);
+    const endMs = Date.parse(signal.windowEnd);
+    const windowDays =
+      Number.isFinite(startMs) && Number.isFinite(endMs)
+        ? Math.max(
+            1,
+            Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)) + 1,
+          )
+        : 14;
+    raw.push({
+      itemKey: `cluster_buying:${ticker}:${signal.windowStart}`,
+      itemType: "cluster_buying",
+      ticker,
+      hoursToEvent: 24 * 7, // THIS_WEEK horizon
+      templateData: {
+        ticker,
+        insiderCount: signal.insiderCount,
+        totalDollarsLabel: totalLabel,
+        windowDays,
+      },
+      chips: [
+        {
+          label: "insiders",
+          value: String(signal.insiderCount),
+          tooltipKey: "insiders",
+        },
+        {
+          label: "cluster",
+          value: totalLabel,
+          tooltipKey: "cluster",
+        },
+        {
+          label: "window",
+          value: `${windowDays}d`,
+          tooltipKey: "window",
+        },
+      ],
+    });
+  }
+}
+
 function buildYearPaceReview(
   review: ReviewSummary | null,
   raw: RawItem[],
@@ -896,6 +965,25 @@ export async function buildQueueForUser(
   // items will display them.
   const revisionByTicker = await loadRevisionBreadthForActionableItems(raw);
   enrichWithRev6Chips(raw, revisionByTicker);
+
+  // Phase 4 Batch K1 — Form 4 insider cluster signal. Fetched per
+  // held ticker (bounded at 25 by the loader). Emits its own
+  // queue item rather than enriching existing items, so the user
+  // sees an explicit "3 insiders bought $X of TICKER" headline.
+  const heldTickers = (review?.holdings ?? []).map((h) =>
+    h.ticker.toUpperCase(),
+  );
+  if (heldTickers.length > 0) {
+    const clusterSignals = await getClusterBuyingSignals(heldTickers).catch(
+      (err) => {
+        log.warn("queue-builder", "cluster signals failed", {
+          ...errorInfo(err),
+        });
+        return new Map<string, ClusterSignal>();
+      },
+    );
+    buildClusterBuying(clusterSignals, raw);
+  }
 
   // ---- finalize: filter state, score, sort ----
   const now = Date.now();

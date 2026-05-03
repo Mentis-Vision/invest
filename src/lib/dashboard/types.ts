@@ -18,7 +18,8 @@ export type ItemTypeKey =
   | "quality_decline"
   | "goals_setup"
   | "rebalance_drift"
-  | "tax_harvest";
+  | "tax_harvest"
+  | "cluster_buying";
 
 export type QueueItemStatus = null | "snoozed" | "dismissed" | "done";
 

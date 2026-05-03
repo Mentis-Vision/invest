@@ -171,5 +171,18 @@ export function renderTemplate(ctx: TemplateContext): TemplateOutput {
         body: `${num} ${noun} ${fmtMoney(total)} in harvestable losses. Suggested replacements available; verify wash-sale safety with your tax advisor.`,
       };
     }
+
+    case "cluster_buying": {
+      // insiderCount is at least 3 by detector contract. totalDollarsLabel
+      // is a pre-formatted string ("$1.4M") supplied by queue-builder so
+      // the template stays string-formatting-free.
+      const insiders = Math.max(3, Math.round(asNumber(data.insiderCount)));
+      const totalLabel = asString(data.totalDollarsLabel, "—");
+      const windowDays = Math.max(1, Math.round(asNumber(data.windowDays)));
+      return {
+        title: `${t} insider cluster: ${insiders} buyers, ${totalLabel}`,
+        body: `${insiders} insiders bought ${totalLabel} of ${t} in the last ${windowDays} days — a coordinated cluster signal. Re-research the thesis before adding.`,
+      };
+    }
   }
 }
