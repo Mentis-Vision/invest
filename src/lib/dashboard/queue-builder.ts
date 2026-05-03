@@ -44,6 +44,11 @@ import {
   formatClusterDollars,
   type ClusterSignal,
 } from "./metrics/insider-cluster";
+import { getShortInterestVelocities } from "./metrics/short-interest-loader";
+import {
+  formatVelocityChip,
+  type ShortVelocityReading,
+} from "./metrics/short-interest";
 import { targetAllocation } from "./goals";
 import type {
   QueueItem,
@@ -821,6 +826,37 @@ function buildTaxHarvest(review: ReviewSummary | null, raw: RawItem[]): void {
 }
 
 /**
+ * Phase 4 Batch K3 — layer `short` (velocity) and `dtc` (days-to-
+ * cover) chips onto every raw item whose ticker has a *material*
+ * short-interest reading. Materiality threshold lives in the loader
+ * (>20% velocity or >5 dtc); this function trusts whatever the
+ * loader's map contains. Mutates raw in place.
+ */
+function enrichWithShortInterestChips(
+  raw: RawItem[],
+  byTicker: Map<string, ShortVelocityReading>,
+): void {
+  for (const r of raw) {
+    if (!r.ticker) continue;
+    const reading = byTicker.get(r.ticker.toUpperCase());
+    if (!reading) continue;
+    r.chips = [
+      ...r.chips,
+      {
+        label: "short",
+        value: formatVelocityChip(reading.velocityPct),
+        tooltipKey: "short",
+      },
+      {
+        label: "dtc",
+        value: `${reading.daysToCover.toFixed(1)}d`,
+        tooltipKey: "dtc",
+      },
+    ];
+  }
+}
+
+/**
  * Phase 4 Batch K1 — emit a `cluster_buying` queue item per held
  * ticker that the loader returned a cluster signal for. The signal
  * is pre-filtered (>= 3 distinct insiders, $100k+ each, non-10b5-1)
@@ -983,6 +1019,19 @@ export async function buildQueueForUser(
       },
     );
     buildClusterBuying(clusterSignals, raw);
+
+    // Phase 4 Batch K3 — short-interest velocity chips. Loader filters
+    // to *material* readings only, so the chip set stays signal-dense.
+    // Returns an empty map until the FINRA cron is wired (deferred).
+    const shortByTicker = await getShortInterestVelocities(heldTickers).catch(
+      (err) => {
+        log.warn("queue-builder", "short-interest fetch failed", {
+          ...errorInfo(err),
+        });
+        return new Map<string, ShortVelocityReading>();
+      },
+    );
+    enrichWithShortInterestChips(raw, shortByTicker);
   }
 
   // ---- finalize: filter state, score, sort ----
