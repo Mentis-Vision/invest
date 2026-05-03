@@ -16,6 +16,7 @@
 import { pool } from "../../db";
 import { log, errorInfo } from "../../log";
 import { computePortfolioRisk, type PortfolioRisk } from "./risk";
+import { computeVaR, type VarResult } from "./var";
 
 const BENCH_TICKER = "SPY";
 const LOOKBACK_DAYS = 365;
@@ -206,4 +207,50 @@ export async function getPortfolioRisk(
   const { portfolio, benchmark } = await loadPortfolioDailyReturns(userId);
   if (portfolio.length < MIN_SAMPLES) return null;
   return computePortfolioRisk(portfolio, benchmark);
+}
+
+/**
+ * Compute the historical VaR / CVaR figures for a user. Reuses the
+ * same daily-return loader as `getPortfolioRisk` so we don't pay for
+ * a second round-trip to the warehouse on the dashboard render.
+ * Returns null when the sample window is too short — the VarTile
+ * renders "—" in that case.
+ */
+export async function getPortfolioVaR(
+  userId: string,
+): Promise<VarResult | null> {
+  const { portfolio } = await loadPortfolioDailyReturns(userId);
+  if (portfolio.length < MIN_SAMPLES) return null;
+  return computeVaR(portfolio);
+}
+
+/**
+ * Total invested capital — sum of `lastValue` across all non-cash
+ * holdings. Used to convert fractional VaR into a dollar exposure
+ * for the dashboard tile. Mirrors the convention in queue-sources
+ * and alerts: cash buckets are excluded so the figure reflects
+ * what's actually at risk in the market.
+ *
+ * Returns 0 for users with no holdings (or only cash). Never throws —
+ * a transient DB error logs and returns 0 so a single failure here
+ * doesn't take down the dashboard render.
+ */
+export async function getPortfolioValue(userId: string): Promise<number> {
+  try {
+    const { rows } = await pool.query<{ total: string | number | null }>(
+      `SELECT COALESCE(SUM("lastValue"), 0) AS total
+         FROM "holding"
+        WHERE "userId" = $1
+          AND "assetClass" IS DISTINCT FROM 'cash'`,
+      [userId],
+    );
+    const total = Number(rows[0]?.total ?? 0);
+    return Number.isFinite(total) ? total : 0;
+  } catch (err) {
+    log.warn("dashboard.risk", "getPortfolioValue failed", {
+      userId,
+      ...errorInfo(err),
+    });
+    return 0;
+  }
 }
