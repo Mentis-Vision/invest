@@ -361,3 +361,78 @@ export async function getEarningsTranscript(
   }
 }
 
+
+/**
+ * Aggregated analyst recommendation history. Finnhub publishes a
+ * monthly snapshot per ticker:
+ *
+ *   { period: "2026-01-01", strongBuy, buy, hold, sell, strongSell }
+ *
+ * Returns the trailing window with the most-recent month last,
+ * which matches the shape `computeRev6` expects. Empty array on
+ * any failure (no key, non-2xx, parse error). The downstream
+ * REV6 chip simply does not render in that case.
+ *
+ * Free-tier endpoint, low rate (60 req/min). Per-ticker call.
+ *
+ * Docs: https://finnhub.io/docs/api/recommendation-trends
+ */
+export type FinnhubAnalystRow = {
+  period: string;
+  strongBuy: number;
+  buy: number;
+  hold: number;
+  sell: number;
+  strongSell: number;
+};
+
+export async function getAnalystRecommendationHistory(
+  ticker: string,
+): Promise<FinnhubAnalystRow[]> {
+  const apiKey = key();
+  if (!apiKey) return [];
+  const url = new URL(`${BASE}/stock/recommendation`);
+  url.searchParams.set('symbol', ticker.toUpperCase());
+  url.searchParams.set('token', apiKey);
+  try {
+    const res = await fetch(url.toString(), {
+      next: { revalidate: 86400 }, // 24h — monthly snapshot
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) {
+      if (res.status !== 403) {
+        log.warn('finnhub', 'recommendation non-2xx', {
+          ticker,
+          status: res.status,
+        });
+      }
+      return [];
+    }
+    const data = (await res.json()) as unknown;
+    if (!Array.isArray(data)) return [];
+    const rows: FinnhubAnalystRow[] = [];
+    for (const raw of data) {
+      if (typeof raw !== 'object' || raw === null) continue;
+      const r = raw as Record<string, unknown>;
+      const period = typeof r.period === 'string' ? r.period : null;
+      if (!period) continue;
+      rows.push({
+        period,
+        strongBuy: Number(r.strongBuy ?? 0) || 0,
+        buy: Number(r.buy ?? 0) || 0,
+        hold: Number(r.hold ?? 0) || 0,
+        sell: Number(r.sell ?? 0) || 0,
+        strongSell: Number(r.strongSell ?? 0) || 0,
+      });
+    }
+    // Sort ascending so most recent is last — matches computeRev6 contract.
+    rows.sort((a, b) => a.period.localeCompare(b.period));
+    return rows;
+  } catch (err) {
+    log.warn('finnhub', 'recommendation fetch failed', {
+      ticker,
+      ...errorInfo(err),
+    });
+    return [];
+  }
+}

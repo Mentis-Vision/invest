@@ -26,6 +26,8 @@ export const CHIP_DEFINITIONS: Record<string, string> = {
   accruals:
     "Sloan accruals ratio = (NetIncome − CFO) / TotalAssets. High positive values flag earnings driven by accruals rather than cash.",
   mom: "Jegadeesh-Titman 12-1 momentum — total return over the trailing 12 months minus the most recent 1 month, which strips out short-term reversal. Positive values mean the trend has been accelerating into a recent pause.",
+  rev6:
+    "Analyst revision breadth (trailing 6 months) — count of months where Finnhub's aggregate strong-buy / buy / sell / strong-sell mix moved up vs. down month-over-month. +5/-2 means five upgrade-months against two downgrade-months. Informational only, not investment advice.",
   "12-1 mom":
     "Jegadeesh-Titman 12-1 momentum — total return over the trailing 12 months minus the most recent 1 month, which strips out short-term reversal. Positive values mean the trend has been accelerating into a recent pause.",
   Kelly:
