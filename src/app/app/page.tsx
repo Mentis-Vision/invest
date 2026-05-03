@@ -12,6 +12,7 @@ import { pool } from "@/lib/db";
 import { buildQueueForUser } from "@/lib/dashboard/queue-builder";
 import { DailyHeadline } from "@/components/dashboard/daily-headline";
 import { DecisionQueue } from "@/components/dashboard/decision-queue";
+import { RiskTile } from "@/components/dashboard/risk-tile";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { HeadlineCache, QueueItem } from "@/lib/dashboard/types";
 
@@ -164,23 +165,24 @@ export default async function Home({
       <main className="max-w-3xl mx-auto px-4 py-6 flex flex-col gap-4">
         <DailyHeadline item={headline} />
         <DecisionQueue items={queue} />
-        <ContextTilesRow />
+        <ContextTilesRow userId={userId} />
       </main>
     </TooltipProvider>
   );
 }
 
-function ContextTilesRow() {
+function ContextTilesRow({ userId }: { userId: string }) {
+  // Macro (Batch D) and {YEAR} pace (Batch G) are still placeholders;
+  // RiskTile (Batch A) replaces the middle "Portfolio MTD" slot. The
+  // tile's own empty-state ("—" everywhere) covers the case where
+  // ticker_market_daily has < 20 days for the user's holdings.
   return (
     <div className="grid grid-cols-3 gap-2 text-xs text-[var(--muted-foreground)]">
       <div className="bg-[var(--card)] border border-[var(--border)] rounded p-3 text-center">
         <div className="opacity-70">Macro</div>
         <div className="font-bold text-[var(--foreground)]">—</div>
       </div>
-      <div className="bg-[var(--card)] border border-[var(--border)] rounded p-3 text-center">
-        <div className="opacity-70">Portfolio MTD</div>
-        <div className="font-bold text-[var(--foreground)]">—</div>
-      </div>
+      <RiskTile userId={userId} />
       <div className="bg-[var(--card)] border border-[var(--border)] rounded p-3 text-center">
         <div className="opacity-70">{new Date().getUTCFullYear()} pace</div>
         <div className="font-bold text-[var(--foreground)]">—</div>
