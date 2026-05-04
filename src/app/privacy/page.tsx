@@ -18,7 +18,7 @@ export default function PrivacyPage() {
           Privacy Policy
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Effective date: 2026-04-15. Last updated: 2026-04-19.
+          Effective date: 2026-04-15. Last updated: 2026-05-04.
         </p>
 
         <div className="prose prose-sm mt-10 max-w-none leading-relaxed dark:prose-invert [&_h2]:mt-10 [&_h2]:font-[family-name:var(--font-display)] [&_h2]:text-2xl [&_h2]:font-medium [&_h3]:mt-6 [&_h3]:text-base [&_h3]:font-semibold [&_p]:mt-3 [&_ul]:mt-2 [&_ul]:list-disc [&_ul]:pl-6 [&_li]:mt-1">
@@ -112,6 +112,17 @@ export default function PrivacyPage() {
               SnapTrade holds the authorization on your behalf and we
               store an encrypted user secret that lets us query your data.
             </li>
+            <li>
+              We retrieve and store your broker transaction history (buys,
+              sells, dividends, fees, splits, transfers) for up to the depth
+              your broker permits, currently as far back as 24 months for
+              most institutions and approximately 4 years for Charles Schwab.
+            </li>
+            <li>
+              We never store your broker account numbers or login
+              credentials. Account references use opaque aggregator IDs from
+              SnapTrade or Plaid.
+            </li>
           </ul>
           <h3>d. From AI providers</h3>
           <ul>
@@ -146,6 +157,15 @@ export default function PrivacyPage() {
               material Service changes.
             </li>
             <li>To comply with law and respond to valid legal process.</li>
+            <li>
+              We use this data only to power your performance chart and
+              analysis surfaces. We do not share it with third parties, do
+              not sell it, and do not use it for advertising.
+            </li>
+            <li>
+              Past transaction outcomes are informational only. Not
+              investment advice. Not a guarantee of future performance.
+            </li>
           </ul>
 
           <h2>4. Sub-processors we rely on</h2>
@@ -213,6 +233,17 @@ export default function PrivacyPage() {
             <li>
               Access to production data is limited to authorized engineering
               staff.
+            </li>
+            <li>
+              Transaction data is encrypted at rest (database-level via AWS
+              KMS) and in transit (TLS 1.3). Free-text broker memos are
+              additionally encrypted at the application layer with
+              AES-256-GCM.
+            </li>
+            <li>
+              We retain transaction history while your ClearPath account is
+              active. Account deletion purges from primary systems
+              immediately and from database backups within 30 days.
             </li>
           </ul>
           <p>
@@ -304,6 +335,14 @@ export default function PrivacyPage() {
               <strong>Opt-out of marketing</strong> — at any time via the
               unsubscribe link in any email.
             </li>
+            <li>
+              You can export all stored transaction data as CSV at any time
+              from Settings → Data &amp; Privacy.
+            </li>
+            <li>
+              You can purge transaction history from any individual broker
+              connection at any time, while keeping your current holdings.
+            </li>
           </ul>
           <p>
             Exercise any of these rights by emailing{" "}
@@ -322,6 +361,26 @@ export default function PrivacyPage() {
             share. We do not sell personal information. California residents
             may also ask us to delete personal information, subject to legal
             exceptions.
+          </p>
+
+          <h2 className="text-base font-semibold mt-6 mb-2">Data Vendors</h2>
+          <p className="text-sm">
+            ClearPath relies on the following service providers, each with their
+            own privacy practices:
+          </p>
+          <ul className="list-disc ml-6 text-sm">
+            <li><a href="https://snaptrade.com/privacy" target="_blank" rel="noreferrer" className="underline">SnapTrade</a> — brokerage data aggregation</li>
+            <li><a href="https://plaid.com/legal/" target="_blank" rel="noreferrer" className="underline">Plaid</a> — investments transactions and holdings</li>
+            <li><a href="https://neon.tech/privacy" target="_blank" rel="noreferrer" className="underline">Neon</a> — Postgres database hosting (data encrypted at rest via AWS KMS)</li>
+            <li><a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noreferrer" className="underline">Vercel</a> — application hosting and CDN</li>
+          </ul>
+
+          <h2 className="text-base font-semibold mt-6 mb-2">Breach Notification</h2>
+          <p className="text-sm">
+            In the event of a data breach affecting 500 or more individuals, we
+            will notify the U.S. Federal Trade Commission and affected users in
+            writing within 30 days of detection, in compliance with the
+            Gramm-Leach-Bliley Act Safeguards Rule.
           </p>
 
           <h2>12. Changes</h2>
