@@ -5,6 +5,8 @@ import {
   fetchProviderItems,
   type EditorialItem,
 } from "../../data/editorial-feeds";
+import { getPolygonNews, polygonConfigured } from "../../data/polygon";
+import { getTickerUniverse } from "../universe";
 
 /**
  * Nightly pull of every configured editorial feed.
@@ -27,6 +29,13 @@ export type EditorialRefreshResult = {
   upserted: number;
   pruned: number;
   failed: Array<{ provider: string; error: string }>;
+  /** Polygon per-ticker ingestion stats (silent no-op when key missing). */
+  polygon: {
+    enabled: boolean;
+    tickersScanned: number;
+    fetched: number;
+    upserted: number;
+  };
 };
 
 export async function refreshEditorialNews(): Promise<EditorialRefreshResult> {
@@ -122,6 +131,89 @@ export async function refreshEditorialNews(): Promise<EditorialRefreshResult> {
     }
   }
 
+  // ── Polygon per-ticker sweep ───────────────────────────────────────
+  //
+  // Pull last 7 days of Polygon news for every ticker in the warehouse
+  // universe (held tickers + seed list — see AGENTS.md rule #9 for why
+  // getTickerUniverse() is the only sanctioned path). Sequential with a
+  // 200ms delay between calls so Polygon's free-tier 5 req/min cap
+  // doesn't 429 us out of the sweep.
+  //
+  // Silent no-op when POLYGON_API_KEY isn't configured — the editorial
+  // RSS feeds above already filled the table; we layer Polygon on top
+  // when available.
+  const polygonStats = {
+    enabled: polygonConfigured(),
+    tickersScanned: 0,
+    fetched: 0,
+    upserted: 0,
+  };
+
+  if (polygonStats.enabled) {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+      .toISOString();
+    let universe: string[] = [];
+    try {
+      universe = await getTickerUniverse();
+    } catch (err) {
+      log.warn("editorial-refresh", "polygon universe failed", errorInfo(err));
+    }
+    polygonStats.tickersScanned = universe.length;
+
+    for (const ticker of universe) {
+      try {
+        const items = await getPolygonNews(ticker, 10, sevenDaysAgo);
+        polygonStats.fetched += items.length;
+        for (const item of items) {
+          if (!item.url || !item.title) continue;
+          // Polygon supplies its own stable ID. Prefix with "polygon:"
+          // so the namespace can't collide with editorial-RSS hashIds.
+          const id = `polygon:${item.id || hashFallback(item.url)}`;
+          try {
+            await pool.query(
+              `INSERT INTO "market_news_daily"
+                 (id, "publishedAt", provider_id, provider_name,
+                  category, title, url, summary, tickers_mentioned)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+               ON CONFLICT (id) DO UPDATE SET
+                 "publishedAt" = EXCLUDED."publishedAt",
+                 title = EXCLUDED.title,
+                 summary = EXCLUDED.summary,
+                 tickers_mentioned = EXCLUDED.tickers_mentioned,
+                 as_of = NOW()`,
+              [
+                id,
+                item.publishedAt,
+                "polygon",
+                item.publisher,
+                "news",
+                item.title.slice(0, 500),
+                item.url.slice(0, 2000),
+                item.description?.slice(0, 4000) ?? null,
+                item.tickers ?? [ticker],
+              ]
+            );
+            polygonStats.upserted++;
+          } catch (err) {
+            log.warn("editorial-refresh", "polygon upsert failed", {
+              ticker,
+              id,
+              ...errorInfo(err),
+            });
+          }
+        }
+      } catch (err) {
+        log.warn("editorial-refresh", "polygon fetch failed", {
+          ticker,
+          ...errorInfo(err),
+        });
+      }
+      // Pace the loop. 200ms × N tickers stays well inside the warm
+      // cron window even for ~600 ticker universes.
+      await new Promise((r) => setTimeout(r, 200));
+    }
+  }
+
   // Prune old news so the table doesn't accumulate forever. 30 days
   // covers the "what's been in the news about my portfolio this
   // month?" use case; older than that is archival and we don't need it.
@@ -142,5 +234,15 @@ export async function refreshEditorialNews(): Promise<EditorialRefreshResult> {
     upserted,
     pruned,
     failed,
+    polygon: polygonStats,
   };
+}
+
+/** djb2 fallback when Polygon doesn't return an ID — stable hash of url. */
+function hashFallback(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) {
+    h = (h * 33) ^ s.charCodeAt(i);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
 }

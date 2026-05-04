@@ -281,11 +281,26 @@ export type PolygonNewsItem = {
  * Per-ticker news feed. Polygon aggregates across major outlets
  * (Reuters, MarketWatch, Yahoo, Zacks, Benzinga, etc.) with a clean
  * uniform shape — useful as a third voice next to Finnhub + AV.
+ *
+ * Optional `publishedSinceIso` clamps the request to a recency window
+ * via Polygon's `published_utc.gte` filter. Drives the editorial-news
+ * cron's "last 7 days per held ticker" sweep without paging through
+ * older items we already have on file.
  */
 export async function getPolygonNews(
   ticker: string,
-  limit = 10
+  limit = 10,
+  publishedSinceIso?: string
 ): Promise<PolygonNewsItem[]> {
+  const params: Record<string, string> = {
+    "ticker": ticker.toUpperCase(),
+    limit: String(Math.min(Math.max(limit, 1), 50)),
+    order: "desc",
+    sort: "published_utc",
+  };
+  if (publishedSinceIso) {
+    params["published_utc.gte"] = publishedSinceIso;
+  }
   const data = await fetchPolygon<{
     results?: Array<{
       id?: string;
@@ -303,12 +318,7 @@ export async function getPolygonNews(
     }>;
   }>(
     `/v2/reference/news`,
-    {
-      "ticker": ticker.toUpperCase(),
-      limit: String(Math.min(Math.max(limit, 1), 50)),
-      order: "desc",
-      sort: "published_utc",
-    },
+    params,
     `news:${ticker}`
   );
   const rows = data?.results ?? [];
