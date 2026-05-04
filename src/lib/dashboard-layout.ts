@@ -27,7 +27,10 @@ export type LayoutBlock = {
 };
 
 export const DEFAULT_LAYOUT: LayoutBlock[] = [
-  { id: "summary", size: 12 },
+  // Note: the "summary" block (Portfolio summary — total value, day
+  // change, positions, cash, hit rate) was removed in Phase 8 because
+  // PortfolioHero above the BlockGrid renders the same data. Keeping
+  // it would have shown the same numbers twice on first-visit users.
   { id: "holdings", size: 8 },
   { id: "alerts", size: 4 },
   { id: "chart", size: 6 },

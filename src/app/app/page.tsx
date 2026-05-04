@@ -208,7 +208,7 @@ export default async function Home({
       user={{ name: session.user.name ?? "", email: session.user.email }}
     >
       <TooltipProvider delay={200}>
-        <main className="max-w-4xl mx-auto px-4 py-6 flex flex-col gap-3">
+        <main className="max-w-7xl mx-auto px-4 py-6 flex flex-col gap-3">
           <PortfolioHero userName={session.user.name ?? null} hero={hero} />
           <TodayDecision primary={primary} others={others} />
           <div className="grid grid-cols-1 md:grid-cols-[1.8fr_1fr] gap-3">
@@ -222,10 +222,13 @@ export default async function Home({
               /api/dashboard/layout (DEFAULT_LAYOUT covers first-visit
               users with summary/holdings/alerts/chart/news/calendar/
               sector/research). Editing controls live inside the grid
-              and are surfaced via a Customize button on the BlockShell. */}
-          <div className="text-[10px] tracking-widest uppercase text-[var(--muted-foreground)] mt-6 mb-3">
-            Pinned widgets
-          </div>
+              and are surfaced via a Customize button on the BlockShell.
+
+              No header — the previous "Pinned widgets" label was
+              inaccurate (the blocks aren't strictly pinned, they're
+              user-customizable widgets). A subtle horizontal rule
+              gives visual separation without mislabeling. */}
+          <hr className="border-t border-[var(--border)] my-2" />
           <BlockGrid />
         </main>
       </TooltipProvider>

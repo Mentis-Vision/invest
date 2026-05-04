@@ -112,6 +112,10 @@ async function loadSparkline(userId: string): Promise<HeroSparklinePoint[]> {
 }
 
 async function loadTopMovers(userId: string): Promise<TickerMover[]> {
+  // De-duplicate held tickers via the `held_unique` CTE — a user with the
+  // same ticker in multiple accounts (taxable + IRA + 401k) would
+  // otherwise show NVDA three times in the movers row, since the holding
+  // table stores one row per (ticker, account).
   const result = await pool
     .query<MoverRow>(
       `WITH latest AS (
@@ -120,13 +124,17 @@ async function loadTopMovers(userId: string): Promise<TickerMover[]> {
          FROM ticker_market_daily
          WHERE captured_at >= CURRENT_DATE - INTERVAL '5 days'
          ORDER BY ticker, captured_at DESC
+       ),
+       held_unique AS (
+         SELECT DISTINCT h.ticker
+         FROM holding h
+         WHERE h."userId" = $1
+           AND h."assetClass" IS DISTINCT FROM 'cash'
        )
-       SELECT h.ticker, COALESCE(l.change_pct, 0)::float AS change_pct
-       FROM holding h
-       LEFT JOIN latest l ON l.ticker = h.ticker
-       WHERE h."userId" = $1
-         AND h."assetClass" IS DISTINCT FROM 'cash'
-         AND l.change_pct IS NOT NULL
+       SELECT hu.ticker, COALESCE(l.change_pct, 0)::float AS change_pct
+       FROM held_unique hu
+       LEFT JOIN latest l ON l.ticker = hu.ticker
+       WHERE l.change_pct IS NOT NULL
        ORDER BY ABS(l.change_pct) DESC
        LIMIT 5`,
       [userId],
