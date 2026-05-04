@@ -471,7 +471,12 @@ export function BlockAlerts() {
 
 // ─── 4. Performance chart (range-selectable portfolio value) ─────────
 
-type Point = { date: string; totalValue: number };
+type Point = {
+  date: string;
+  totalValue: number;
+  /** Provenance flag — undefined for backward compat with older payloads. */
+  source?: "observed" | "reconstructed";
+};
 
 type TrackData = {
   /** Range the server actually rendered (may differ from request on
@@ -479,6 +484,9 @@ type TrackData = {
   range: string;
   /** Earliest snapshot date we have on file — drives the as-of footnote. */
   oldestSnapshotDate: string | null;
+  /** Earliest snapshot we observed directly (vs reconstructed from
+   *  broker txns). Used to draw the boundary in the chart legend. */
+  oldestObservedDate: string | null;
   /** Which range buttons should be enabled, computed from data depth. */
   supportedRanges: string[];
   portfolioSeries: Point[];
@@ -528,6 +536,10 @@ export function BlockChart() {
           oldestSnapshotDate:
             typeof d.oldestSnapshotDate === "string"
               ? d.oldestSnapshotDate
+              : null,
+          oldestObservedDate:
+            typeof d.oldestObservedDate === "string"
+              ? d.oldestObservedDate
               : null,
           supportedRanges: Array.isArray(d.supportedRanges)
             ? (d.supportedRanges as string[])
@@ -640,6 +652,13 @@ export function BlockChart() {
   }
 
   const values = series.map((p) => p.totalValue);
+  // Per-point provenance — only forwarded to MiniSparkline if any point
+  // is reconstructed, so existing fully-observed users see no visual
+  // change. Trust tenet (rule #13): never silently merge.
+  const sources: ("observed" | "reconstructed")[] = series.map(
+    (p) => (p.source === "reconstructed" ? "reconstructed" : "observed"),
+  );
+  const hasReconstructed = sources.some((s) => s === "reconstructed");
   const first = values[0];
   const last = values[values.length - 1];
   const pct = first > 0 ? ((last - first) / first) * 100 : 0;
@@ -673,12 +692,43 @@ export function BlockChart() {
       <div className="h-28 w-full">
         {/* Responsive: viewBox-scaled SVG. Prevents the 520px fixed
             width from bleeding past narrow (S/M) block sizes. */}
-        <MiniSparkline data={values} width={520} height={112} responsive />
+        <MiniSparkline
+          data={values}
+          width={520}
+          height={112}
+          responsive
+          sources={hasReconstructed ? sources : undefined}
+        />
       </div>
       <div className="flex items-baseline justify-between text-[10px] text-muted-foreground">
         <span>{series[0].date}</span>
         <span className="font-mono">{fmtMoney(last)}</span>
       </div>
+      {hasReconstructed && (
+        <div
+          className="flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground"
+          aria-label="Chart legend"
+        >
+          <span className="inline-flex items-center gap-1">
+            <span
+              aria-hidden="true"
+              className="inline-block h-[2px] w-4 bg-current"
+            />
+            Observed
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span
+              aria-hidden="true"
+              className="inline-block h-[2px] w-4 opacity-60"
+              style={{
+                backgroundImage:
+                  "repeating-linear-gradient(to right, currentColor 0 4px, transparent 4px 7px)",
+              }}
+            />
+            Reconstructed from broker transactions
+          </span>
+        </div>
+      )}
       <div className="text-[10px] text-muted-foreground">{footnote}</div>
     </div>
   );
