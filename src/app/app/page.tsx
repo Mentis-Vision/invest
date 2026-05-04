@@ -17,6 +17,7 @@ import { MarketConditionsSidebar } from "@/components/dashboard/redesign/market-
 import { getHeroData } from "@/lib/dashboard/hero-loader";
 import { getMarketRegime } from "@/lib/dashboard/metrics/regime-loader";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import BlockGrid from "@/components/dashboard/block-grid";
 import type { QueueItem } from "@/lib/dashboard/types";
 
 export const dynamic = "force-dynamic";
@@ -214,6 +215,18 @@ export default async function Home({
             <WatchThisWeek items={watchThisWeek} totalCount={queue.length} />
             <MarketConditionsSidebar {...regimeProps} />
           </div>
+
+          {/* Below-the-fold: customizable block grid. Phase 5 spec §7.2
+              kept BlockGrid + all individual block components — Task 10
+              skipped wiring it. The grid loads its own layout from
+              /api/dashboard/layout (DEFAULT_LAYOUT covers first-visit
+              users with summary/holdings/alerts/chart/news/calendar/
+              sector/research). Editing controls live inside the grid
+              and are surfaced via a Customize button on the BlockShell. */}
+          <div className="text-[10px] tracking-widest uppercase text-[var(--muted-foreground)] mt-6 mb-3">
+            Pinned widgets
+          </div>
+          <BlockGrid />
         </main>
       </TooltipProvider>
     </AppShell>
