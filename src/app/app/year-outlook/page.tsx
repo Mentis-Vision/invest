@@ -142,7 +142,7 @@ export default async function YearOutlookPage() {
     <AppShell
       user={{ name: session.user.name ?? "", email: session.user.email }}
     >
-      <main className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 py-6">
+      <main className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-6">
         <header>
           <h1 className="text-2xl font-bold tracking-tight">
             {year} Year Outlook

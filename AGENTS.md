@@ -30,6 +30,15 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 12. **Warehouse is additive, not replacement.** Yahoo live `quote()` calls still happen for current price + day change (freshness). Warehouse covers slowly-changing fields: valuation multiples, technicals, fundamentals, analyst consensus. Readers return `null` on miss; all consumers must tolerate that.
 
+13. **Accuracy over completeness — the trust tenet.** Every number, chart, or claim shown to a user must be defensible from the underlying data. When the data doesn't support a number, we don't show it — we show what we have and explain the gap. This means:
+    - **No interpolation** of historical values we don't have observations for. If we don't have a snapshot from 2024-01-01, we don't draw a line through it.
+    - **No mixed-resolution charts.** If account A has 2y of history and account B has 4y, the portfolio chart's max range is 2y (the floor of common coverage), not 4y with B alone.
+    - **Range controls reflect actual data depth.** If we have 30 days of snapshots, only "30D" and "MAX" are enabled. "1Y" is disabled with a tooltip explaining why.
+    - **As-of timestamps everywhere.** Every chart/tile shows the freshness of its source data and the date range it actually covers.
+    - **When upstream data is stale (>24h for "today" claims, >7d for "this week"), we say so prominently.** Don't pretend stale data is current.
+    - **No silent fallbacks to less-credible sources.** If FRED is down and we have a cached value from yesterday, we show "as of yesterday." If we drop to a synthetic baseline, we label it "estimated."
+    - This rule supersedes "ship it" pressure. A wrong number is worse than no number.
+
 ## Proxy gating
 
 `src/proxy.ts` gates `/app/*` and AI API routes (`/api/research`, `/api/strategy`, `/api/portfolio-review`, `/api/snaptrade/*`, `/api/cron/*` is excluded because it uses its own Bearer auth). `matcher` excludes `_next/static`.
