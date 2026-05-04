@@ -389,7 +389,7 @@ export async function exchangePublicToken(
 
 // ─── Access token helpers ────────────────────────────────────────────
 
-async function getAccessTokenForItem(
+export async function getAccessTokenForItem(
   userId: string,
   itemId: string
 ): Promise<string | null> {
