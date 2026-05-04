@@ -9,6 +9,7 @@ import {
 } from "@/lib/plaid";
 import { pool } from "@/lib/db";
 import { log, errorInfo } from "@/lib/log";
+import { enqueueJob } from "@/lib/broker-history/queue";
 
 /**
  * POST /api/plaid/webhook
@@ -142,6 +143,59 @@ export async function POST(req: NextRequest) {
           await syncTransactions(userId, itemId, 90);
           // Also re-sync holdings — they often shift with transactions.
           await syncHoldings(userId, itemId);
+
+          // On HISTORICAL_UPDATE, Plaid is signalling the first
+          // historical transaction pull is ready. Enqueue a
+          // full_backfill job for every account on this item so the
+          // broker-history worker (every 5 min) picks it up and
+          // reconstructs the historical snapshot timeline. The 90-day
+          // syncTransactions above only covers recent activity — this
+          // schedules the deeper 24-month pull via the loader.
+          if (wCode === "HISTORICAL_UPDATE") {
+            const { rows: accts } = await pool.query<{
+              plaidAccountId: string;
+            }>(
+              `SELECT "plaidAccountId"
+               FROM "plaid_account"
+               WHERE "userId" = $1 AND "itemId" = $2`,
+              [userId, itemId]
+            );
+            // waitUntil so the enqueue completes after we ack the
+            // webhook — Plaid only retries on 5xx and we don't want a
+            // queue-write hiccup to cascade into webhook retries.
+            waitUntil(
+              (async () => {
+                let enqueued = 0;
+                for (const a of accts) {
+                  try {
+                    await enqueueJob(
+                      userId,
+                      "plaid",
+                      a.plaidAccountId,
+                      "full_backfill"
+                    );
+                    enqueued++;
+                  } catch (err) {
+                    log.warn(
+                      "plaid.webhook",
+                      "broker-history enqueue failed",
+                      {
+                        userId,
+                        plaidAccountId: a.plaidAccountId,
+                        ...errorInfo(err),
+                      }
+                    );
+                  }
+                }
+                log.info("plaid.webhook", "enqueued full_backfill", {
+                  userId,
+                  itemId,
+                  accountCount: accts.length,
+                  enqueued,
+                });
+              })()
+            );
+          }
           break;
         }
         case "HOLDINGS": {
