@@ -28,7 +28,6 @@ import { getHoldings } from "@/lib/client/holdings-cache";
 import ResearchStarter from "@/components/research/research-starter";
 import { DossierHero } from "@/components/research/dossier-hero";
 import { SectorRail } from "@/components/research/sector-rail";
-import { MarketPulse } from "@/components/research/market-pulse";
 import { MiniSparkline } from "@/components/research/mini-sparkline";
 import { WorthReading } from "@/components/research/worth-reading";
 import { YourBookToday } from "@/components/research/your-book-today";
@@ -779,14 +778,16 @@ export default function ResearchView({
         />
       )}
 
-      {/* Market pulse: today's index closes + macro headline. Lands first
-          so the page has SOMETHING valuable before any user input. */}
-      <MarketPulse />
-
       {/* Movers in your book — top gainer + top loser from the user's
           own portfolio. Each card is clickable and routes to the research
           input auto-populated for that ticker. Hides when no holdings
-          or all flat. */}
+          or all flat.
+
+          Note: MarketPulse was removed from this surface in Phase 8 — the
+          dashboard's MarketConditionsSidebar already covers the same
+          ground (regime label / VIX / FOMC) and surfacing it twice was
+          duplicative. The component file remains on disk for possible
+          reuse but is no longer rendered from the research view. */}
       <YourBookToday onSeeAll={onNavigateToPortfolio} />
 
       {/* Two-col strip: events this week + worth-reading. Together they
