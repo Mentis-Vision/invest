@@ -1,4 +1,5 @@
 import type { StockSnapshot } from "../data/yahoo";
+import { getKellyFraction } from "../dashboard/metrics/kelly-loader";
 import { buildDecisionEngineInput } from "./adapter";
 import {
   DECISION_ENGINE_WEIGHTS,
@@ -44,19 +45,32 @@ export async function runDecisionEngine(args: {
   macroRaw?: unknown;
   riskProfileHint?: string | null;
 }): Promise<DecisionEngineOutput> {
-  const input = await buildDecisionEngineInput(args);
-  return runDecisionEngineForInput(input);
+  const [input, kellyFractionPct] = await Promise.all([
+    buildDecisionEngineInput(args),
+    // getKellyFraction returns a fraction in [0, 1]; we work in percent
+    // units inside the position-sizing math, so convert here. Returns
+    // null when <10 outcomes — passed straight through.
+    getKellyFraction(args.userId).then((f) =>
+      f === null || f <= 0 ? null : f * 100,
+    ),
+  ]);
+  return runDecisionEngineForInput(input, { kellyFractionPct });
 }
 
 export function runDecisionEngineForInput(
-  input: DecisionEngineInput
+  input: DecisionEngineInput,
+  opts: { kellyFractionPct?: number | null } = {}
 ): DecisionEngineOutput {
   const scoreResult = computeDecisionScores(input);
   const riskGates = evaluateRiskGates(input);
   const gateRiskPenalty = computeRiskPenalty(input, riskGates);
   const riskPenalty = clampScore(scoreResult.riskPenalty + gateRiskPenalty);
   const tradeQualityScore = clampScore(scoreResult.grossScore - riskPenalty);
-  const positionSizing = computePositionSizing(input, tradeQualityScore);
+  const positionSizing = computePositionSizing(
+    input,
+    tradeQualityScore,
+    opts.kellyFractionPct ?? null,
+  );
   const riskLevel = deriveRiskLevel(input, riskGates, tradeQualityScore);
   const action = deriveDecisionAction({
     input,

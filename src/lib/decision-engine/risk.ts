@@ -230,7 +230,21 @@ export function computeRiskPenalty(
 
 export function computePositionSizing(
   input: DecisionEngineInput,
-  tradeQualityScore: number
+  tradeQualityScore: number,
+  /**
+   * Optional fractional-Kelly suggested allocation, in PERCENT units
+   * (e.g. 5 = 5% of portfolio). When provided AND positive, Kelly only
+   * ever LOWERS the suggested max — it never raises it. This is the
+   * safety property: Kelly is unstable on small samples, so the
+   * risk-profile cap is the ceiling and Kelly can only tighten it.
+   *
+   * Pass null (or omit) when Kelly is unavailable (e.g. <10 outcomes).
+   * A zero or negative Kelly is treated as null on purpose — we don't
+   * want to zero out users' positions when they happen to have a
+   * temporarily-negative win rate; the risk-profile cap stays the
+   * floor in that case.
+   */
+  kellyFractionPct?: number | null
 ): PositionSizing {
   const sizing = sizingFor(input.riskProfile);
   const rr = computeRewardRisk(input);
@@ -241,12 +255,19 @@ export function computePositionSizing(
       ? portfolio.currentTickerPct
       : null;
   const baseMax = Math.min(10, sizing.suggestedMaxPositionPct);
-  const suggestedMax =
+  const profileSuggested =
     tradeQualityScore < 40
       ? Math.min(baseMax, 1)
       : tradeQualityScore < 55
         ? Math.min(baseMax, 2)
         : baseMax;
+  // Apply Kelly as a monotonic-decreasing override. We require a
+  // strictly-positive Kelly value — null/0/negative all fall through
+  // to the risk-profile suggestion unchanged.
+  const suggestedMax =
+    isFiniteNumber(kellyFractionPct) && kellyFractionPct > 0
+      ? Math.min(profileSuggested, kellyFractionPct)
+      : profileSuggested;
 
   let note =
     "Percent-based position guidance only. This is not an order or instruction to trade.";
