@@ -469,20 +469,73 @@ export function BlockAlerts() {
   );
 }
 
-// ─── 4. Performance chart (YTD portfolio value) ─────────────────────
+// ─── 4. Performance chart (range-selectable portfolio value) ─────────
 
 type Point = { date: string; totalValue: number };
 
+type TrackData = {
+  /** Range the server actually rendered (may differ from request on
+   *  fallback to max). */
+  range: string;
+  /** Earliest snapshot date we have on file — drives the as-of footnote. */
+  oldestSnapshotDate: string | null;
+  /** Which range buttons should be enabled, computed from data depth. */
+  supportedRanges: string[];
+  portfolioSeries: Point[];
+};
+
+const RANGE_OPTIONS = [
+  { key: "30d", label: "30D" },
+  { key: "ytd", label: "YTD" },
+  { key: "1y", label: "1Y" },
+  { key: "2y", label: "2Y" },
+  { key: "3y", label: "3Y" },
+  { key: "5y", label: "5Y" },
+  { key: "max", label: "MAX" },
+] as const;
+
+/** Days between two ISO yyyy-mm-dd dates (positive when `to` ≥ `from`). */
+function daysBetween(fromIso: string, toIso: string): number {
+  const a = new Date(`${fromIso}T00:00:00Z`).getTime();
+  const b = new Date(`${toIso}T00:00:00Z`).getTime();
+  return Math.floor((b - a) / (24 * 60 * 60 * 1000));
+}
+
+function formatLongDate(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 export function BlockChart() {
-  const [series, setSeries] = useState<Point[]>([]);
+  const [range, setRange] = useState<string>("ytd");
+  const [data, setData] = useState<TrackData | null>(null);
   const [loading, setLoading] = useState(true);
+
   useEffect(() => {
     let alive = true;
-    fetch("/api/track-record")
+    setLoading(true);
+    fetch(`/api/track-record?range=${range}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (!alive || !d?.portfolioSeries) return;
-        setSeries(d.portfolioSeries as Point[]);
+        if (!alive || !d) return;
+        setData({
+          range: typeof d.range === "string" ? d.range : range,
+          oldestSnapshotDate:
+            typeof d.oldestSnapshotDate === "string"
+              ? d.oldestSnapshotDate
+              : null,
+          supportedRanges: Array.isArray(d.supportedRanges)
+            ? (d.supportedRanges as string[])
+            : [],
+          portfolioSeries: Array.isArray(d.portfolioSeries)
+            ? (d.portfolioSeries as Point[])
+            : [],
+        });
       })
       .catch(() => {})
       .finally(() => {
@@ -491,27 +544,130 @@ export function BlockChart() {
     return () => {
       alive = false;
     };
-  }, []);
-  if (loading)
-    return <div className="h-32 animate-pulse rounded bg-secondary/30" />;
-  if (series.length < 2)
+  }, [range]);
+
+  if (loading && !data) {
+    return <div className="h-40 animate-pulse rounded bg-secondary/30" />;
+  }
+
+  const series = data?.portfolioSeries ?? [];
+  const oldestIso = data?.oldestSnapshotDate ?? null;
+  const supported = new Set(data?.supportedRanges ?? []);
+  const activeRange = data?.range ?? range;
+
+  // Today (yyyy-mm-dd in UTC) for "days short" tooltip math. Match the
+  // server's UTC slicing so the gap value the user sees lines up with
+  // what the server uses to gate supportedRanges.
+  const todayIso = new Date().toISOString().slice(0, 10);
+
+  // Compute "days short" for each disabled range. Trust tenet: if we
+  // can't render a range honestly, the tooltip explains exactly why
+  // (so a user with 100 days of history sees "Need ≥365 days — 265d
+  // short" on the 1Y button instead of a silent grey).
+  const tooltipFor = (key: (typeof RANGE_OPTIONS)[number]["key"]): string => {
+    if (supported.has(key)) return "";
+    if (!oldestIso) return "Need at least one snapshot to render any range.";
+    const haveDays = daysBetween(oldestIso, todayIso);
+    if (key === "30d")
+      return `Need ≥30 days of data — currently ${Math.max(30 - haveDays, 0)}d short`;
+    if (key === "ytd") {
+      const yearStart = `${new Date(`${todayIso}T00:00:00Z`).getUTCFullYear()}-01-01`;
+      const needFromYearStart = daysBetween(yearStart, todayIso);
+      return `Need data from ${yearStart} — ${Math.max(needFromYearStart - haveDays, 0)}d short`;
+    }
+    const needed =
+      key === "1y"
+        ? 365
+        : key === "2y"
+          ? 730
+          : key === "3y"
+            ? 1095
+            : key === "5y"
+              ? 1825
+              : 0;
+    return `Need ≥${needed} days of data — currently ${Math.max(needed - haveDays, 0)}d short`;
+  };
+
+  const buttons = (
+    <div
+      className="flex flex-wrap gap-1"
+      role="group"
+      aria-label="Performance range"
+    >
+      {RANGE_OPTIONS.map((opt) => {
+        const enabled = supported.has(opt.key);
+        const active = activeRange === opt.key;
+        return (
+          <button
+            key={opt.key}
+            type="button"
+            onClick={() => enabled && setRange(opt.key)}
+            disabled={!enabled}
+            title={!enabled ? tooltipFor(opt.key) : undefined}
+            aria-pressed={active}
+            className={[
+              "rounded px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em] transition-colors",
+              active
+                ? "bg-primary text-primary-foreground"
+                : enabled
+                  ? "bg-secondary/60 text-foreground/80 hover:bg-secondary"
+                  : "cursor-not-allowed bg-secondary/20 text-muted-foreground/50",
+            ].join(" ")}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  // Empty state: <2 snapshots renders no chart, but we still show the
+  // (entirely-disabled) range row so the surface explains itself.
+  if (series.length < 2) {
     return (
-      <div className="py-8 text-center text-[12px] text-muted-foreground">
-        Need at least two daily snapshots. Back tomorrow.
+      <div className="space-y-2">
+        {buttons}
+        <div className="py-8 text-center text-[12px] text-muted-foreground">
+          Need at least two daily snapshots. Back tomorrow.
+        </div>
+        {oldestIso && (
+          <div className="text-[10px] text-muted-foreground">
+            Oldest snapshot {formatLongDate(oldestIso)}.
+          </div>
+        )}
       </div>
     );
+  }
+
   const values = series.map((p) => p.totalValue);
   const first = values[0];
   const last = values[values.length - 1];
   const pct = first > 0 ? ((last - first) / first) * 100 : 0;
+
+  // As-of footnote. Trust tenet: cite the actual covered range, not
+  // what the user clicked. For `max`, "From {oldest}"; otherwise show
+  // the period AND the oldest snapshot so users see the full picture.
+  const rangeLabel =
+    RANGE_OPTIONS.find((r) => r.key === activeRange)?.label ??
+    activeRange.toUpperCase();
+  const footnote =
+    activeRange === "max"
+      ? oldestIso
+        ? `From ${formatLongDate(oldestIso)}`
+        : `${series.length} snapshots`
+      : oldestIso
+        ? `${rangeLabel} window · oldest snapshot ${formatLongDate(oldestIso)}`
+        : `${rangeLabel} window`;
+
   return (
-    <div>
-      <div className="mb-2 flex items-baseline justify-between">
+    <div className="space-y-2">
+      {buttons}
+      <div className="flex items-baseline justify-between">
         <span className={`font-mono text-[14px] font-semibold ${toneClass(pct)}`}>
           {fmtPct(pct)}
         </span>
         <span className="text-[11px] text-muted-foreground">
-          {series.length} days
+          {series.length} {series.length === 1 ? "snapshot" : "snapshots"}
         </span>
       </div>
       <div className="h-28 w-full">
@@ -519,10 +675,11 @@ export function BlockChart() {
             width from bleeding past narrow (S/M) block sizes. */}
         <MiniSparkline data={values} width={520} height={112} responsive />
       </div>
-      <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
+      <div className="flex items-baseline justify-between text-[10px] text-muted-foreground">
         <span>{series[0].date}</span>
         <span className="font-mono">{fmtMoney(last)}</span>
       </div>
+      <div className="text-[10px] text-muted-foreground">{footnote}</div>
     </div>
   );
 }
@@ -996,10 +1153,10 @@ export const BLOCK_REGISTRY: Record<string, BlockDef> = {
   chart: {
     id: "chart",
     title: "Performance",
-    hint: "YTD",
+    hint: "30D · YTD · 1Y · MAX",
     defaultSize: 6,
     Component: BlockChart,
-    description: "Portfolio value sparkline over the year",
+    description: "Portfolio value over a selectable range",
   },
   news: {
     id: "news",
