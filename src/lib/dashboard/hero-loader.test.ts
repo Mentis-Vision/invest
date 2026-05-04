@@ -114,7 +114,7 @@ describe("getHeroData", () => {
   it("emits top 5 movers sorted by absolute change", async () => {
     PV.mockResolvedValue(100000);
     Q.mockImplementation((sql: string) => {
-      if (sql.includes("holding") && sql.includes("change_pct")) {
+      if (sql.includes("held_unique") && sql.includes("change_pct")) {
         // SQL sorts by ABS(change_pct) DESC; mock returns the post-sort shape.
         return Promise.resolve({
           rows: [
@@ -133,5 +133,39 @@ describe("getHeroData", () => {
     expect(out.topMovers[0].ticker).toBe("AAPL");
     expect(out.topMovers[1].ticker).toBe("META");
     expect(out.topMovers[2].ticker).toBe("NVDA");
+  });
+
+  it("de-duplicates the same ticker across multiple accounts", async () => {
+    // Simulates the fix: even though the holding table has NVDA in three
+    // accounts (taxable + IRA + 401k), the held_unique CTE collapses to
+    // one row before the LEFT JOIN — so the SQL must ship only one NVDA
+    // back from the database. We assert behavior at the SQL contract
+    // level: the query string contains DISTINCT on the held side, and
+    // the post-query shape contains each ticker once.
+    PV.mockResolvedValue(100000);
+    let movers_sql = "";
+    Q.mockImplementation((sql: string) => {
+      if (sql.includes("held_unique") && sql.includes("change_pct")) {
+        movers_sql = sql;
+        // Simulate the de-duplicated SQL output — DB has already
+        // collapsed the three NVDA holding rows into one.
+        return Promise.resolve({
+          rows: [
+            { ticker: "NVDA", change_pct: -1.1 },
+            { ticker: "AAPL", change_pct: 0.8 },
+          ],
+        });
+      }
+      return Promise.resolve({ rows: [] });
+    });
+    const out = await getHeroData("user_a");
+    // Contract: SQL must include the DISTINCT-held CTE, not just JOIN
+    // straight against holding.
+    expect(movers_sql).toContain("SELECT DISTINCT h.ticker");
+    expect(out.topMovers).toHaveLength(2);
+    const tickers = out.topMovers.map((m) => m.ticker);
+    expect(tickers).toEqual(["NVDA", "AAPL"]);
+    // No duplicates anywhere in the output.
+    expect(new Set(tickers).size).toBe(tickers.length);
   });
 });
