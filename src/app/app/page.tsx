@@ -17,7 +17,7 @@ import { MarketConditionsSidebar } from "@/components/dashboard/redesign/market-
 import { getHeroData } from "@/lib/dashboard/hero-loader";
 import { getMarketRegime } from "@/lib/dashboard/metrics/regime-loader";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import BlockGrid from "@/components/dashboard/block-grid";
+import { CustomizableBlockGrid } from "@/components/dashboard/customizable-block-grid";
 import type { QueueItem } from "@/lib/dashboard/types";
 
 export const dynamic = "force-dynamic";
@@ -229,7 +229,7 @@ export default async function Home({
               user-customizable widgets). A subtle horizontal rule
               gives visual separation without mislabeling. */}
           <hr className="border-t border-[var(--border)] my-2" />
-          <BlockGrid />
+          <CustomizableBlockGrid />
         </main>
       </TooltipProvider>
     </AppShell>
