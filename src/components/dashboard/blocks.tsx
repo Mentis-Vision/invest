@@ -697,55 +697,99 @@ type NewsItem = {
 
 export function BlockNews() {
   const [items, setItems] = useState<NewsItem[]>([]);
+  const [scopeLabel, setScopeLabel] = useState<"portfolio" | "market">(
+    "portfolio"
+  );
   const [loading, setLoading] = useState(true);
+
   useEffect(() => {
     let alive = true;
-    fetch("/api/market-news?scope=portfolio&limit=5")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (!alive || !d?.items) return;
-        setItems(d.items as NewsItem[]);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
+
+    // Trust tenet: 72h freshness cap so the dashboard never claims
+    // stale items as current news. If portfolio-scoped results come
+    // up thin (<3 items), follow up with market-scoped — same window,
+    // explicit label so the user can tell they're seeing general
+    // headlines, not portfolio coverage.
+    const fetchScope = (scope: "portfolio" | "market") =>
+      fetch(`/api/market-news?scope=${scope}&limit=5&freshness=72h`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d): NewsItem[] => {
+          if (!d?.items) return [];
+          return d.items as NewsItem[];
+        })
+        .catch(() => [] as NewsItem[]);
+
+    (async () => {
+      const portfolio = await fetchScope("portfolio");
+      if (!alive) return;
+      if (portfolio.length >= 3) {
+        setItems(portfolio);
+        setScopeLabel("portfolio");
+        setLoading(false);
+        return;
+      }
+      const market = await fetchScope("market");
+      if (!alive) return;
+      // If portfolio had at least one item, prefer it but top up from
+      // market-scope to avoid an "almost empty" surface. Otherwise show
+      // the market list and label accordingly.
+      if (portfolio.length > 0) {
+        const dedup = new Map<string, NewsItem>();
+        [...portfolio, ...market].forEach((it) => dedup.set(it.id, it));
+        setItems(Array.from(dedup.values()).slice(0, 5));
+        setScopeLabel("portfolio");
+      } else {
+        setItems(market);
+        setScopeLabel("market");
+      }
+      setLoading(false);
+    })();
+
     return () => {
       alive = false;
     };
   }, []);
+
   if (loading)
     return <div className="h-24 animate-pulse rounded bg-secondary/30" />;
   if (items.length === 0)
     return (
       <div className="py-4 text-center text-[12px] text-muted-foreground">
-        Nothing on your holdings right now.
+        Nothing in the last 72 hours.
       </div>
     );
   return (
-    <ul className="divide-y divide-border/60">
-      {items.map((n) => (
-        <li key={n.id} className="py-2.5">
-          <a
-            href={n.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block transition-colors hover:text-primary"
-          >
-            <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-              {n.providerName}
-              {n.tickersMentioned.slice(0, 2).length > 0 && (
-                <span className="ml-1">
-                  · <span className="font-mono">{n.tickersMentioned.slice(0, 2).join(" ")}</span>
-                </span>
-              )}{" "}
-              · {relTime(n.publishedAt)}
-            </div>
-            <div className="mt-0.5 text-[13px] leading-snug">{n.title}</div>
-          </a>
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-2">
+      <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+        {scopeLabel === "portfolio" ? "On your holdings" : "Market"}
+        <span className="ml-1 normal-case tracking-normal text-muted-foreground/70">
+          · last 72h
+        </span>
+      </div>
+      <ul className="divide-y divide-border/60">
+        {items.map((n) => (
+          <li key={n.id} className="py-2.5">
+            <a
+              href={n.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block transition-colors hover:text-primary"
+            >
+              <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                {n.providerName}
+                {n.tickersMentioned.slice(0, 2).length > 0 && (
+                  <span className="ml-1">
+                    · <span className="font-mono">{n.tickersMentioned.slice(0, 2).join(" ")}</span>
+                  </span>
+                )}{" "}
+                · {relTime(n.publishedAt)}
+              </div>
+              <div className="mt-0.5 text-[13px] leading-snug">{n.title}</div>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
