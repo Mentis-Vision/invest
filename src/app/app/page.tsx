@@ -222,10 +222,13 @@ export default async function Home({
               /api/dashboard/layout (DEFAULT_LAYOUT covers first-visit
               users with summary/holdings/alerts/chart/news/calendar/
               sector/research). Editing controls live inside the grid
-              and are surfaced via a Customize button on the BlockShell. */}
-          <div className="text-[10px] tracking-widest uppercase text-[var(--muted-foreground)] mt-6 mb-3">
-            Pinned widgets
-          </div>
+              and are surfaced via a Customize button on the BlockShell.
+
+              No header — the previous "Pinned widgets" label was
+              inaccurate (the blocks aren't strictly pinned, they're
+              user-customizable widgets). A subtle horizontal rule
+              gives visual separation without mislabeling. */}
+          <hr className="border-t border-[var(--border)] my-2" />
           <BlockGrid />
         </main>
       </TooltipProvider>
