@@ -78,6 +78,48 @@ async function fetchStatus(url: string, expected: number): Promise<Response> {
   return res;
 }
 
+/**
+ * Probe an external URL with HEAD first; if the server rejects HEAD
+ * (some static-file hosts return 4xx for HEAD even when GET works),
+ * fall back to a short GET with a 5s timeout. We never read the body.
+ *
+ * Throws on a final non-2xx so the smoke check fails the test, but is
+ * tolerant of transient network blips: the existing weekly cron runs
+ * once and emails Sang on failure — that's the desired alerting cadence
+ * for "the upstream we depend on is down".
+ */
+async function reachableUpstream(url: string): Promise<number> {
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "HEAD",
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch (err) {
+    // Timeout or network error — try GET as a courtesy.
+    res = await fetch(url, {
+      method: "GET",
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) {
+      throw new Error(
+        `${url} unreachable: ${res.status} (HEAD threw: ${err instanceof Error ? err.message : String(err)})`,
+      );
+    }
+    return res.status;
+  }
+  if (res.ok) return res.status;
+  // HEAD denied — try GET. Don't read the body.
+  res = await fetch(url, {
+    method: "GET",
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!res.ok) {
+    throw new Error(`${url} returned ${res.status} on both HEAD and GET`);
+  }
+  return res.status;
+}
+
 async function dbColumnExists(
   table: string,
   column: string
@@ -464,6 +506,113 @@ const TESTS: SmokeTest[] = [
         `expected 200 / 30x / 401, got ${res.status}`
       );
       return `auth gate intact (status ${res.status})`;
+    },
+  },
+
+  // Category: dashboard-redesign — Phase 5 acceptance checks. Covers the
+  // benchmarks pipeline (column + APIs) and the upstream live-data
+  // sources we depend on. HEAD probes against external sites are
+  // deliberately tolerant — see fetchOrHeadOk for the GET fallback when
+  // a server denies HEAD.
+  {
+    name: "dashboard /app is auth-gated",
+    category: "dashboard-redesign",
+    async run({ baseUrl }) {
+      const res = await fetch(`${baseUrl}/app`, { redirect: "manual" });
+      // Either 307/302 redirect to /sign-in OR 200 with auth-gated client render.
+      assert(
+        [200, 302, 307].includes(res.status),
+        `unexpected /app status ${res.status}`,
+      );
+      return `status ${res.status}`;
+    },
+  },
+  {
+    name: "dashboard /api/user/benchmarks rejects unauth",
+    category: "dashboard-redesign",
+    async run({ baseUrl }) {
+      const res = await fetch(`${baseUrl}/api/user/benchmarks`, {
+        redirect: "manual",
+      });
+      // Either a direct 401 from the handler, or a 30x redirect to
+      // /sign-in if proxy.ts is gating the route. Both are valid
+      // "not authorized" signals — what we want to catch is a 200.
+      const ok =
+        res.status === 401 ||
+        (res.status >= 300 &&
+          res.status < 400 &&
+          (res.headers.get("location") ?? "").includes("/sign-in"));
+      assert(ok, `expected 401 or 30x→/sign-in, got ${res.status}`);
+      return `auth gate intact (${res.status})`;
+    },
+  },
+  {
+    name: "dashboard /api/benchmarks/validate rejects unauth",
+    category: "dashboard-redesign",
+    async run({ baseUrl }) {
+      const res = await fetch(`${baseUrl}/api/benchmarks/validate?ticker=SPY`, {
+        redirect: "manual",
+      });
+      const ok =
+        res.status === 401 ||
+        (res.status >= 300 &&
+          res.status < 400 &&
+          (res.headers.get("location") ?? "").includes("/sign-in"));
+      assert(ok, `expected 401 or 30x→/sign-in, got ${res.status}`);
+      return `auth gate intact (${res.status})`;
+    },
+  },
+  {
+    name: "dashboard user_profile.benchmarks column exists",
+    category: "dashboard-redesign",
+    async run() {
+      const result = await pool.query<{
+        column_name: string;
+        data_type: string;
+      }>(
+        `SELECT column_name, data_type
+           FROM information_schema.columns
+          WHERE table_name = 'user_profile' AND column_name = 'benchmarks'`,
+      );
+      assert(
+        result.rows.length === 1,
+        "user_profile.benchmarks column missing",
+      );
+      assert(
+        result.rows[0].data_type === "jsonb",
+        `expected jsonb, got ${result.rows[0].data_type}`,
+      );
+      return `${result.rows[0].column_name} ${result.rows[0].data_type}`;
+    },
+  },
+  {
+    name: "dashboard Kenneth French CSV reachable",
+    category: "dashboard-redesign",
+    async run() {
+      const status = await reachableUpstream(
+        "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_Factors_daily_CSV.zip",
+      );
+      return `${status}`;
+    },
+  },
+  {
+    name: "dashboard Damodaran ERP page reachable",
+    category: "dashboard-redesign",
+    async run() {
+      const status = await reachableUpstream(
+        "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/histimpl.html",
+      );
+      return `${status}`;
+    },
+  },
+  {
+    name: "dashboard FOMC calendar page reachable",
+    category: "dashboard-redesign",
+    async run() {
+      const status = await reachableUpstream(
+        "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+      );
+      return `${status}`;
     },
   },
 ];
