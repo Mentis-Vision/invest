@@ -30,7 +30,7 @@ import { DossierHero } from "@/components/research/dossier-hero";
 import { SectorRail } from "@/components/research/sector-rail";
 import { MiniSparkline } from "@/components/research/mini-sparkline";
 import { WorthReading } from "@/components/research/worth-reading";
-import { YourBookToday } from "@/components/research/your-book-today";
+import { LookCloserAtHoldings } from "@/components/research/look-closer-at-holdings";
 import { EventsThisWeek } from "@/components/research/events-this-week";
 import { PastCallsStrip } from "@/components/research/past-calls-strip";
 import { RecentSearchesStrip } from "@/components/research/recent-searches-strip";
@@ -778,17 +778,18 @@ export default function ResearchView({
         />
       )}
 
-      {/* Movers in your book — top gainer + top loser from the user's
-          own portfolio. Each card is clickable and routes to the research
-          input auto-populated for that ticker. Hides when no holdings
-          or all flat.
+      {/* Look closer at your holdings — Phase 8 replacement for the
+          older YourBookToday top-gainer/top-loser strip. Surfaces up
+          to 8 holdings tagged with a primary "why" (earnings T-X,
+          stale research, concentration, top-mover fallback). Each
+          card links into the research view for that ticker.
 
           Note: MarketPulse was removed from this surface in Phase 8 — the
           dashboard's MarketConditionsSidebar already covers the same
           ground (regime label / VIX / FOMC) and surfacing it twice was
           duplicative. The component file remains on disk for possible
           reuse but is no longer rendered from the research view. */}
-      <YourBookToday onSeeAll={onNavigateToPortfolio} />
+      <LookCloserAtHoldings />
 
       {/* Two-col strip: events this week + worth-reading. Together they
           give the user something to click on (events = what's coming,
