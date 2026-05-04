@@ -98,11 +98,12 @@ export async function GET(req: Request) {
   const requested: RangeKey = isRangeKey(rawRange) ? rawRange : "ytd";
 
   try {
-    // Pull track-record summary, oldest snapshot date, and the full
-    // series in parallel. We fetch the full available series (no upper
-    // age cap) because filtering is cheap in JS once we have it, and
-    // it lets us answer `range=max` honestly.
-    const [recordData, oldestRow, seriesRows] = await Promise.all([
+    // Pull track-record summary, oldest snapshot date, oldest *observed*
+    // snapshot date (the boundary between reconstructed and observed for
+    // the chart legend), and the full series in parallel. We fetch the
+    // full available series (no upper age cap) because filtering is cheap
+    // in JS once we have it, and it lets us answer `range=max` honestly.
+    const [recordData, oldestRow, oldestObservedRow, seriesRows] = await Promise.all([
       getUserTrackRecord(session.user.id, 30),
       pool.query<{ oldest: Date | null }>(
         `SELECT MIN("capturedAt")::timestamptz AS oldest
@@ -110,9 +111,16 @@ export async function GET(req: Request) {
          WHERE "userId" = $1`,
         [session.user.id]
       ),
+      pool.query<{ oldest: Date | null }>(
+        `SELECT MIN("capturedAt")::timestamptz AS oldest
+         FROM "portfolio_snapshot"
+         WHERE "userId" = $1 AND COALESCE(source, 'observed') = 'observed'`,
+        [session.user.id]
+      ),
       pool.query(
         `SELECT "capturedAt", "totalValue"::float AS "totalValue",
-                "positionCount"
+                "positionCount",
+                COALESCE(source, 'observed') AS source
          FROM "portfolio_snapshot"
          WHERE "userId" = $1
          ORDER BY "capturedAt" ASC`,
@@ -126,6 +134,14 @@ export async function GET(req: Request) {
         ? oldestSnapshot.toISOString().slice(0, 10)
         : oldestSnapshot
           ? String(oldestSnapshot).slice(0, 10)
+          : null;
+
+    const oldestObserved = oldestObservedRow.rows[0]?.oldest ?? null;
+    const oldestObservedDate =
+      oldestObserved instanceof Date
+        ? oldestObserved.toISOString().slice(0, 10)
+        : oldestObserved
+          ? String(oldestObserved).slice(0, 10)
           : null;
 
     const now = new Date();
@@ -153,6 +169,10 @@ export async function GET(req: Request) {
             : String(r.capturedAt).slice(0, 10),
         totalValue: Number(r.totalValue),
         positionCount: Number(r.positionCount),
+        source:
+          r.source === "reconstructed"
+            ? ("reconstructed" as const)
+            : ("observed" as const),
       })
     );
 
@@ -167,6 +187,7 @@ export async function GET(req: Request) {
       range: effectiveRange,
       requestedRange: requested,
       oldestSnapshotDate: oldestIso,
+      oldestObservedDate,
       supportedRanges,
       portfolioSeries,
     });
@@ -182,6 +203,7 @@ export async function GET(req: Request) {
       range: "ytd",
       requestedRange: requested,
       oldestSnapshotDate: null,
+      oldestObservedDate: null,
       supportedRanges: [],
       portfolioSeries: [],
     });

@@ -24,12 +24,25 @@ export function MiniSparkline({
   height = 36,
   responsive = false,
   className = "",
+  sources,
 }: {
   data: number[];
   width?: number;
   height?: number;
   responsive?: boolean;
   className?: string;
+  /**
+   * Optional per-point provenance flag. When provided (length must equal
+   * `data.length`) the sparkline splits its line into two visual segments:
+   *   - "observed"      → solid line at full opacity
+   *   - "reconstructed" → dashed line at reduced opacity
+   *
+   * AGENTS.md trust tenet (rule #13): never silently merge observed +
+   * reconstructed history. Callers passing this prop get a chart that
+   * is honest about which range came from broker observation vs
+   * transaction-replay reconstruction.
+   */
+  sources?: ReadonlyArray<"observed" | "reconstructed">;
 }) {
   // IMPORTANT: useId() is stable across SSR + client hydration. Using
   // Math.random() here — as a previous revision did — generated a
@@ -46,19 +59,20 @@ export function MiniSparkline({
   const range = max - min || 1;
   const stepX = width / (data.length - 1);
 
-  const points = data
-    .map((v, i) => {
-      const x = i * stepX;
-      // Invert y because SVG origin is top-left.
-      const y = height - ((v - min) / range) * height;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
+  const coords = data.map((v, i) => {
+    const x = i * stepX;
+    // Invert y because SVG origin is top-left.
+    const y = height - ((v - min) / range) * height;
+    return { x, y };
+  });
+
+  const points = coords
+    .map(({ x, y }) => `${x.toFixed(1)},${y.toFixed(1)}`)
     .join(" ");
 
   // Build a closed area path (line + bottom edge) for the soft fill.
   const areaPath =
     `M 0,${height} L ${points.split(" ").join(" L ")} L ${width.toFixed(1)},${height} Z`;
-  const linePath = `M ${points.split(" ").join(" L ")}`;
 
   const first = data[0];
   const last = data[data.length - 1];
@@ -71,6 +85,34 @@ export function MiniSparkline({
   const sizeProps = responsive
     ? { width: "100%" as const, height: "100%" as const }
     : { width, height };
+
+  // Build per-segment paths. Each segment between coords[i] and
+  // coords[i+1] is tagged "reconstructed" if EITHER endpoint is
+  // reconstructed; this produces a single hand-off point at the
+  // boundary rather than a one-segment overlap.
+  const hasSources =
+    sources !== undefined && sources.length === data.length;
+
+  const observedSubpaths: string[] = [];
+  const reconstructedSubpaths: string[] = [];
+
+  if (hasSources) {
+    for (let i = 0; i < coords.length - 1; i++) {
+      const a = coords[i];
+      const b = coords[i + 1];
+      const segmentReconstructed =
+        sources![i] === "reconstructed" ||
+        sources![i + 1] === "reconstructed";
+      const seg = `M ${a.x.toFixed(1)},${a.y.toFixed(1)} L ${b.x.toFixed(1)},${b.y.toFixed(1)}`;
+      if (segmentReconstructed) {
+        reconstructedSubpaths.push(seg);
+      } else {
+        observedSubpaths.push(seg);
+      }
+    }
+  }
+
+  const linePath = `M ${points.split(" ").join(" L ")}`;
 
   return (
     <svg
@@ -87,15 +129,44 @@ export function MiniSparkline({
         </linearGradient>
       </defs>
       <path d={areaPath} fill={`url(#${id})`} />
-      <path
-        d={linePath}
-        fill="none"
-        stroke={stroke}
-        strokeWidth={1.5}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        vectorEffect="non-scaling-stroke"
-      />
+      {hasSources ? (
+        <>
+          {reconstructedSubpaths.length > 0 && (
+            <path
+              d={reconstructedSubpaths.join(" ")}
+              fill="none"
+              stroke={stroke}
+              strokeOpacity={0.6}
+              strokeWidth={1.5}
+              strokeDasharray="4 3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
+            />
+          )}
+          {observedSubpaths.length > 0 && (
+            <path
+              d={observedSubpaths.join(" ")}
+              fill="none"
+              stroke={stroke}
+              strokeWidth={1.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
+            />
+          )}
+        </>
+      ) : (
+        <path
+          d={linePath}
+          fill="none"
+          stroke={stroke}
+          strokeWidth={1.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+        />
+      )}
     </svg>
   );
 }
