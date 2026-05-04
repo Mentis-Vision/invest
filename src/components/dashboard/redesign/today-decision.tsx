@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { QueueItem } from "@/lib/dashboard/types";
 import { LayeredChipRow } from "@/components/dashboard/layered-chip-row";
+import { Card } from "@/components/ui/card";
 
 type Action = "snooze" | "dismiss";
 
@@ -42,33 +43,36 @@ export function TodayDecision({
 
   if (!primary) {
     return (
-      <div className="bg-[var(--card)] border border-[var(--border)] border-l-4 border-l-[var(--decisive)] rounded-md p-5">
-        <div className="text-[10px] tracking-widest uppercase text-[var(--decisive)] font-bold">
-          Today&apos;s decision
+      <Card className="border-l-4 border-l-[var(--decisive)]">
+        <div className="px-5">
+          <div className="text-[10px] tracking-widest uppercase text-[var(--decisive)] font-bold">
+            Today&apos;s decision
+          </div>
+          <div className="text-base font-semibold mt-1.5">
+            No urgent decisions right now.
+          </div>
+          <div className="text-xs text-[var(--muted-foreground)] mt-1">
+            Browse research candidates or check the latest activity.
+          </div>
+          <div className="mt-3">
+            <button
+              onClick={() => router.push("/app?view=research")}
+              className="bg-[var(--foreground)] text-[var(--background)] text-xs font-bold px-3 py-1.5 rounded"
+            >
+              Open research
+            </button>
+          </div>
         </div>
-        <div className="text-base font-semibold mt-1.5">
-          No urgent decisions right now.
-        </div>
-        <div className="text-xs text-[var(--muted-foreground)] mt-1">
-          Browse research candidates or check the latest activity.
-        </div>
-        <div className="mt-3">
-          <button
-            onClick={() => router.push("/app?view=research")}
-            className="bg-[var(--foreground)] text-[var(--background)] text-xs font-bold px-3 py-1.5 rounded"
-          >
-            Open research
-          </button>
-        </div>
-      </div>
+      </Card>
     );
   }
 
   const total = 1 + others.length;
 
   return (
-    <div className="bg-[var(--card)] border border-[var(--border)] border-l-4 border-l-[var(--decisive)] rounded-md p-5">
-      <div className="flex justify-between items-baseline">
+    <Card className="border-l-4 border-l-[var(--decisive)]">
+      <div className="px-5">
+        <div className="flex justify-between items-baseline">
         <div className="text-[10px] tracking-widest uppercase text-[var(--decisive)] font-bold">
           Today&apos;s decision · 1 of {total}
         </div>
@@ -149,6 +153,7 @@ export function TodayDecision({
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </Card>
   );
 }

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { QueueItem, ItemTypeKey } from "@/lib/dashboard/types";
+import { Card } from "@/components/ui/card";
 
 const BADGE: Record<string, { label: string; bg: string }> = {
   catalyst_prep_imminent: { label: "EARNINGS", bg: "var(--decisive)" },
@@ -39,63 +40,67 @@ export function WatchThisWeek({
 }) {
   if (items.length === 0) {
     return (
-      <div className="bg-[var(--card)] border border-[var(--border)] rounded-md p-4">
-        <div className="text-[10px] tracking-widest uppercase text-[var(--hold)] font-bold">
-          Watch this week
+      <Card>
+        <div className="px-4">
+          <div className="text-[10px] tracking-widest uppercase text-[var(--hold)] font-bold">
+            Watch this week
+          </div>
+          <div className="text-xs text-[var(--muted-foreground)] mt-2">
+            Nothing to watch this week. Quiet weeks are normal.
+          </div>
         </div>
-        <div className="text-xs text-[var(--muted-foreground)] mt-2">
-          Nothing to watch this week. Quiet weeks are normal.
-        </div>
-      </div>
+      </Card>
     );
   }
 
   return (
-    <div className="bg-[var(--card)] border border-[var(--border)] rounded-md p-4">
-      <div className="flex justify-between items-baseline mb-2">
-        <div className="text-[10px] tracking-widest uppercase text-[var(--hold)] font-bold">
-          Watch this week · {items.length}
-        </div>
-        {totalCount > items.length && (
-          <Link
-            href="/app/history"
-            className="text-[10px] text-[var(--decisive)]"
-          >
-            View all →
-          </Link>
-        )}
-      </div>
-      <div className="text-xs leading-relaxed">
-        {items.map((item, i) => {
-          const b = badge(item.itemType);
-          const isLast = i === items.length - 1;
-          return (
+    <Card>
+      <div className="px-4">
+        <div className="flex justify-between items-baseline mb-2">
+          <div className="text-[10px] tracking-widest uppercase text-[var(--hold)] font-bold">
+            Watch this week · {items.length}
+          </div>
+          {totalCount > items.length && (
             <Link
-              key={item.itemKey}
-              href={item.primaryActionHref}
-              className={`flex justify-between items-baseline gap-2 py-1.5 ${
-                isLast ? "" : "border-b border-dashed border-[var(--border)] mb-1.5"
-              } hover:bg-[var(--background)]`}
+              href="/app/history"
+              className="text-[10px] text-[var(--decisive)]"
             >
-              <div className="min-w-0 flex-1">
-                <span className="font-bold">
-                  {item.ticker ? `${item.ticker} · ` : ""}
-                  {item.title.replace(/^[A-Z]+ · /, "")}
-                </span>{" "}
-                <span className="text-[11px] text-[var(--muted-foreground)]">
-                  {buildSecondaryText(item)}
-                </span>
-              </div>
-              <span
-                className="text-[8px] text-white px-1.5 py-0.5 rounded font-bold flex-shrink-0"
-                style={{ backgroundColor: b.bg }}
-              >
-                {b.label}
-              </span>
+              View all →
             </Link>
-          );
-        })}
+          )}
+        </div>
+        <div className="text-xs leading-relaxed">
+          {items.map((item, i) => {
+            const b = badge(item.itemType);
+            const isLast = i === items.length - 1;
+            return (
+              <Link
+                key={item.itemKey}
+                href={item.primaryActionHref}
+                className={`flex justify-between items-baseline gap-2 py-1.5 ${
+                  isLast ? "" : "border-b border-dashed border-[var(--border)] mb-1.5"
+                } hover:bg-[var(--background)]`}
+              >
+                <div className="min-w-0 flex-1">
+                  <span className="font-bold">
+                    {item.ticker ? `${item.ticker} · ` : ""}
+                    {item.title.replace(/^[A-Z]+ · /, "")}
+                  </span>{" "}
+                  <span className="text-[11px] text-[var(--muted-foreground)]">
+                    {buildSecondaryText(item)}
+                  </span>
+                </div>
+                <span
+                  className="text-[8px] text-white px-1.5 py-0.5 rounded font-bold flex-shrink-0"
+                  style={{ backgroundColor: b.bg }}
+                >
+                  {b.label}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
       </div>
-    </div>
+    </Card>
   );
 }

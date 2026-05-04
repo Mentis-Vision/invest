@@ -4,6 +4,7 @@
 
 import type { HeroData } from "@/lib/dashboard/types";
 import { BenchmarkPickerLauncher } from "./benchmark-picker";
+import { Card } from "@/components/ui/card";
 
 function fmtMoney(n: number): string {
   return `$${Math.round(n).toLocaleString("en-US")}`;
@@ -66,17 +67,19 @@ export function PortfolioHero({
 
   if (!hero || hero.totalValue === null || hero.totalValue === 0) {
     return (
-      <div className="bg-[var(--card)] border border-[var(--border)] rounded-md p-5">
-        <div className="text-[10px] tracking-widest uppercase text-[var(--hold)]">
-          {today} · {greeting}
+      <Card>
+        <div className="px-5">
+          <div className="text-[10px] tracking-widest uppercase text-[var(--hold)]">
+            {today} · {greeting}
+          </div>
+          <div className="mt-2 text-base font-semibold">
+            Connect a brokerage to see your portfolio →
+          </div>
+          <div className="mt-1 text-xs text-[var(--muted-foreground)]">
+            We&apos;ll sync your holdings, sync prices nightly, and surface what to act on each morning.
+          </div>
         </div>
-        <div className="mt-2 text-base font-semibold">
-          Connect a brokerage to see your portfolio →
-        </div>
-        <div className="mt-1 text-xs text-[var(--muted-foreground)]">
-          We&apos;ll sync your holdings, sync prices nightly, and surface what to act on each morning.
-        </div>
-      </div>
+      </Card>
     );
   }
 
@@ -88,9 +91,10 @@ export function PortfolioHero({
   const sparkColor = sparkDelta >= 0 ? "var(--buy)" : "var(--sell)";
 
   return (
-    <div className="bg-[var(--card)] border border-[var(--border)] rounded-md p-5 grid grid-cols-1 md:grid-cols-[1.4fr_1fr] gap-4">
-      {/* LEFT: greeting + total + benchmarks */}
-      <div>
+    <Card className="gap-0">
+      <div className="px-5 grid grid-cols-1 md:grid-cols-[1.4fr_1fr] gap-4">
+        {/* LEFT: greeting + total + benchmarks */}
+        <div>
         <div className="text-[10px] tracking-widest uppercase text-[var(--hold)]">
           {today} · {greeting}
         </div>
@@ -193,6 +197,7 @@ export function PortfolioHero({
           )}
         </div>
       </div>
-    </div>
+      </div>
+    </Card>
   );
 }

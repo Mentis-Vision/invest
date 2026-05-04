@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AsOfFootnote } from "@/components/dashboard/as-of-footnote";
+import { Card } from "@/components/ui/card";
 
 export type RegimeLabel = "RISK_ON" | "NEUTRAL" | "FRAGILE" | "STRESS";
 
@@ -34,55 +35,59 @@ export function MarketConditionsSidebar({
 }) {
   if (!label) {
     return (
-      <div className="bg-[var(--card)] border border-[var(--border)] rounded-md p-4">
-        <div className="text-[10px] tracking-widest uppercase text-[var(--hold)] font-bold">
-          Market conditions
+      <Card>
+        <div className="px-4">
+          <div className="text-[10px] tracking-widest uppercase text-[var(--hold)] font-bold">
+            Market conditions
+          </div>
+          <div className="text-xs text-[var(--muted-foreground)] mt-2">
+            Macro signals unavailable. Try again later.
+          </div>
         </div>
-        <div className="text-xs text-[var(--muted-foreground)] mt-2">
-          Macro signals unavailable. Try again later.
-        </div>
-      </div>
+      </Card>
     );
   }
 
   const color = COLOR_FOR_REGIME[label];
 
   return (
-    <div className="bg-[var(--card)] border border-[var(--border)] rounded-md p-4 flex flex-col gap-2">
-      <div className="text-[10px] tracking-widest uppercase text-[var(--hold)] font-bold">
-        Market conditions
+    <Card className="gap-0">
+      <div className="px-4 flex flex-col gap-2">
+        <div className="text-[10px] tracking-widest uppercase text-[var(--hold)] font-bold">
+          Market conditions
+        </div>
+        <div
+          className="text-lg font-bold italic"
+          style={{ color, fontFamily: "Fraunces, Georgia, serif" }}
+        >
+          {READABLE[label]}
+        </div>
+        <div className="text-[10px] text-[var(--muted-foreground)] leading-relaxed">
+          {vix !== null && (
+            <>
+              VIX {vix.toFixed(1)}
+              {vixTermStructure && ` · ${vixTermStructure}`}
+              <br />
+            </>
+          )}
+          {daysToFOMC !== null && daysToFOMC < 999 && (
+            <>
+              FOMC in {daysToFOMC}d
+              <br />
+            </>
+          )}
+          {real10Y !== null && (
+            <>Real 10Y {real10Y >= 0 ? "+" : ""}{real10Y.toFixed(1)}%</>
+          )}
+        </div>
+        <Link
+          href="/app/year-outlook"
+          className="text-[9px] text-[var(--hold)] mt-1"
+        >
+          view full outlook →
+        </Link>
+        <AsOfFootnote source="Macro signals" asOf={asOf ?? undefined} />
       </div>
-      <div
-        className="text-lg font-bold italic"
-        style={{ color, fontFamily: "Fraunces, Georgia, serif" }}
-      >
-        {READABLE[label]}
-      </div>
-      <div className="text-[10px] text-[var(--muted-foreground)] leading-relaxed">
-        {vix !== null && (
-          <>
-            VIX {vix.toFixed(1)}
-            {vixTermStructure && ` · ${vixTermStructure}`}
-            <br />
-          </>
-        )}
-        {daysToFOMC !== null && daysToFOMC < 999 && (
-          <>
-            FOMC in {daysToFOMC}d
-            <br />
-          </>
-        )}
-        {real10Y !== null && (
-          <>Real 10Y {real10Y >= 0 ? "+" : ""}{real10Y.toFixed(1)}%</>
-        )}
-      </div>
-      <Link
-        href="/app/year-outlook"
-        className="text-[9px] text-[var(--hold)] mt-1"
-      >
-        view full outlook →
-      </Link>
-      <AsOfFootnote source="Macro signals" asOf={asOf ?? undefined} />
-    </div>
+    </Card>
   );
 }
