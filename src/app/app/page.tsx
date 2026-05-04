@@ -208,7 +208,7 @@ export default async function Home({
       user={{ name: session.user.name ?? "", email: session.user.email }}
     >
       <TooltipProvider delay={200}>
-        <main className="max-w-4xl mx-auto px-4 py-6 flex flex-col gap-3">
+        <main className="max-w-7xl mx-auto px-4 py-6 flex flex-col gap-3">
           <PortfolioHero userName={session.user.name ?? null} hero={hero} />
           <TodayDecision primary={primary} others={others} />
           <div className="grid grid-cols-1 md:grid-cols-[1.8fr_1fr] gap-3">
