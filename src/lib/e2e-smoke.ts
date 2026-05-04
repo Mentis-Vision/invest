@@ -1,4 +1,5 @@
 import { pool } from "./db";
+import { getFetcherHealth } from "./dashboard/metrics/fetcher-health";
 
 /**
  * End-to-end smoke test runner.
@@ -613,6 +614,24 @@ const TESTS: SmokeTest[] = [
         "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
       );
       return `${status}`;
+    },
+  },
+  {
+    name: "dashboard live-fetchers not degraded",
+    category: "dashboard-redesign",
+    async run() {
+      const health = getFetcherHealth();
+      const degraded = health.filter((h) => h.degraded);
+      if (degraded.length === 0) {
+        return `${health.length} fetchers all healthy`;
+      }
+      const summary = degraded
+        .map(
+          (h) =>
+            `${h.source}(${h.totalFallbacks24h}f/${h.totalErrors24h}e)`,
+        )
+        .join(" ");
+      throw new Error(`fetchers degraded: ${summary}`);
     },
   },
 ];

@@ -29,6 +29,7 @@
 
 import AdmZip from "adm-zip";
 import { log, errorInfo } from "../../log";
+import { recordFetcherEvent } from "./fetcher-health";
 
 const FF_3FACTOR_URL =
   "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_Factors_daily_CSV.zip";
@@ -124,6 +125,7 @@ export async function fetchFrenchFactorsDaily(
       rows: rows.length,
       latest: rows[rows.length - 1]?.date ?? null,
     });
+    recordFetcherEvent("fama-french", "live", `rows=${rows.length}`);
     return rows;
   } catch (err) {
     log.warn("dashboard.fama-french", "fetch failed", {
@@ -132,7 +134,11 @@ export async function fetchFrenchFactorsDaily(
     });
     // Stale cache is better than nothing — keep serving prior data
     // when the upstream wobbles.
-    if (cache && cache.flavor === flavor) return cache.rows;
+    if (cache && cache.flavor === flavor) {
+      recordFetcherEvent("fama-french", "fallback", "stale cache");
+      return cache.rows;
+    }
+    recordFetcherEvent("fama-french", "error");
     return [];
   }
 }

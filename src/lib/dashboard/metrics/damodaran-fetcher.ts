@@ -35,6 +35,7 @@
 //     to the pinned constant in damodaran-loader.ts.
 
 import { log, errorInfo } from "../../log";
+import { recordFetcherEvent } from "./fetcher-health";
 
 const URL =
   "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/histimpl.html";
@@ -111,10 +112,16 @@ export async function fetchLiveDamodaranERP(): Promise<DamodaranLiveERP | null> 
       asOf: parsed.asOf,
       year: parsed.year,
     });
+    recordFetcherEvent("damodaran", "live", `year=${parsed.year}`);
     return parsed;
   } catch (err) {
     log.warn("dashboard.damodaran", "fetch failed", errorInfo(err));
-    return cache?.data ?? null;
+    if (cache?.data) {
+      recordFetcherEvent("damodaran", "fallback", "stale cache");
+      return cache.data;
+    }
+    recordFetcherEvent("damodaran", "error");
+    return null;
   }
 }
 

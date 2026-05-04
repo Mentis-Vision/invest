@@ -28,6 +28,7 @@
 //   * On fetch failure: stale cache; if no cache, [].
 
 import { log, errorInfo } from "../../log";
+import { recordFetcherEvent } from "./fetcher-health";
 
 const FED_URL =
   "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm";
@@ -95,10 +96,16 @@ export async function fetchFOMCCalendar(): Promise<string[]> {
       first: dates[0],
       last: dates[dates.length - 1],
     });
+    recordFetcherEvent("fomc", "live", `count=${dates.length}`);
     return dates;
   } catch (err) {
     log.warn("dashboard.fomc", "fetch failed", errorInfo(err));
-    return cache?.dates ?? [];
+    if (cache && cache.dates.length > 0) {
+      recordFetcherEvent("fomc", "fallback", "stale cache");
+      return cache.dates;
+    }
+    recordFetcherEvent("fomc", "error");
+    return [];
   }
 }
 
